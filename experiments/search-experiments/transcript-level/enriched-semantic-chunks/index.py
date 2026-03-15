@@ -51,6 +51,8 @@ def main():
                 "date": s["date"],
                 "title": s["title"],
                 "chunk_index": ci,
+                "start_char": chunk.start_index,
+                "end_char": chunk.end_index,
             })
 
     BATCH = 10
