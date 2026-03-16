@@ -1,6 +1,7 @@
 """Search transcript semantic chunks. Usage: uv run search.py "query" """
 
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -20,7 +21,7 @@ def main():
     embed_fn = get_embed_fn("RETRIEVAL_QUERY")
     col = client.get_collection("semantic_chunks", embedding_function=embed_fn)
 
-    results = col.query(query_texts=[query], n_results=5)
+    results = col.query(query_texts=[query], n_results=50)
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
     dists = results.get("distances", [[]])[0]
@@ -29,14 +30,23 @@ def main():
         print("No results.")
         return
 
-    print(f"Top {len(docs)} results for: {query}\n")
-    for rank, (doc, meta, dist) in enumerate(zip(docs, metas, dists), start=1):
-        chunk_index = (meta or {}).get("chunk_index", "?")
+    journals: dict[str, list[tuple[float, str, dict]]] = defaultdict(list)
+    for doc, meta, dist in zip(docs, metas, dists):
         title = (meta or {}).get("title", "?")
-        embedding_for = f"semantic_chunk(index={chunk_index})"
+        journals[title].append((dist, doc, meta or {}))
+
+    ranked = []
+    for title, entries in journals.items():
+        best_dist, best_doc, best_meta = min(entries, key=lambda x: x[0])
+        ranked.append((best_dist, title, best_doc, len(entries)))
+    ranked.sort(key=lambda x: x[0])
+
+    top = ranked[:5]
+    print(f"Top {len(top)} results for: {query}\n")
+    for rank, (dist, title, doc, count) in enumerate(top, start=1):
         print(f"[{rank:02d}] dist={dist:.4f}")
         print(f"title: {title}")
-        print(f"for: {embedding_for}")
+        print(f"for: semantic_chunk(best_of={count})")
         print(f"content:\n{doc}\n")
 
 
