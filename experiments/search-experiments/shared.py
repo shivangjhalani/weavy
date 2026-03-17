@@ -25,14 +25,24 @@ def get_chromadb_client(persist_dir: str | Path) -> chromadb.ClientAPI:
 
 
 class LiteLLMEmbeddingFunction:
-    """ChromaDB-compatible embedding function backed by litellm."""
+    """ChromaDB-compatible embedding function backed by litellm.
+
+    ChromaDB >= 1.5 calls embed_query() for query-time embeddings
+    and __call__() for document-time embeddings.
+    """
 
     def __init__(self, model: str = "gemini/gemini-embedding-001"):
         self.model = model
 
+    def name(self) -> str:
+        return "litellm-gemini"
+
     def __call__(self, input: list[str]) -> list[list[float]]:
         response = litellm_embedding(model=self.model, input=input)
         return [item["embedding"] for item in response.data]
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:
+        return self(input)
 
 
 def get_embed_fn(task_type: str | None = None) -> LiteLLMEmbeddingFunction:
