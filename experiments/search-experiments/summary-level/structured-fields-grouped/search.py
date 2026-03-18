@@ -29,7 +29,7 @@ def main():
     embed_fn = get_embed_fn("RETRIEVAL_QUERY")
     col = client.get_collection("structured_fields", embedding_function=embed_fn)
 
-    results = col.query(query_texts=[query], n_results=20)
+    results = col.query(query_texts=[query], n_results=50)
     docs = results.get("documents", [[]])[0]
     dists = results.get("distances", [[]])[0]
 
@@ -45,13 +45,14 @@ def main():
     ranked = []
     for title, entries in journals.items():
         best_dist, best_doc = min(entries, key=lambda x: x[0])
-        ranked.append((best_dist, best_doc, len(entries)))
+        ranked.append((best_dist, title, best_doc, len(entries)))
     ranked.sort(key=lambda x: x[0])
 
     top = ranked[:5]
     print(f"Top {len(top)} results for: {query}\n")
-    for rank, (dist, doc, count) in enumerate(top, start=1):
+    for rank, (dist, title, doc, count) in enumerate(top, start=1):
         print(f"[{rank:02d}] dist={dist:.4f}")
+        print(f"title: {title}")
         print(f"for: grouped_structured(best_of={count})")
         print(f"content:\n{doc}\n")
 

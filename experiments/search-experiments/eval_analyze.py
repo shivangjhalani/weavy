@@ -18,11 +18,7 @@ SEARCH_DIR = Path(__file__).resolve().parent
 RESULTS_PATH = SEARCH_DIR / "eval_raw_results.json"
 SUMMARIES_DIR = ROOT / "private" / "summaries"
 TOP_K = 5
-GROUPED_CANDIDATE_DEPTHS = {
-    "grouped_structured": 20,
-    "grouped_semantic_chunks": 50,
-    "grouped_enriched_chunks": 50,
-}
+CANDIDATE_DEPTH = 50  # All methods retrieve 50 candidates, deduplicate by journal, return top-5
 
 EXPERIMENTS = [
     "full_blob",
@@ -32,6 +28,12 @@ EXPERIMENTS = [
     "enriched_chunks",
     "grouped_semantic_chunks",
     "grouped_enriched_chunks",
+    "sentence_chunks_512",
+    "sentence_chunks_1024",
+    "sentence_chunks_2048",
+    "grouped_sentence_chunks_512",
+    "grouped_sentence_chunks_1024",
+    "grouped_sentence_chunks_2048",
 ]
 EXP_LABELS = {
     "full_blob": "Full Blob",
@@ -41,6 +43,12 @@ EXP_LABELS = {
     "enriched_chunks": "Enr. Chunks",
     "grouped_semantic_chunks": "Grp Sem. Chunks",
     "grouped_enriched_chunks": "Grp Enr. Chunks",
+    "sentence_chunks_512": "Sent. 512",
+    "sentence_chunks_1024": "Sent. 1024",
+    "sentence_chunks_2048": "Sent. 2048",
+    "grouped_sentence_chunks_512": "Grp Sent. 512",
+    "grouped_sentence_chunks_1024": "Grp Sent. 1024",
+    "grouped_sentence_chunks_2048": "Grp Sent. 2048",
 }
 CATEGORIES = ["exact", "thematic", "question", "emotional", "indirect"]
 
@@ -102,6 +110,25 @@ def _title_candidates(result: dict):
 
 def _effective_expected(expected: list[int]) -> set[int]:
     return {CANONICAL_IDX_BY_INDEX.get(idx, idx) for idx in expected}
+
+
+def resolve_expected_indices(q_data: dict) -> list[int]:
+    expected_titles = q_data.get("expected_titles", [])
+    if expected_titles:
+        resolved: list[int] = []
+        missing: list[str] = []
+        for title in expected_titles:
+            clean_title = str(title).strip()
+            indices = TITLE_TO_INDICES.get(clean_title)
+            if not indices:
+                missing.append(clean_title)
+                continue
+            resolved.extend(indices)
+        if missing:
+            missing_fmt = "; ".join(missing)
+            raise ValueError(f"missing ground-truth title(s): {missing_fmt}")
+        return sorted(set(resolved))
+    return list(q_data.get("expected_indices", []))
 
 
 def deduplicate_by_journal(results: list[dict]) -> list[tuple[int, float]]:
@@ -186,7 +213,20 @@ def compute_metrics(results: list[dict], expected: list[int]) -> dict:
     }
 
 
-def detect_experiment_issue(raw: str, parsed: list[dict]) -> str | None:
+def detect_experiment_issue(exp_data: dict | None) -> str | None:
+    if exp_data is None:
+        return "missing run record"
+
+    error = exp_data.get("error")
+    if error:
+        return str(error)
+
+    returncode = exp_data.get("returncode")
+    if returncode not in (None, 0):
+        return f"non-zero return code: {returncode}"
+
+    raw = exp_data.get("raw", "")
+    parsed = exp_data.get("parsed", [])
     stripped = raw.strip()
     if not stripped:
         return "empty stdout/stderr"
@@ -243,21 +283,23 @@ def main():
     with open(RESULTS_PATH) as f:
         data = json.load(f)
 
-    # Determine which experiments are actually present in data
-    sample_key = next(iter(data))
+    # Determine which experiments appear in any query row.
+    q_keys = sorted(data.keys())
     available_exps = [
-        e for e in EXPERIMENTS if e in data[sample_key]["experiments"]
+        e for e in EXPERIMENTS
+        if any(e in data[q_key].get("experiments", {}) for q_key in q_keys)
     ]
 
     run_issues: list[tuple[str, str, str]] = []
-    for q_key in sorted(data.keys()):
+    for q_key in q_keys:
         q_data = data[q_key]
+        try:
+            resolve_expected_indices(q_data)
+        except ValueError as exc:
+            run_issues.append((q_key, "ground_truth", str(exc)))
         for exp in available_exps:
-            exp_data = q_data["experiments"][exp]
-            issue = detect_experiment_issue(
-                exp_data.get("raw", ""),
-                exp_data.get("parsed", []),
-            )
+            exp_data = q_data.get("experiments", {}).get(exp)
+            issue = detect_experiment_issue(exp_data)
             if issue:
                 run_issues.append((q_key, exp, issue))
 
@@ -269,28 +311,30 @@ def main():
         print("Fix the runtime environment and regenerate `eval_raw_results.json` before trusting any metrics.\n")
         print("Detected issues:")
         for q_key, exp, issue in run_issues[:20]:
-            print(f"  {q_key} | {EXP_LABELS[exp]:<16} | {issue}")
+            label = EXP_LABELS.get(exp, exp)
+            print(f"  {q_key} | {label:<16} | {issue}")
         remaining = len(run_issues) - 20
         if remaining > 0:
             print(f"  ... and {remaining} more failures")
         raise SystemExit(1)
 
     all_metrics: dict[str, dict] = {}
-    for q_key in sorted(data.keys()):
+    for q_key in q_keys:
         q_data = data[q_key]
+        resolved_expected = resolve_expected_indices(q_data)
         all_metrics[q_key] = {
             "query": q_data["query"],
             "category": q_data["category"],
-            "expected": q_data["expected_indices"],
+            "expected": resolved_expected,
+            "expected_titles": q_data.get("expected_titles", []),
+            "expected_raw_indices": q_data.get("expected_indices", []),
             "by_exp": {},
         }
         for exp in available_exps:
             parsed = q_data["experiments"][exp]["parsed"]
             all_metrics[q_key]["by_exp"][exp] = compute_metrics(
-                parsed, q_data["expected_indices"]
+                parsed, resolved_expected
             )
-
-    q_keys = sorted(all_metrics.keys())
 
     # ══════════════════════════════════════════════════════════════════
     print("=" * 120)
@@ -312,6 +356,10 @@ def main():
         f"  Corpus summary files: {RAW_SUMMARY_COUNT} | Canonical journal identities: {CANONICAL_JOURNAL_COUNT} "
         f"| Queries: {len(q_keys)} | Visible ranking depth: top-{TOP_K}"
     )
+    if all(all_metrics[q_key]["expected_titles"] for q_key in q_keys):
+        print("  Ground truth is title-based (resolved to current corpus indices at runtime).")
+    else:
+        print("  WARNING: legacy index-based ground truth detected; this can drift when corpus order changes.")
     if DUPLICATE_TITLE_GROUPS:
         print("  Duplicate title groups are canonicalized for evaluation:")
         for title, indices in sorted(DUPLICATE_TITLE_GROUPS.items()):
@@ -328,14 +376,10 @@ def main():
             print(
                 f"    {q_key}: {rel_count} relevant journals -> max classic Recall {TOP_K / rel_count:.2f} | {query}"
             )
-    grouped_available = [e for e in available_exps if e in GROUPED_CANDIDATE_DEPTHS]
-    if grouped_available:
-        print("  Grouped variants use deeper candidate pools before reranking by best journal distance:")
-        for exp in grouped_available:
-            print(
-                f"    {EXP_LABELS[exp]} queries top-{GROUPED_CANDIDATE_DEPTHS[exp]} candidates, "
-                f"then returns top-{TOP_K} journals"
-            )
+    print(
+        f"  All methods retrieve top-{CANDIDATE_DEPTH} candidates, deduplicate by journal (min distance), "
+        f"and return top-{TOP_K} journals."
+    )
     print(
         "  Distance summaries are descriptive only; absolute distance magnitudes are not directly comparable across indexes."
     )
@@ -347,14 +391,18 @@ def main():
 
     header = (
         f"  {'Experiment':<16} {'MRR':>5} {'S@1':>4} {'S@3':>4}"
-        f" {'nDCG@5':>7} {'JP':>5} {'R@all':>6} {'Cov@5':>6} {'#Uniq':>5}  Retrieved Journals"
+        f" {'nDCG@5':>7} {'JP':>5} {'R@5':>6} {'Cov@5':>6} {'#Uniq':>5}  Retrieved Journals"
     )
     for q_key in q_keys:
         qm = all_metrics[q_key]
         eff_expected = sorted(_effective_expected(qm["expected"]))
         print(f"\n{'─'*100}")
         print(f"[{q_key}] ({qm['category'].upper()}) {qm['query']}")
-        print(f"  Expected raw: {qm['expected']}")
+        if qm["expected_titles"]:
+            print(f"  Expected titles: {qm['expected_titles']}")
+        print(f"  Expected indices: {qm['expected_raw_indices']}")
+        if sorted(qm["expected"]) != sorted(qm["expected_raw_indices"]):
+            print(f"  Expected indices (resolved): {sorted(qm['expected'])}")
         if sorted(qm["expected"]) != eff_expected:
             print(f"  Expected canonical: {eff_expected}")
         if len(eff_expected) > TOP_K:
@@ -390,7 +438,7 @@ def main():
         f" {'S@3%':>6}"
         f" {'nDCG@5':>7}"
         f" {'JP':>6}"
-        f" {'R@all':>7}"
+        f" {'R@5':>7}"
         f" {'Cov@5':>7}"
         f" {'AvgUniq':>8}"
     )
@@ -450,8 +498,22 @@ def main():
         parts = [f"{EXP_LABELS[e]} wins: {wins[e]}" for e in summary_exps]
         print(f"    {'  |  '.join(parts)}  |  Ties: {ties}")
 
-    # Transcript-level
-    transcript_exps = [e for e in ["semantic_chunks", "enriched_chunks", "grouped_semantic_chunks", "grouped_enriched_chunks"] if e in available_exps]
+    # Transcript-level (semantic, enriched, sentence chunk variants)
+    transcript_exps = [
+        e for e in [
+            "semantic_chunks",
+            "enriched_chunks",
+            "sentence_chunks_512",
+            "sentence_chunks_1024",
+            "sentence_chunks_2048",
+            "grouped_semantic_chunks",
+            "grouped_enriched_chunks",
+            "grouped_sentence_chunks_512",
+            "grouped_sentence_chunks_1024",
+            "grouped_sentence_chunks_2048",
+        ]
+        if e in available_exps
+    ]
     if len(transcript_exps) >= 2:
         print("\n  ▸ TRANSCRIPT-LEVEL:")
         wins = {e: 0 for e in transcript_exps}
@@ -477,6 +539,76 @@ def main():
     exp_composites.sort(key=lambda x: x[1], reverse=True)
     for rank, (exp, avg) in enumerate(exp_composites, 1):
         print(f"    {rank}. {EXP_LABELS[exp]:<16} composite={avg:.3f}")
+
+    # ── SECTION 3.5: Fair Comparison Tracks ──
+    print("\n" + "─" * 120)
+    print("SECTION 3.5: Fair Comparison Tracks")
+    print("─" * 120)
+
+    same_budget_names = [
+        "semantic_chunks",
+        "grouped_semantic_chunks",
+        "sentence_chunks_512",
+        "sentence_chunks_1024",
+        "sentence_chunks_2048",
+        "grouped_sentence_chunks_512",
+        "grouped_sentence_chunks_1024",
+        "grouped_sentence_chunks_2048",
+    ]
+    enriched_names = [
+        "full_blob",
+        "structured_fields",
+        "grouped_structured",
+        "enriched_chunks",
+        "grouped_enriched_chunks",
+    ]
+
+    for track_label, track_names, track_desc in [
+        (
+            "Track A: Same Information Budget (strict retriever comparison)",
+            same_budget_names,
+            "Transcript-level methods that index the same raw information without enrichment.",
+        ),
+        (
+            "Track B: Enriched Data (product-oriented comparison)",
+            enriched_names,
+            "Methods that index enriched/summary data (summaries, structured fields, enriched transcripts).",
+        ),
+    ]:
+        track_exps = [e for e in track_names if e in available_exps]
+        print(f"\n  ▸ {track_label}")
+        print(f"    {track_desc}")
+        print(f"    Experiments: {', '.join(EXP_LABELS[e] for e in track_exps)}")
+
+        if len(track_exps) < 2:
+            print("    (fewer than 2 experiments available — skipping)")
+            continue
+
+        # Ranking by avg composite
+        track_composites = []
+        for exp in track_exps:
+            avg = sum(composite_score(all_metrics[k]["by_exp"][exp]) for k in q_keys) / len(q_keys)
+            track_composites.append((exp, avg))
+        track_composites.sort(key=lambda x: x[1], reverse=True)
+        print("\n    Ranking (by avg composite):")
+        for rank, (exp, avg) in enumerate(track_composites, 1):
+            print(f"      {rank}. {EXP_LABELS[exp]:<16} composite={avg:.3f}")
+
+        # Pairwise win counts
+        print("\n    Pairwise win counts:")
+        wins = {e: 0 for e in track_exps}
+        ties = 0
+        for q_key in q_keys:
+            scores = {e: composite_score(all_metrics[q_key]["by_exp"][e]) for e in track_exps}
+            best_score = max(scores.values())
+            winners = [e for e, s in scores.items() if s == best_score]
+            if len(winners) == len(track_exps):
+                ties += 1
+            else:
+                for w in winners:
+                    wins[w] += 1
+        parts = [f"{EXP_LABELS[e]} wins: {wins[e]}" for e in track_exps]
+        print(f"      {'  |  '.join(parts)}  |  Ties: {ties}")
 
     # ── SECTION 4: Structured Fields — Field Attribution ──
     print("\n" + "─" * 120)
@@ -516,6 +648,9 @@ def main():
                 all_d1.append(dists[0])
                 all_d5.append(dists[-1])
                 all_spreads.append(dists[-1] - dists[0])
+        if not all_d1:
+            print(f"  {EXP_LABELS[exp]:<16}  no distance data")
+            continue
         print(
             f"  {EXP_LABELS[exp]:<16}"
             f"  AvgDist#1={sum(all_d1)/len(all_d1):.4f}"
@@ -528,7 +663,7 @@ def main():
     print("FINAL VERDICT")
     print("=" * 120)
 
-    metric_names = ["AvgMRR", "S@1%", "S@3%", "nDCG@5", "JP", "R@all", "Cov@5", "AvgUniq"]
+    metric_names = ["AvgMRR", "S@1%", "S@3%", "nDCG@5", "JP", "R@5", "Cov@5", "AvgUniq"]
     print(
         f"\n  {'Experiment':<16} {metric_names[0]:>7} {metric_names[1]:>6} {metric_names[2]:>6} "
         f"{metric_names[3]:>7} {metric_names[4]:>6} {metric_names[5]:>7} {metric_names[6]:>7} {metric_names[7]:>8}"
@@ -560,46 +695,21 @@ def main():
         )
 
     summary_pool = [e for e in ["full_blob", "structured_fields", "grouped_structured"] if e in available_exps]
-    transcript_pool = [e for e in ["semantic_chunks", "enriched_chunks", "grouped_semantic_chunks", "grouped_enriched_chunks"] if e in available_exps]
-
-    if summary_pool:
-        best_summary = max(summary_pool, key=lambda e: exp_final_scores[e])
-        print(
-            f"\n  WINNER (summary-level, journal discovery):    "
-            f"{EXP_LABELS[best_summary]} (composite={exp_final_scores[best_summary]:.3f})"
-        )
-    if transcript_pool:
-        best_transcript = max(transcript_pool, key=lambda e: exp_final_scores[e])
-        print(
-            f"  WINNER (transcript-level, journal discovery): "
-            f"{EXP_LABELS[best_transcript]} (composite={exp_final_scores[best_transcript]:.3f})"
-        )
-    best_overall = max(available_exps, key=lambda e: exp_final_scores[e])
-    print(
-        f"  WINNER (overall, journal discovery):          "
-        f"{EXP_LABELS[best_overall]} (composite={exp_final_scores[best_overall]:.3f})"
-    )
-
-    if {"grouped_structured", "full_blob"} <= available_set:
-        gs_wins, fb_wins, ties = pairwise_breakdown(
-            all_metrics,
-            q_keys,
-            "grouped_structured",
-            "full_blob",
-        )
-        print(
-            f"  PAIRWISE NOTE: Grp Struct vs Full Blob -> wins {gs_wins} | losses {fb_wins} | ties {ties}"
-        )
-    if {"grouped_enriched_chunks", "enriched_chunks"} <= available_set:
-        ge_wins, e_wins, ties = pairwise_breakdown(
-            all_metrics,
-            q_keys,
-            "grouped_enriched_chunks",
+    transcript_pool = [
+        e for e in [
+            "semantic_chunks",
             "enriched_chunks",
-        )
-        print(
-            f"  PAIRWISE NOTE: Grp Enr. Chunks vs Enr. Chunks -> wins {ge_wins} | losses {e_wins} | ties {ties}"
-        )
+            "sentence_chunks_512",
+            "sentence_chunks_1024",
+            "sentence_chunks_2048",
+            "grouped_semantic_chunks",
+            "grouped_enriched_chunks",
+            "grouped_sentence_chunks_512",
+            "grouped_sentence_chunks_1024",
+            "grouped_sentence_chunks_2048",
+        ]
+        if e in available_exps
+    ]
 
 
 if __name__ == "__main__":
