@@ -1,4 +1,7 @@
-private/
+private
+.chromadb/
+raw_results.json
+*queries.json
 
 # Experiments (eval data)
 eval_raw_results.json
