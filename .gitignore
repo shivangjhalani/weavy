@@ -1,8 +1,5 @@
 private/
 
-# Experiments (eval data)
-eval_raw_results.json
-
 # Devenv
 .devenv*
 devenv.local.nix
