@@ -302,3 +302,4 @@ bun-debug.log*
 
 .android/
 .agents/
+skills-lock.json
