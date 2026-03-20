@@ -15,3 +15,20 @@ Public License v3.0 (AGPLv3).
 ## License
 
 **LifeOS is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](LICENSE).**
+
+## Episode Segmentation Experiments
+
+Minimal throwaway pipeline (ignores `experiments-old`):
+
+```bash
+devenv shell -- uv run helpers/episode_segmentation_experiment.py run-all
+```
+
+Useful step-by-step commands:
+
+```bash
+devenv shell -- uv run helpers/episode_segmentation_experiment.py normalize
+devenv shell -- uv run helpers/episode_segmentation_experiment.py label-gold
+devenv shell -- uv run helpers/episode_segmentation_experiment.py predict
+devenv shell -- uv run helpers/episode_segmentation_experiment.py evaluate
+```
