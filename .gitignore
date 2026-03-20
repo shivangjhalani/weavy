@@ -2,6 +2,7 @@ private
 .chromadb/
 raw_results.json
 *queries.json
+experiments-old
 
 # Experiments (eval data)
 eval_raw_results.json
