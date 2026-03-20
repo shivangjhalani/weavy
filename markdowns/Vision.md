@@ -116,7 +116,6 @@ Every episode is anchored with metadata at the moment of encoding:
 - Themes and topics
 - Learnings
 - Open questions
-- Links to related past episodes
 
 The richer this metadata, the more powerful retrieval becomes later.
 
@@ -125,13 +124,6 @@ The richer this metadata, the more powerful retrieval becomes later.
 ### Phase 2 — Storage
 
 Structured episodes with their full context tags, held in a queryable store.
-
-Each episode is linked to:
-
-- The source journal entry and transcript passage (citation-first)
-- Thematically related episodes across time
-- People and projects that appear across multiple entries
-- Its status: resolved, ongoing, or open
 
 Storage is designed around the assumption that **retrieval will always start with
 partial, fragmentary cues** — not precise keywords. The data structure must support
@@ -147,9 +139,6 @@ browse it, let more details emerge, narrow further.
 
 The LifeOS interface must support this sequential narrowing:
 
-- **Layer 1** — Summary retrieval: _"Which journal is this from?"_
-- **Layer 2** — Passage retrieval: _"Where exactly was this said?"_
-
 A fragmentary memory — a person's name, an emotion, a rough timeframe — should
 be enough to begin the journey. The system surfaces the rest.
 
@@ -157,43 +146,9 @@ be enough to begin the journey. The system surfaces the rest.
 
 ### Memory Layers
 
-| Layer                 | What It Contains                                                                                  | Analog              |
-| --------------------- | ------------------------------------------------------------------------------------------------- | ------------------- |
-| **Raw Audio**         | Original recording file for each journal, retained permanently                                    | Source artifact     |
-| **Transcript**        | Timestamped text derived from audio — canonical source of truth for all higher layers             | Verbatim record     |
-| **Episodes & Topics** | Segmented topic blocks with thread reconnection across non-adjacent spans                         | Individual memories |
-| **Temporal Graph**    | Entities, themes, emotions, unresolved tensions, and cross-episode links with temporal behavior   | Associative network |
-| **Stable Memory**     | Durable facts the system learns over time: recurring people, ongoing projects, long-term patterns | Semantic memory     |
-
----
-
-### Open Loops — Future Layer (Deferred Beyond V1)
-
-Research on _retrieval-induced forgetting_ shows that selectively surfacing some
-memories can passively suppress related but unreviewed ones. If LifeOS only ever
-surfaces thoughts users search for, it risks burying the ones they haven't returned to.
-
-**Open loops tracking is memory hygiene, not a task manager.**
-
-When implemented, the system would proactively surface:
-
-- Unresolved questions that haven't been revisited
-- Decisions that were made but never followed up
-- Topics that recur across entries without resolution
-
-This is architecturally deferred beyond V1, but the memory layers above (particularly
-the Temporal Graph and Stable Memory) preserve the data needed to support it later.
-
----
-
-## Summary
-
-| Dimension              | LifeOS                                                       |
-| ---------------------- | ------------------------------------------------------------ |
-| **Format**             | Audio journaling — speak, don't type                         |
-| **Core output**        | Organized, findable, cumulative record of your thinking      |
-| **Atomic unit**        | The episode (a segmented topic block, not the raw recording) |
-| **Memory model**       | Encode richly → store with context → retrieve by journey     |
-| **Emotional register** | Calm, private, grounding — a garden, not a dashboard         |
-| **What it avoids**     | Productivity tools, trackers, gamification, raw file lists   |
-| **Long-term value**    | Self-knowledge: patterns, evolution, answered open loops     |
+| Layer                                          | What It Contains                                                                                  | Analog              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------- |
+| **Raw Audio**                                  | Original recording file for each journal, retained permanently                                    | Source artifact     |
+| **Transcript**                                 | Timestamped text derived from audio — canonical source of truth for all higher layers             | Verbatim record     |
+| **Episodes**                                   | Segmented topic blocks with thread reconnection across non-adjacent spans                         | Individual memories |
+| **Stable Memory**(Future plan. not part of v1) | Durable facts the system learns over time: recurring people, ongoing projects, long-term patterns | Semantic memory     |
