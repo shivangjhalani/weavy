@@ -5,13 +5,20 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "chonkie[model2vec,semantic]>=1.6.0",
-    "chromadb>=1.5.5",
-    "dotenv>=0.9.9",
     "falkordb>=1.6.0",
     "google-genai>=1.14.0",
     "litellm>=1.82.1",
     "pydantic>=2.12.5",
+    "python-dotenv>=1.0.0",
     "pyyaml>=6.0.3",
     "ragas>=0.4.3",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
