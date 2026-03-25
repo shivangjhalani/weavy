@@ -1,4 +1,10 @@
-{ pkgs, lib, config, inputs, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  inputs,
+  ...
+}:
 
 {
   dotenv.enable = true;
@@ -7,7 +13,9 @@
   env.GREET = "LifeOS";
 
   # https://devenv.sh/packages/
-  packages = [ pkgs.zlib ];
+  packages = [
+    pkgs.zlib
+  ];
 
   # https://devenv.sh/languages/
   languages.python = {

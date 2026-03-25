@@ -1,5 +1,7 @@
 private
+.claude
 .chromadb/
+.neo4j/
 raw_results.json
 *queries.json
 experiments-old

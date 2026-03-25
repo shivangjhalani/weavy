@@ -3,7 +3,9 @@
 #   nixpkgs:
 #     url: github:cachix/devenv-nixpkgs/rolling
 
-inputs: {}
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-25.05
 
 # If you're using non-OSS software, you can set allowUnfree to true.
 # allowUnfree: true
