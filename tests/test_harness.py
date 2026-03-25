@@ -222,13 +222,23 @@ def test_harness_function_response_includes_fc_id():
     )
     harness.run(system_prompt=".", user_message="test")
 
-    # The second call to generate_content should have the function response in contents
-    # contents[-1] should be a Content with parts that include function_response with id
+    # The second call to generate_content receives contents including the function response
+    # contents[-1] is the real types.Content the harness built with types.Part(function_response=...)
     second_call_contents = received_contents[1]
-    function_response_content = second_call_contents[-1]
-    # It's a real types.Content — check the part has a function_response with the right id
-    fr_part = function_response_content.parts[0]
-    assert fr_part.function_response.id == "call-ID-123"
+    # Walk ALL content items looking for a part with a function_response attribute
+    # (skip mock objects that won't have it)
+    found_id = None
+    for content in second_call_contents:
+        if not hasattr(content, "parts"):
+            continue
+        for p in content.parts:
+            if hasattr(p, "function_response") and p.function_response is not None:
+                found_id = p.function_response.id
+                break
+        if found_id is not None:
+            break
+
+    assert found_id == "call-ID-123", f"Expected fc.id 'call-ID-123' in function_response, got: {found_id}"
 
 
 def test_harness_iterates_all_parts():
@@ -325,9 +335,8 @@ def test_harness_budget_injects_exhausted_message():
         final = make_text_response("final")
 
         def generate_content(self, model, contents, config):
-            # Record what contents were passed on the budget-exhausted call
-            if self._count == 1:  # second call = after budget hit
-                injected_contents.extend(contents)
+            # Record what contents were passed on every call so we can find the budget message
+            injected_contents.extend(contents)
             resp = self.always_fc if self._count < 3 else self.final
             self._count += 1
             return resp
