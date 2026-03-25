@@ -46,9 +46,9 @@
 
 ### Agent Harness
 
-- [ ] **HARN-01**: Single modular harness with agentic loop (LLM + tools + role-specific system prompt)
+- [x] **HARN-01**: Single modular harness with agentic loop (LLM + tools + role-specific system prompt)
 - [ ] **HARN-02**: Three roles with distinct system prompts: ingestion, query, memo
-- [ ] **HARN-03**: Hard tool-call budget enforced in harness code — agent forced to answer/complete after budget exhausted
+- [x] **HARN-03**: Hard tool-call budget enforced in harness code — agent forced to answer/complete after budget exhausted
 - [ ] **HARN-04**: Tools for: graph read/write/search/merge/delete, vector search, transcript range retrieval
 
 ### Query Agent
@@ -83,7 +83,7 @@
 - [x] **INFR-01**: Python project with uv, ruff, devenv — no global package installs
 - [x] **INFR-02**: Environment config via .env (GEMINI_API_KEY, GROQ_API_KEY)
 - [x] **INFR-03**: FalkorDB running via Docker in devenv, with index creation at initialization
-- [ ] **INFR-04**: Runnable Python scripts for each workflow (ingest, query, memo, eval) — no API, no CLI
+- [x] **INFR-04**: Runnable Python scripts for each workflow (ingest, query, memo, eval) — no API, no CLI
 
 ## v2 Requirements
 
@@ -126,11 +126,11 @@ Deferred to future release. Tracked but not in current roadmap.
 | INFR-01 | Phase 1 | Complete |
 | INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Complete |
-| INFR-04 | Phase 1 | Pending |
+| INFR-04 | Phase 1 | Complete |
 | GRPH-01 | Phase 1 | Complete |
 | GRPH-05 | Phase 1 | Complete |
-| HARN-01 | Phase 1 | Pending |
-| HARN-03 | Phase 1 | Pending |
+| HARN-01 | Phase 1 | Complete |
+| HARN-03 | Phase 1 | Complete |
 | TRNS-01 | Phase 2 | Pending |
 | TRNS-02 | Phase 2 | Pending |
 | TRNS-03 | Phase 2 | Pending |

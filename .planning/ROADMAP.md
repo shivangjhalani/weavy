@@ -12,7 +12,7 @@ LifeOS builds a personal memory engine in five phases: lay the infrastructure fo
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Infrastructure** - Devenv, FalkorDB with indexes, atomic storage ops, LLM client, agent harness skeleton
+- [x] **Phase 1: Infrastructure** - Devenv, FalkorDB with indexes, atomic storage ops, LLM client, agent harness skeleton (completed 2026-03-25)
 - [ ] **Phase 2: Ingestion Agent** - Full audio-to-graph pipeline with disambiguation, vocabulary registry, and log compression
 - [ ] **Phase 3: Query Agent** - Vector search, agentic retrieval strategy, transcript-grounded answer synthesis
 - [ ] **Phase 4: Theme Layer + Memo Agent** - Derived theme map with heat/salience, memo agent pattern detection
@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold, deps cleanup, config, models, embeddings, transcript store
 - [x] 01-02-PLAN.md — FalkorDB graph init, indexes, atomic CRUD with auto-embedding, vector search
-- [ ] 01-03-PLAN.md — Agent harness with budget enforcement, script stubs for all workflows
+- [x] 01-03-PLAN.md — Agent harness with budget enforcement, script stubs for all workflows
 
 ### Phase 2: Ingestion Agent
 **Goal**: An audio file can be ingested end-to-end — transcribed, parsed by the ingestion agent, and written to the graph as typed nodes and edges with append-only logs, episode spans, and embedded summaries — with no duplicate nodes and controlled type drift
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure | 2/3 | In Progress|  |
+| 1. Infrastructure | 3/3 | Complete   | 2026-03-25 |
 | 2. Ingestion Agent | 0/? | Not started | - |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |
