@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Project scaffold, deps cleanup, config, models, embeddings, transcript store
+- [x] 01-01-PLAN.md — Project scaffold, deps cleanup, config, models, embeddings, transcript store
 - [ ] 01-02-PLAN.md — FalkorDB graph init, indexes, atomic CRUD with auto-embedding, vector search
 - [ ] 01-03-PLAN.md — Agent harness with budget enforcement, script stubs for all workflows
 
