@@ -123,55 +123,55 @@ Deferred to future release. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TRNS-01 | Pending | Pending |
-| TRNS-02 | Pending | Pending |
-| TRNS-03 | Pending | Pending |
-| GRPH-01 | Pending | Pending |
-| GRPH-02 | Pending | Pending |
-| GRPH-03 | Pending | Pending |
-| GRPH-04 | Pending | Pending |
-| GRPH-05 | Pending | Pending |
-| INGST-01 | Pending | Pending |
-| INGST-02 | Pending | Pending |
-| INGST-03 | Pending | Pending |
-| INGST-04 | Pending | Pending |
-| INGST-05 | Pending | Pending |
-| INGST-06 | Pending | Pending |
-| COMP-01 | Pending | Pending |
-| COMP-02 | Pending | Pending |
-| COMP-03 | Pending | Pending |
-| VECT-01 | Pending | Pending |
-| VECT-02 | Pending | Pending |
-| VECT-03 | Pending | Pending |
-| HARN-01 | Pending | Pending |
-| HARN-02 | Pending | Pending |
-| HARN-03 | Pending | Pending |
-| HARN-04 | Pending | Pending |
-| QURY-01 | Pending | Pending |
-| QURY-02 | Pending | Pending |
-| QURY-03 | Pending | Pending |
-| QURY-04 | Pending | Pending |
-| THME-01 | Pending | Pending |
-| THME-02 | Pending | Pending |
-| THME-03 | Pending | Pending |
-| THME-04 | Pending | Pending |
-| THME-05 | Pending | Pending |
-| MEMO-01 | Pending | Pending |
-| MEMO-02 | Pending | Pending |
-| MEMO-03 | Pending | Pending |
-| EVAL-01 | Pending | Pending |
-| EVAL-02 | Pending | Pending |
-| EVAL-03 | Pending | Pending |
-| INFR-01 | Pending | Pending |
-| INFR-02 | Pending | Pending |
-| INFR-03 | Pending | Pending |
-| INFR-04 | Pending | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Pending |
+| INFR-03 | Phase 1 | Pending |
+| INFR-04 | Phase 1 | Pending |
+| GRPH-01 | Phase 1 | Pending |
+| GRPH-05 | Phase 1 | Pending |
+| HARN-01 | Phase 1 | Pending |
+| HARN-03 | Phase 1 | Pending |
+| TRNS-01 | Phase 2 | Pending |
+| TRNS-02 | Phase 2 | Pending |
+| TRNS-03 | Phase 2 | Pending |
+| GRPH-02 | Phase 2 | Pending |
+| GRPH-03 | Phase 2 | Pending |
+| GRPH-04 | Phase 2 | Pending |
+| INGST-01 | Phase 2 | Pending |
+| INGST-02 | Phase 2 | Pending |
+| INGST-03 | Phase 2 | Pending |
+| INGST-04 | Phase 2 | Pending |
+| INGST-05 | Phase 2 | Pending |
+| INGST-06 | Phase 2 | Pending |
+| COMP-01 | Phase 2 | Pending |
+| COMP-02 | Phase 2 | Pending |
+| COMP-03 | Phase 2 | Pending |
+| VECT-01 | Phase 2 | Pending |
+| VECT-02 | Phase 3 | Pending |
+| VECT-03 | Phase 3 | Pending |
+| HARN-02 | Phase 3 | Pending |
+| HARN-04 | Phase 3 | Pending |
+| QURY-01 | Phase 3 | Pending |
+| QURY-02 | Phase 3 | Pending |
+| QURY-03 | Phase 3 | Pending |
+| QURY-04 | Phase 3 | Pending |
+| THME-01 | Phase 4 | Pending |
+| THME-02 | Phase 4 | Pending |
+| THME-03 | Phase 4 | Pending |
+| THME-04 | Phase 4 | Pending |
+| THME-05 | Phase 4 | Pending |
+| MEMO-01 | Phase 4 | Pending |
+| MEMO-02 | Phase 4 | Pending |
+| MEMO-03 | Phase 4 | Pending |
+| EVAL-01 | Phase 5 | Pending |
+| EVAL-02 | Phase 5 | Pending |
+| EVAL-03 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 43 total
-- Mapped to phases: 0
-- Unmapped: 43 ⚠️
+- Mapped to phases: 43
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after initial definition*
+*Last updated: 2026-03-25 after roadmap creation*
