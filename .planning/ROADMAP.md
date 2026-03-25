@@ -29,7 +29,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. A call to `update_node` re-embeds the node summary in the same operation — no separate embed step is possible
   3. The agent harness accepts a role, system prompt, and tool list; terminates after hitting the hard tool-call budget regardless of LLM output
   4. API keys load from `.env` and the Gemini client produces a completion; Groq client returns a transcription on a test audio file
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, deps cleanup, config, models, embeddings, transcript store
+- [ ] 01-02-PLAN.md — FalkorDB graph init, indexes, atomic CRUD with auto-embedding, vector search
+- [ ] 01-03-PLAN.md — Agent harness with budget enforcement, script stubs for all workflows
 
 ### Phase 2: Ingestion Agent
 **Goal**: An audio file can be ingested end-to-end — transcribed, parsed by the ingestion agent, and written to the graph as typed nodes and edges with append-only logs, episode spans, and embedded summaries — with no duplicate nodes and controlled type drift
@@ -83,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure | 0/? | Not started | - |
+| 1. Infrastructure | 0/3 | Planning complete | - |
 | 2. Ingestion Agent | 0/? | Not started | - |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |
