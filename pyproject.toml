@@ -20,12 +20,17 @@ dev = [
     "pytest",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["integration: requires live FalkorDB and API keys"]
 
 [dependency-groups]
 dev = [
+    "hatchling>=1.29.0",
     "pytest>=9.0.2",
     "ruff>=0.15.7",
 ]
