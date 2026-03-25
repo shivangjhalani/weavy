@@ -27,4 +27,5 @@ markers = ["integration: requires live FalkorDB and API keys"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.15.7",
 ]
