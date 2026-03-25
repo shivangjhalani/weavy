@@ -12,23 +12,27 @@ The memory system must faithfully capture, organize, and retrieve a person's evo
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Transcription pipeline: accept audio files, transcribe via Groq Whisper API — Validated in Phase 1: Infrastructure (transcribe module refactored, config loads API keys)
+- [x] Semantic graph layer: LLM-defined nodes and edges in FalkorDB — Validated in Phase 1: Infrastructure (FalkorDB graph init with indexes, atomic CRUD)
+- [x] Node/edge structure: current summary, append-only log with recording timestamps, transcript references — Validated in Phase 1: Infrastructure (Pydantic models + graph CRUD)
+- [x] Agent harness: single modular harness with role-specific system prompts — Validated in Phase 1: Infrastructure (AgentHarness with budget enforcement)
+- [x] Vector embeddings: gemini-embedding-001 for node/edge summaries — Validated in Phase 1: Infrastructure (embed_text/embed_query + atomic re-embedding in graph ops)
 
 ### Active
 
-- [ ] Transcription pipeline: accept audio files, transcribe via Groq Whisper API, store transcripts with timestamps and episode spans
-- [ ] Semantic graph layer: LLM-defined nodes and edges in FalkorDB — no rigid extraction schema, free-form types and relationships
-- [ ] Node/edge structure: current summary, append-only log with recording timestamps, transcript references (transcript_id, start_offset, end_offset)
+- [ ] Transcription pipeline: store transcripts with timestamps and episode spans (transcribe module exists, full pipeline in Phase 2)
+- [ ] Semantic graph layer: no rigid extraction schema, free-form types and relationships (graph layer exists, agent-driven extraction in Phase 2)
+- [ ] Node/edge structure: episode spans (structure exists, episode spans in Phase 2)
 - [ ] Node disambiguation: alias sets (exact match) → fuzzy similarity → LLM reasoning for ambiguous cases
 - [ ] Log compression: token-budgeted compression of node/edge logs, preserving arc of change
 - [ ] Theme layer: derived memos with heat/salience scoring, always-in-context map for agent, embeddings via gemini-embedding-001
-- [ ] Agent harness: single modular harness with role-specific system prompts for ingestion, query, and memo work — powered by Gemini 2.5 Flash
+- [ ] Agent harness: extend with ingestion, query, and memo role-specific tool sets (harness exists, role tools in Phase 2-4)
 - [ ] Ingestion agent: reads full transcript, builds/updates graph, creates episode spans, exercises judgment on what's worth persisting
 - [ ] Query agent: agentic retrieval across all memory layers — decides its own retrieval strategy per query, uses themes as map
 - [ ] Memo agent: periodic theme extraction and maintenance — observer voice, pattern detection
 - [ ] Agent tools: graph read/write/search/merge/delete, vector search across layers, transcript range retrieval, hybrid vector+graph tools
 - [ ] Evaluation: RAGAS-based query quality evaluation — faithfulness, relevance, groundedness in transcripts
-- [ ] Vector embeddings: gemini-embedding-001 for episode summaries, node/edge summaries, theme text
+- [ ] Vector embeddings: gemini-embedding-001 for episode summaries, theme text (node/edge embedding done, episode/theme in Phase 2/4)
 
 ### Out of Scope
 
@@ -65,8 +69,8 @@ The memory system must faithfully capture, organize, and retrieve a person's evo
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| FalkorDB for graph storage | Already set up in devenv, Redis-compatible, supports Cypher queries | — Pending |
-| Gemini 2.5 Flash as reasoning engine | Cost-effective, fast, good for experimentation phase | — Pending |
+| FalkorDB for graph storage | Already set up in devenv, Redis-compatible, supports Cypher queries | Validated Phase 1 — indexes, atomic CRUD, vector search working |
+| Gemini 2.5 Flash as reasoning engine | Cost-effective, fast, good for experimentation phase | Validated Phase 1 — harness built, embeddings via gemini-embedding-001 confirmed |
 | LLM-defined graph schema | Avoids baking in assumptions about what questions will be asked; becomes more powerful as models improve | — Pending |
 | Three-layer memory (transcripts → graph → themes) | Separates source of truth from derived structure from high-level patterns | — Pending |
 | RAGAS for evaluation | Established framework for RAG quality evaluation — faithfulness, relevance, groundedness | — Pending |
@@ -90,4 +94,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after initialization*
+*Last updated: 2026-03-25 after Phase 1 (Infrastructure) completion*
