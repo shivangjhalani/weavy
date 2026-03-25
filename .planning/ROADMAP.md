@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold, deps cleanup, config, models, embeddings, transcript store
-- [ ] 01-02-PLAN.md — FalkorDB graph init, indexes, atomic CRUD with auto-embedding, vector search
+- [x] 01-02-PLAN.md — FalkorDB graph init, indexes, atomic CRUD with auto-embedding, vector search
 - [ ] 01-03-PLAN.md — Agent harness with budget enforcement, script stubs for all workflows
 
 ### Phase 2: Ingestion Agent
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure | 0/3 | Planning complete | - |
+| 1. Infrastructure | 2/3 | In Progress|  |
 | 2. Ingestion Agent | 0/? | Not started | - |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |

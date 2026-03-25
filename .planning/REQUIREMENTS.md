@@ -17,11 +17,11 @@
 
 ### Graph Storage
 
-- [ ] **GRPH-01**: FalkorDB graph store initialized with proper indexes on frequently queried properties
+- [x] **GRPH-01**: FalkorDB graph store initialized with proper indexes on frequently queried properties
 - [ ] **GRPH-02**: Nodes carry: current summary, append-only log (timestamped entries), alias set, transcript references (transcript_id, start_offset, end_offset)
 - [ ] **GRPH-03**: Edges carry: current summary, append-only log (timestamped entries), transcript references
 - [ ] **GRPH-04**: Node and edge types are entirely LLM-defined — no hardcoded entity types or relationship types
-- [ ] **GRPH-05**: Atomic update operations: updating a node/edge summary always re-embeds in the same operation
+- [x] **GRPH-05**: Atomic update operations: updating a node/edge summary always re-embeds in the same operation
 
 ### Ingestion Agent
 
@@ -80,9 +80,9 @@
 
 ### Infrastructure
 
-- [ ] **INFR-01**: Python project with uv, ruff, devenv — no global package installs
-- [ ] **INFR-02**: Environment config via .env (GEMINI_API_KEY, GROQ_API_KEY)
-- [ ] **INFR-03**: FalkorDB running via Docker in devenv, with index creation at initialization
+- [x] **INFR-01**: Python project with uv, ruff, devenv — no global package installs
+- [x] **INFR-02**: Environment config via .env (GEMINI_API_KEY, GROQ_API_KEY)
+- [x] **INFR-03**: FalkorDB running via Docker in devenv, with index creation at initialization
 - [ ] **INFR-04**: Runnable Python scripts for each workflow (ingest, query, memo, eval) — no API, no CLI
 
 ## v2 Requirements
@@ -123,12 +123,12 @@ Deferred to future release. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFR-01 | Phase 1 | Pending |
-| INFR-02 | Phase 1 | Pending |
-| INFR-03 | Phase 1 | Pending |
+| INFR-01 | Phase 1 | Complete |
+| INFR-02 | Phase 1 | Complete |
+| INFR-03 | Phase 1 | Complete |
 | INFR-04 | Phase 1 | Pending |
-| GRPH-01 | Phase 1 | Pending |
-| GRPH-05 | Phase 1 | Pending |
+| GRPH-01 | Phase 1 | Complete |
+| GRPH-05 | Phase 1 | Complete |
 | HARN-01 | Phase 1 | Pending |
 | HARN-03 | Phase 1 | Pending |
 | TRNS-01 | Phase 2 | Pending |
