@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-26T05:55:31.961Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-03-26T06:00:29.414Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 02 (ingestion-agent) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Plan: 4 of 5
 | Phase 02-ingestion-agent P00 | 1 | 1 tasks | 5 files |
 | Phase 02-ingestion-agent P01 | 4min | 2 tasks | 4 files |
 | Phase 02-ingestion-agent P02 | 4min | 2 tasks | 4 files |
+| Phase 02-ingestion-agent P03 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,9 @@ Recent decisions affecting current work:
 - [Phase 02-ingestion-agent]: set_node_log/set_edge_log intentionally skip re-embedding — compression pass only touches log, summary/embedding unchanged
 - [Phase 02-ingestion-agent]: D-08 applied: removed budget param and calls_used counter from AgentHarness entirely
 - [Phase 02-ingestion-agent]: build_tools uses closures over graph/store; patch target is 'lifeos.agent.tools.embed_text' not source module
+- [Phase 02-ingestion-agent]: tiktoken cl100k_base for token counting with 2000-token compression threshold
+- [Phase 02-ingestion-agent]: compress_log keeps last 3 entries intact (COMP-03), compresses older via standalone Gemini call (D-16)
+- [Phase 02-ingestion-agent]: run_compression_pass uses set_node_log/set_edge_log not update_node — avoids spurious re-embedding
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T05:55:31.954Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-26T06:00:29.408Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None

@@ -52,7 +52,7 @@ Plans:
 - [x] 02-00-PLAN.md — Wave 0: test stub files for Nyquist sampling continuity
 - [x] 02-01-PLAN.md — Data model updates: drop type field, add name/label, Transcript model, graph.py extensions
 - [x] 02-02-PLAN.md — Agent harness budget removal, 9 ingestion tools with build_tools factory
-- [ ] 02-03-PLAN.md — Ingestion and compression prompts, log compression module
+- [x] 02-03-PLAN.md — Ingestion and compression prompts, log compression module
 - [ ] 02-04-PLAN.md — Full ingest.py pipeline wiring: transcribe -> store -> agent -> compress -> summary
 
 ### Phase 3: Query Agent
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 3/3 | Complete   | 2026-03-25 |
-| 2. Ingestion Agent | 1/5 | In Progress|  |
+| 2. Ingestion Agent | 4/5 | In Progress|  |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |
 | 5. Evaluation | 0/? | Not started | - |
