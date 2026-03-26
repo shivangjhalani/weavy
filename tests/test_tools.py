@@ -373,5 +373,5 @@ def test_declaration_names_match_tool_keys():
     graph = make_graph()
     store = make_store()
     tools_dict, declarations = build_tools(graph, store)
-    decl_names = {d.name for d in declarations}
+    decl_names = {d["function"]["name"] for d in declarations}
     assert decl_names == set(tools_dict.keys())

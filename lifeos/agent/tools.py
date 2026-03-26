@@ -1,4 +1,4 @@
-"""build_tools factory — returns 9 agent tool callables and FunctionDeclarations.
+"""build_tools factory — returns 9 agent tool callables and OpenAI-format declarations.
 
 Each tool is a closure over the graph and store objects, bridging the agent's
 LLM decisions to graph.py operations.
@@ -10,8 +10,6 @@ Usage:
 import uuid
 from datetime import datetime, timezone
 from typing import Any
-
-from google.genai import types
 
 from lifeos.memory import graph as graph_module
 from lifeos.memory.models import Edge, EpisodeSpan, LogEntry, Node, TranscriptRef
@@ -34,7 +32,7 @@ def build_tools(
 
     Returns:
         (tools_dict, declarations_list) where tools_dict maps tool name to
-        callable and declarations_list contains 9 FunctionDeclaration objects.
+        callable and declarations_list contains 9 OpenAI-format tool dicts.
     """
 
     def _ts() -> datetime:
@@ -252,143 +250,166 @@ def build_tools(
     }
 
     # -----------------------------------------------------------------------
-    # FunctionDeclarations — types.Schema format for google-genai 1.68.0
+    # OpenAI-format tool declarations — plain Python dicts (no SDK imports)
     # -----------------------------------------------------------------------
-
-    _str = types.Schema(type=types.Type.STRING)
-    _int = types.Schema(type=types.Type.INTEGER)
-    _str_array = types.Schema(type=types.Type.ARRAY, items=types.Schema(type=types.Type.STRING))
 
     # Reusable optional transcript coordinate properties
     _transcript_props = {
-        "transcript_id": _str,
-        "start_offset": _int,
-        "end_offset": _int,
+        "transcript_id": {"type": "string"},
+        "start_offset": {"type": "integer"},
+        "end_offset": {"type": "integer"},
     }
 
     declarations = [
-        types.FunctionDeclaration(
-            name="search_nodes_by_alias",
-            description="Find graph nodes whose alias set contains the given alias (exact match). Use this as the first disambiguation step before creating a new node.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={"alias": _str},
-                required=["alias"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="search_nodes_by_embedding",
-            description="Semantic similarity search over node summaries using vector KNN. Use as second disambiguation step when alias search returns no results. Returns nodes with similarity scores.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "query": _str,
-                    "k": _int,
+        {
+            "type": "function",
+            "function": {
+                "name": "search_nodes_by_alias",
+                "description": "Find graph nodes whose alias set contains the given alias (exact match). Use this as the first disambiguation step before creating a new node.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"alias": {"type": "string"}},
+                    "required": ["alias"],
                 },
-                required=["query"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="create_node",
-            description="Create a new node in the semantic graph. Only call after confirming via search that no existing node represents this entity. Only persist things that matter to the person's evolving inner life.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "name": _str,
-                    "summary": _str,
-                    "aliases": _str_array,
-                    "log_note": _str,
-                    **_transcript_props,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_nodes_by_embedding",
+                "description": "Semantic similarity search over node summaries using vector KNN. Use as second disambiguation step when alias search returns no results. Returns nodes with similarity scores.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "k": {"type": "integer"},
+                    },
+                    "required": ["query"],
                 },
-                required=["name", "summary"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="update_node",
-            description="Update an existing node's summary and append a log entry. Use when an entity already exists and new information changes or extends its description.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "node_id": _str,
-                    "summary": _str,
-                    "log_note": _str,
-                    "new_aliases": _str_array,
-                    **_transcript_props,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_node",
+                "description": "Create a new node in the semantic graph. Only call after confirming via search that no existing node represents this entity. Only persist things that matter to the person's evolving inner life.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "aliases": {"type": "array", "items": {"type": "string"}},
+                        "log_note": {"type": "string"},
+                        **_transcript_props,
+                    },
+                    "required": ["name", "summary"],
                 },
-                required=["node_id", "summary", "log_note"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="delete_node",
-            description="Delete a node and all its relationships from the graph. Use when an entity is no longer relevant or was created in error.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={"node_id": _str},
-                required=["node_id"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="create_edge",
-            description="Create a directed relationship edge between two existing nodes. The label is a concise descriptor (e.g. 'fears', 'is_mentor_of', 'evolved_into').",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "source_id": _str,
-                    "target_id": _str,
-                    "label": _str,
-                    "summary": _str,
-                    "log_note": _str,
-                    **_transcript_props,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_node",
+                "description": "Update an existing node's summary and append a log entry. Use when an entity already exists and new information changes or extends its description.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "node_id": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "log_note": {"type": "string"},
+                        "new_aliases": {"type": "array", "items": {"type": "string"}},
+                        **_transcript_props,
+                    },
+                    "required": ["node_id", "summary", "log_note"],
                 },
-                required=["source_id", "target_id", "label", "summary"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="update_edge",
-            description="Update an existing edge's summary and append a log entry. Use when a relationship has evolved or new information changes its description.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "edge_id": _str,
-                    "summary": _str,
-                    "log_note": _str,
-                    **_transcript_props,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_node",
+                "description": "Delete a node and all its relationships from the graph. Use when an entity is no longer relevant or was created in error.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"node_id": {"type": "string"}},
+                    "required": ["node_id"],
                 },
-                required=["edge_id", "summary", "log_note"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="delete_edge",
-            description="Delete a relationship edge from the graph by its id.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={"edge_id": _str},
-                required=["edge_id"],
-            ),
-        ),
-        types.FunctionDeclaration(
-            name="create_episode_spans",
-            description="Store episode spans for a transcript. Call after all graph writes are complete to mark significant segments with start/end offsets and summaries.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "transcript_id": _str,
-                    "spans": types.Schema(
-                        type=types.Type.ARRAY,
-                        items=types.Schema(
-                            type=types.Type.OBJECT,
-                            properties={
-                                "start_offset": _int,
-                                "end_offset": _int,
-                                "summary": _str,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_edge",
+                "description": "Create a directed relationship edge between two existing nodes. The label is a concise descriptor (e.g. 'fears', 'is_mentor_of', 'evolved_into').",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "source_id": {"type": "string"},
+                        "target_id": {"type": "string"},
+                        "label": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "log_note": {"type": "string"},
+                        **_transcript_props,
+                    },
+                    "required": ["source_id", "target_id", "label", "summary"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_edge",
+                "description": "Update an existing edge's summary and append a log entry. Use when a relationship has evolved or new information changes its description.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "edge_id": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "log_note": {"type": "string"},
+                        **_transcript_props,
+                    },
+                    "required": ["edge_id", "summary", "log_note"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_edge",
+                "description": "Delete a relationship edge from the graph by its id.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"edge_id": {"type": "string"}},
+                    "required": ["edge_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_episode_spans",
+                "description": "Store episode spans for a transcript. Call after all graph writes are complete to mark significant segments with start/end offsets and summaries.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "transcript_id": {"type": "string"},
+                        "spans": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "start_offset": {"type": "integer"},
+                                    "end_offset": {"type": "integer"},
+                                    "summary": {"type": "string"},
+                                },
+                                "required": ["start_offset", "end_offset", "summary"],
                             },
-                            required=["start_offset", "end_offset", "summary"],
-                        ),
-                    ),
+                        },
+                    },
+                    "required": ["transcript_id", "spans"],
                 },
-                required=["transcript_id", "spans"],
-            ),
-        ),
+            },
+        },
     ]
 
     return tools_dict, declarations
