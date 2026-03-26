@@ -13,7 +13,7 @@ LifeOS builds a personal memory engine in five phases: lay the infrastructure fo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure** - Devenv, FalkorDB with indexes, atomic storage ops, LLM client, agent harness skeleton (completed 2026-03-25)
-- [ ] **Phase 2: Ingestion Agent** - Full audio-to-graph pipeline with disambiguation, vocabulary registry, and log compression
+- [ ] **Phase 2: Ingestion Agent** - Full audio-to-graph pipeline with disambiguation and log compression
 - [ ] **Phase 3: Query Agent** - Vector search, agentic retrieval strategy, transcript-grounded answer synthesis
 - [ ] **Phase 4: Theme Layer + Memo Agent** - Derived theme map with heat/salience, memo agent pattern detection
 - [ ] **Phase 5: Evaluation** - RAGAS harness configured for Gemini, test dataset, temporal query suite
@@ -37,18 +37,19 @@ Plans:
 - [x] 01-03-PLAN.md — Agent harness with budget enforcement, script stubs for all workflows
 
 ### Phase 2: Ingestion Agent
-**Goal**: An audio file can be ingested end-to-end — transcribed, parsed by the ingestion agent, and written to the graph as typed nodes and edges with append-only logs, episode spans, and embedded summaries — with no duplicate nodes and controlled type drift
+**Goal**: An audio file can be ingested end-to-end — transcribed, parsed by the ingestion agent, and written to the graph as LLM-defined nodes and edges with append-only logs, episode spans, and embedded summaries — with no duplicate nodes and log compression
 **Depends on**: Phase 1
-**Requirements**: TRNS-01, TRNS-02, TRNS-03, GRPH-02, GRPH-03, GRPH-04, INGST-01, INGST-02, INGST-03, INGST-04, INGST-05, INGST-06, COMP-01, COMP-02, COMP-03, VECT-01
+**Requirements**: TRNS-01, TRNS-02, TRNS-03, GRPH-02, GRPH-03, GRPH-04, INGST-01, INGST-02, INGST-03, INGST-04, INGST-06, COMP-01, COMP-02, COMP-03, VECT-01
 **Success Criteria** (what must be TRUE):
   1. Running `ingest.py` on an audio file produces a stored transcript with ID, recording timestamp, and full text
   2. The ingestion agent writes LLM-defined nodes and edges to FalkorDB — no hardcoded types — and each node/edge carries a current summary, append-only log, alias set, and transcript references
   3. Ingesting the same concept twice (with different surface forms) produces one node, not two — alias union and disambiguation work
   4. Episode spans (start_offset, end_offset, summary, embedding) are created as a side effect of graph writes and stored with transcript references
   5. When a node log exceeds the token budget, compression runs automatically and preserves inflection points and reversals while condensing older entries
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
+- [ ] 02-00-PLAN.md — Wave 0: test stub files for Nyquist sampling continuity
 - [ ] 02-01-PLAN.md — Data model updates: drop type field, add name/label, Transcript model, graph.py extensions
 - [ ] 02-02-PLAN.md — Agent harness budget removal, 9 ingestion tools with build_tools factory
 - [ ] 02-03-PLAN.md — Ingestion and compression prompts, log compression module
@@ -89,12 +90,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 3/3 | Complete   | 2026-03-25 |
-| 2. Ingestion Agent | 0/4 | Planning complete | - |
+| 2. Ingestion Agent | 0/5 | Planning complete | - |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |
 | 5. Evaluation | 0/? | Not started | - |

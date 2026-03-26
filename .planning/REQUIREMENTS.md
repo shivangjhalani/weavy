@@ -26,10 +26,10 @@
 ### Ingestion Agent
 
 - [ ] **INGST-01**: Agent reads full transcript at once (no chunking) and builds/updates graph
-- [ ] **INGST-02**: Three-tier node disambiguation: exact alias match → fuzzy similarity → LLM reasoning
+- [ ] **INGST-02**: Three-tier node disambiguation: exact alias match -> fuzzy similarity -> LLM reasoning
 - [ ] **INGST-03**: When nodes merge, alias sets are unioned; new surface forms added to existing alias sets
 - [ ] **INGST-04**: Agent exercises judgment on what's worth persisting — not every sentence becomes a node
-- [ ] **INGST-05**: Vocabulary registry of existing node/edge types injected into ingestion prompt to reduce type drift
+- ~~**INGST-05**: Vocabulary registry of existing node/edge types injected into ingestion prompt to reduce type drift~~ — **Dropped (D-01)**: Types removed per Bitter Lesson. No vocabulary registry needed.
 - [ ] **INGST-06**: Log entries include recording timestamp and natural language note describing what changed or was reinforced
 
 ### Log Compression
@@ -141,7 +141,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | INGST-02 | Phase 2 | Pending |
 | INGST-03 | Phase 2 | Pending |
 | INGST-04 | Phase 2 | Pending |
-| INGST-05 | Phase 2 | Pending |
+| INGST-05 | Phase 2 | Dropped (D-01) |
 | INGST-06 | Phase 2 | Pending |
 | COMP-01 | Phase 2 | Pending |
 | COMP-02 | Phase 2 | Pending |
@@ -168,10 +168,10 @@ Deferred to future release. Tracked but not in current roadmap.
 | EVAL-03 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 43 total
+- v1 requirements: 43 total (1 dropped)
 - Mapped to phases: 43
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after roadmap creation*
+*Last updated: 2026-03-26 after Phase 2 planning revision*
