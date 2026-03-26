@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-stopped_at: "Completed 06-01-PLAN.md: Migrate leaf modules to litellm"
-last_updated: "2026-03-26T19:28:42.921Z"
+status: Phase complete — ready for verification
+stopped_at: "Completed 06-02-PLAN.md: Migrate AgentHarness to litellm with cost tracking"
+last_updated: "2026-03-26T19:34:28.646Z"
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Plan: 2 of 2
 | Phase 02-ingestion-agent P02 | 4min | 2 tasks | 4 files |
 | Phase 02-ingestion-agent P03 | 3min | 2 tasks | 6 files |
 | Phase 06 P01 | 9min | 2 tasks | 8 files |
+| Phase 06 P02 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 - [Phase 06]: litellm requires gemini/ prefix for Google AI Studio routing — model names updated in config and .env
 - [Phase 06]: reasoning_effort string replaces thinking_budget integer — litellm maps effort levels to budget tokens internally
 - [Phase 06]: compress_log drops client param — litellm is stateless, no client object threading required
+- [Phase 06]: AgentHarness drops client and thinking_config params: litellm is stateless, reasoning_effort string replaces ThinkingConfig integer budget
+- [Phase 06]: Tool results use role:tool messages with tool_call_id: required by OpenAI function calling protocol, replaces google-genai FunctionResponse
+- [Phase 06]: cost tracking is best-effort (try/except around completion_cost): avoids breaking agent loop on unsupported models
 
 ### Pending Todos
 
@@ -110,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T19:28:42.914Z
-Stopped at: Completed 06-01-PLAN.md: Migrate leaf modules to litellm
+Last session: 2026-03-26T19:34:28.638Z
+Stopped at: Completed 06-02-PLAN.md: Migrate AgentHarness to litellm with cost tracking
 Resume file: None

@@ -105,8 +105,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 **Goal:** All LLM completion, embedding, and function-calling calls use litellm instead of google-genai SDK — zero google-genai imports remain in production code, and per-run cost tracking is available via litellm.completion_cost()
 **Requirements**: MIGR-01, MIGR-02, MIGR-03, MIGR-04, MIGR-05, MIGR-06
 **Depends on:** Phase 2
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 06-01-PLAN.md — Migrate leaf modules (embeddings, compress, tools) to litellm
-- [ ] 06-02-PLAN.md — Rewrite AgentHarness and ingest.py for litellm, add cost tracking, rewrite tests
+- [x] 06-02-PLAN.md — Rewrite AgentHarness and ingest.py for litellm, add cost tracking, rewrite tests
