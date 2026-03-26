@@ -48,7 +48,7 @@ The memory system must faithfully capture, organize, and retrieve a person's evo
 
 - **Platform:** Python backend, runnable scripts for experimentation
 - **Graph DB:** FalkorDB (Docker via devenv.nix, always running)
-- **LLM:** Gemini 2.5 Flash via GEMINI_API_KEY
+- **LLM:** Gemini 2.5 Flash via litellm (provider-agnostic, per-run cost tracking)
 - **Transcription:** Whisper via Groq API (GROQ_API_KEY)
 - **Embeddings:** gemini-embedding-001
 - **Evaluation:** RAGAS for query quality (faithfulness, relevance, groundedness)
@@ -70,7 +70,8 @@ The memory system must faithfully capture, organize, and retrieve a person's evo
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | FalkorDB for graph storage | Already set up in devenv, Redis-compatible, supports Cypher queries | Validated Phase 1 — indexes, atomic CRUD, vector search working |
-| Gemini 2.5 Flash as reasoning engine | Cost-effective, fast, good for experimentation phase | Validated Phase 1 — harness built, embeddings via gemini-embedding-001 confirmed |
+| Gemini 2.5 Flash as reasoning engine | Cost-effective, fast, good for experimentation phase | Validated Phase 1 — harness built, embeddings confirmed; Phase 6 migrated to litellm for provider-agnostic calls |
+| litellm as LLM abstraction layer | Provider-agnostic API, per-run cost tracking, OpenAI-format tool calling | Validated Phase 6 — zero google-genai imports, cost tracking via completion_cost() |
 | LLM-defined graph schema | Avoids baking in assumptions about what questions will be asked; becomes more powerful as models improve | Validated Phase 2 — Node.name/Edge.label are free strings, no hardcoded types in prompt |
 | Three-layer memory (transcripts → graph → themes) | Separates source of truth from derived structure from high-level patterns | — Pending |
 | RAGAS for evaluation | Established framework for RAG quality evaluation — faithfulness, relevance, groundedness | — Pending |
@@ -94,4 +95,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after Phase 2 (Ingestion Agent) completion*
+*Last updated: 2026-03-27 after Phase 6 (litellm migration) completion*
