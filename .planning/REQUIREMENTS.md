@@ -18,9 +18,9 @@
 ### Graph Storage
 
 - [x] **GRPH-01**: FalkorDB graph store initialized with proper indexes on frequently queried properties
-- [ ] **GRPH-02**: Nodes carry: current summary, append-only log (timestamped entries), alias set, transcript references (transcript_id, start_offset, end_offset)
-- [ ] **GRPH-03**: Edges carry: current summary, append-only log (timestamped entries), transcript references
-- [ ] **GRPH-04**: Node and edge types are entirely LLM-defined — no hardcoded entity types or relationship types
+- [x] **GRPH-02**: Nodes carry: current summary, append-only log (timestamped entries), alias set, transcript references (transcript_id, start_offset, end_offset)
+- [x] **GRPH-03**: Edges carry: current summary, append-only log (timestamped entries), transcript references
+- [x] **GRPH-04**: Node and edge types are entirely LLM-defined — no hardcoded entity types or relationship types
 - [x] **GRPH-05**: Atomic update operations: updating a node/edge summary always re-embeds in the same operation
 
 ### Ingestion Agent
@@ -134,9 +134,9 @@ Deferred to future release. Tracked but not in current roadmap.
 | TRNS-01 | Phase 2 | Complete |
 | TRNS-02 | Phase 2 | Complete |
 | TRNS-03 | Phase 2 | Complete |
-| GRPH-02 | Phase 2 | Pending |
-| GRPH-03 | Phase 2 | Pending |
-| GRPH-04 | Phase 2 | Pending |
+| GRPH-02 | Phase 2 | Complete |
+| GRPH-03 | Phase 2 | Complete |
+| GRPH-04 | Phase 2 | Complete |
 | INGST-01 | Phase 2 | Complete |
 | INGST-02 | Phase 2 | Complete |
 | INGST-03 | Phase 2 | Complete |
