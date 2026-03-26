@@ -132,13 +132,13 @@ def main():
     tools, declarations = build_tools(graph, store, recording_timestamp=recorded_at)
     wrapped_tools, modified_node_ids, modified_edge_ids = tracking_wrapper(tools)
 
-    # NOTE: AgentHarness will be fully migrated to litellm in plan 02.
-    # For now, harness construction stays compatible with current harness.py signature.
+    reasoning_effort = config.reasoning_effort
     harness = AgentHarness(
         model=config.gemini_model,
         tools=wrapped_tools,
         declarations=declarations,
         tracer=tracer,
+        reasoning_effort=reasoning_effort,
     )
 
     system_prompt = load_prompt("prompts/ingest.md")
@@ -147,8 +147,8 @@ def main():
         f"Recording from {recorded_at.strftime('%Y-%m-%d %H:%M')}:\n\n{transcript.text}"
     )
 
-    harness.run(system_prompt=system_prompt, user_message=user_message)
-    print("[ingest] Agent processing complete.")
+    result = harness.run(system_prompt=system_prompt, user_message=user_message)
+    print(f"[ingest] Agent processing complete. Cost: ${harness.last_run_cost:.4f}")
 
     # Step 4 — Compression pass
     compressed = run_compression_pass(
