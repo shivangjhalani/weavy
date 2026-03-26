@@ -11,9 +11,9 @@
 
 ### Transcription
 
-- [ ] **TRNS-01**: System accepts audio files and transcribes via Groq Whisper API
-- [ ] **TRNS-02**: Raw transcript stored with unique ID, recording timestamp, and full text
-- [ ] **TRNS-03**: Episode spans (start_offset, end_offset, summary, embedding) created during ingestion as a side effect of graph writing
+- [x] **TRNS-01**: System accepts audio files and transcribes via Groq Whisper API
+- [x] **TRNS-02**: Raw transcript stored with unique ID, recording timestamp, and full text
+- [x] **TRNS-03**: Episode spans (start_offset, end_offset, summary, embedding) created during ingestion as a side effect of graph writing
 
 ### Graph Storage
 
@@ -25,22 +25,22 @@
 
 ### Ingestion Agent
 
-- [ ] **INGST-01**: Agent reads full transcript at once (no chunking) and builds/updates graph
-- [ ] **INGST-02**: Three-tier node disambiguation: exact alias match -> fuzzy similarity -> LLM reasoning
-- [ ] **INGST-03**: When nodes merge, alias sets are unioned; new surface forms added to existing alias sets
-- [ ] **INGST-04**: Agent exercises judgment on what's worth persisting — not every sentence becomes a node
+- [x] **INGST-01**: Agent reads full transcript at once (no chunking) and builds/updates graph
+- [x] **INGST-02**: Three-tier node disambiguation: exact alias match -> fuzzy similarity -> LLM reasoning
+- [x] **INGST-03**: When nodes merge, alias sets are unioned; new surface forms added to existing alias sets
+- [x] **INGST-04**: Agent exercises judgment on what's worth persisting — not every sentence becomes a node
 - ~~**INGST-05**: Vocabulary registry of existing node/edge types injected into ingestion prompt to reduce type drift~~ — **Dropped (D-01)**: Types removed per Bitter Lesson. No vocabulary registry needed.
-- [ ] **INGST-06**: Log entries include recording timestamp and natural language note describing what changed or was reinforced
+- [x] **INGST-06**: Log entries include recording timestamp and natural language note describing what changed or was reinforced
 
 ### Log Compression
 
-- [ ] **COMP-01**: Token-budgeted compression triggers when a node/edge log exceeds threshold
-- [ ] **COMP-02**: Compression preserves arc of change — inflection points, reversals, contradictions retained
-- [ ] **COMP-03**: Recent entries kept intact; older entries condensed into summary
+- [x] **COMP-01**: Token-budgeted compression triggers when a node/edge log exceeds threshold
+- [x] **COMP-02**: Compression preserves arc of change — inflection points, reversals, contradictions retained
+- [x] **COMP-03**: Recent entries kept intact; older entries condensed into summary
 
 ### Vector Search
 
-- [ ] **VECT-01**: Embeddings generated via gemini-embedding-001 for node summaries, edge summaries, episode summaries, theme text
+- [x] **VECT-01**: Embeddings generated via gemini-embedding-001 for node summaries, edge summaries, episode summaries, theme text
 - [ ] **VECT-02**: Vector similarity search across all memory layers using FalkorDB native vector indexes
 - [ ] **VECT-03**: Hybrid vector + graph retrieval: vector similarity seeds graph traversal, or graph neighbors enhance vector results
 
@@ -131,22 +131,22 @@ Deferred to future release. Tracked but not in current roadmap.
 | GRPH-05 | Phase 1 | Complete |
 | HARN-01 | Phase 1 | Complete |
 | HARN-03 | Phase 1 | Complete |
-| TRNS-01 | Phase 2 | Pending |
-| TRNS-02 | Phase 2 | Pending |
-| TRNS-03 | Phase 2 | Pending |
+| TRNS-01 | Phase 2 | Complete |
+| TRNS-02 | Phase 2 | Complete |
+| TRNS-03 | Phase 2 | Complete |
 | GRPH-02 | Phase 2 | Pending |
 | GRPH-03 | Phase 2 | Pending |
 | GRPH-04 | Phase 2 | Pending |
-| INGST-01 | Phase 2 | Pending |
-| INGST-02 | Phase 2 | Pending |
-| INGST-03 | Phase 2 | Pending |
-| INGST-04 | Phase 2 | Pending |
+| INGST-01 | Phase 2 | Complete |
+| INGST-02 | Phase 2 | Complete |
+| INGST-03 | Phase 2 | Complete |
+| INGST-04 | Phase 2 | Complete |
 | INGST-05 | Phase 2 | Dropped (D-01) |
-| INGST-06 | Phase 2 | Pending |
-| COMP-01 | Phase 2 | Pending |
-| COMP-02 | Phase 2 | Pending |
-| COMP-03 | Phase 2 | Pending |
-| VECT-01 | Phase 2 | Pending |
+| INGST-06 | Phase 2 | Complete |
+| COMP-01 | Phase 2 | Complete |
+| COMP-02 | Phase 2 | Complete |
+| COMP-03 | Phase 2 | Complete |
+| VECT-01 | Phase 2 | Complete |
 | VECT-02 | Phase 3 | Pending |
 | VECT-03 | Phase 3 | Pending |
 | HARN-02 | Phase 3 | Pending |
