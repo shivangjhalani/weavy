@@ -46,8 +46,13 @@ Plans:
   3. Ingesting the same concept twice (with different surface forms) produces one node, not two — alias union and disambiguation work
   4. Episode spans (start_offset, end_offset, summary, embedding) are created as a side effect of graph writes and stored with transcript references
   5. When a node log exceeds the token budget, compression runs automatically and preserves inflection points and reversals while condensing older entries
-**Plans**: TBD
-**UI hint**: no
+**Plans**: 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Data model updates: drop type field, add name/label, Transcript model, graph.py extensions
+- [ ] 02-02-PLAN.md — Agent harness budget removal, 9 ingestion tools with build_tools factory
+- [ ] 02-03-PLAN.md — Ingestion and compression prompts, log compression module
+- [ ] 02-04-PLAN.md — Full ingest.py pipeline wiring: transcribe -> store -> agent -> compress -> summary
 
 ### Phase 3: Query Agent
 **Goal**: A natural-language question about the ingested journal can be answered with source citations — the query agent autonomously decides its retrieval strategy across all three memory layers using vector similarity, graph traversal, and direct transcript access
@@ -89,7 +94,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 3/3 | Complete   | 2026-03-25 |
-| 2. Ingestion Agent | 0/? | Not started | - |
+| 2. Ingestion Agent | 0/4 | Planning complete | - |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |
 | 5. Evaluation | 0/? | Not started | - |
