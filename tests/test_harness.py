@@ -101,7 +101,7 @@ class MockClient:
 # ---------------------------------------------------------------------------
 
 def test_harness_instantiation():
-    """AgentHarness can be instantiated with model, tools, declarations, budget."""
+    """AgentHarness can be instantiated with model, tools, declarations, client."""
     from lifeos.agent.harness import AgentHarness
 
     client = MockClient([make_text_response("hello")])
@@ -109,11 +109,10 @@ def test_harness_instantiation():
         model="gemini-2.5-flash",
         tools={},
         declarations=[],
-        budget=3,
         client=client,
     )
     assert harness.model == "gemini-2.5-flash"
-    assert harness.budget == 3
+    assert not hasattr(harness, "budget")
 
 
 def test_harness_text_only_response():
@@ -126,7 +125,6 @@ def test_harness_text_only_response():
         model="gemini-2.5-flash",
         tools={},
         declarations=[],
-        budget=3,
         client=client,
     )
     result = harness.run(system_prompt="You are helpful.", user_message="What is the answer?")
@@ -153,7 +151,6 @@ def test_harness_dispatches_tool_call():
         model="gemini-2.5-flash",
         tools={"my_tool": my_tool},
         declarations=[],
-        budget=5,
         client=client,
     )
     result = harness.run(system_prompt="Use tools.", user_message="Add numbers.")
@@ -180,7 +177,6 @@ def test_harness_tool_receives_correct_kwargs():
         model="gemini-2.5-flash",
         tools={"capture_tool": capture_tool},
         declarations=[],
-        budget=3,
         client=client,
     )
     harness.run(system_prompt="Use tools.", user_message="Test kwargs.")
@@ -217,7 +213,6 @@ def test_harness_function_response_includes_fc_id():
         model="gemini-2.5-flash",
         tools={"my_tool": my_tool},
         declarations=[],
-        budget=3,
         client=CapturingClient(),
     )
     harness.run(system_prompt=".", user_message="test")
@@ -272,7 +267,6 @@ def test_harness_iterates_all_parts():
         model="gemini-2.5-flash",
         tools={"tool_a": tool_a, "tool_b": tool_b},
         declarations=[],
-        budget=5,
         client=client,
     )
     result = harness.run(system_prompt=".", user_message="run both")
@@ -281,8 +275,8 @@ def test_harness_iterates_all_parts():
     assert ("b", "second") in calls_dispatched
 
 
-def test_harness_budget_enforcement():
-    """When budget=2 and model keeps returning tool calls, harness stops after 2 and forces final answer."""
+def test_harness_runs_until_model_stops():
+    """Harness runs tool calls until model returns text-only response (no budget limit)."""
     from lifeos.agent.harness import AgentHarness
 
     call_count = 0
@@ -292,80 +286,20 @@ def test_harness_budget_enforcement():
         call_count += 1
         return f"result-{n}"
 
-    # Always return a function call — budget should stop this
-    always_fc = make_fc_response("counting_tool", {"n": 1}, "call-loop")
-    # Final answer after budget exhausted
-    final_answer = make_text_response("I have exhausted my budget, here is my answer.")
+    # Model calls tool 5 times before returning text
+    responses = [make_fc_response("counting_tool", {"n": i}, f"call-{i}") for i in range(5)]
+    responses.append(make_text_response("Done after 5 tool calls."))
 
-    class BudgetTestModels:
-        _count = 0
-
-        def generate_content(self, model, contents, config):
-            result = always_fc if self._count < 4 else final_answer
-            self._count += 1
-            return result
-
-    class BudgetTestClient:
-        models = BudgetTestModels()
-
+    client = MockClient(responses)
     harness = AgentHarness(
         model="gemini-2.5-flash",
         tools={"counting_tool": counting_tool},
         declarations=[],
-        budget=2,
-        client=BudgetTestClient(),
+        client=client,
     )
-    result = harness.run(system_prompt=".", user_message="loop forever")
-
-    # Tool should have been called at most `budget` times
-    assert call_count <= 2, f"Tool was called {call_count} times, expected <= 2"
-    # Result must be a string (forced final answer)
-    assert isinstance(result, str)
-
-
-def test_harness_budget_injects_exhausted_message():
-    """When budget is exhausted, harness injects the budget-exhausted turn before forcing final answer."""
-    from lifeos.agent.harness import AgentHarness
-
-    injected_contents = []
-
-    class TrackingModels:
-        _count = 0
-        always_fc = make_fc_response("t", {}, "c1")
-        final = make_text_response("final")
-
-        def generate_content(self, model, contents, config):
-            # Record what contents were passed on every call so we can find the budget message
-            injected_contents.extend(contents)
-            resp = self.always_fc if self._count < 3 else self.final
-            self._count += 1
-            return resp
-
-    class TrackingClient:
-        models = TrackingModels()
-
-    def t() -> str:
-        return "ok"
-
-    harness = AgentHarness(
-        model="gemini-2.5-flash",
-        tools={"t": t},
-        declarations=[],
-        budget=1,
-        client=TrackingClient(),
-    )
-    harness.run(system_prompt=".", user_message="test")
-
-    # Find if any content includes the budget-exhausted text
-    all_text = []
-    for c in injected_contents:
-        if hasattr(c, "parts"):
-            for p in c.parts:
-                if hasattr(p, "text") and p.text:
-                    all_text.append(p.text)
-
-    budget_msg_found = any("budget exhausted" in t.lower() for t in all_text)
-    assert budget_msg_found, f"Budget exhaustion message not found in injected contents. Texts: {all_text}"
+    result = harness.run(system_prompt=".", user_message="call tools many times")
+    assert result == "Done after 5 tool calls."
+    assert call_count == 5, f"Expected 5 tool calls, got {call_count}"
 
 
 def test_harness_returns_string():
@@ -377,7 +311,6 @@ def test_harness_returns_string():
         model="gemini-2.5-flash",
         tools={},
         declarations=[],
-        budget=3,
         client=client,
     )
     result = harness.run(system_prompt=".", user_message=".")
