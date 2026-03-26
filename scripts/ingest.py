@@ -2,17 +2,16 @@
 
 Usage: devenv shell -- uv run python scripts/ingest.py <audio_file> [--verbose]
 
---verbose enables full-fidelity JSONL tracing to ./traces/ and activates
-Gemini extended thinking (thinking_budget=8000).
+--verbose enables full-fidelity JSONL tracing to ./traces/.
 """
 
 import argparse
+import logging
 import uuid
+
+logging.basicConfig(level=logging.WARNING)
 from datetime import datetime, timezone
 from pathlib import Path
-
-from google import genai
-from google.genai import types
 
 from lifeos.agent.compress import run_compression_pass
 from lifeos.agent.harness import AgentHarness
@@ -25,17 +24,13 @@ from lifeos.memory.store import TranscriptStore
 
 
 def get_recording_timestamp(audio_path: Path) -> datetime:
-    """Extract recording timestamp from file mtime. Fallback to now.
+    """Extract recording timestamp from file mtime.
 
     Per D-21: read from filesystem metadata.
     Per Pitfall 7: Linux has no st_birthtime — use st_mtime.
     """
-    try:
-        stat = audio_path.stat()
-        mtime = stat.st_mtime
-        return datetime.fromtimestamp(mtime, tz=timezone.utc)
-    except (OSError, ValueError):
-        return datetime.now(timezone.utc)
+    mtime = audio_path.stat().st_mtime
+    return datetime.fromtimestamp(mtime, tz=timezone.utc)
 
 
 def load_prompt(path: str) -> str:
@@ -94,7 +89,7 @@ def main():
         "--verbose",
         action="store_true",
         help=(
-            "Enable full-fidelity JSONL tracing to ./traces/ and Gemini extended thinking. "
+            "Enable full-fidelity JSONL tracing to ./traces/. "
             "Useful for debugging agent decisions."
         ),
     )
@@ -104,25 +99,22 @@ def main():
     if not audio_path.exists():
         parser.error(f"file not found: {audio_path}")
 
-    # Set up optional tracer and thinking config
-    tracer = None
-    thinking_config = None
-    if args.verbose:
-        from lifeos.agent.tracer import JsonlTracer
-
-        tracer = JsonlTracer()
-        thinking_config = types.ThinkingConfig(thinking_budget=8000, include_thoughts=True)
-        print(f"[ingest] Verbose mode: tracing to {tracer.trace_file}")
-
     # Initialize config and services
     config = get_config()
     graph = init_graph(config.falkordb_host, config.falkordb_port, config.graph_name)
     store = TranscriptStore(config.transcript_dir)
-    client = genai.Client()
+
+    # Set up optional tracer (--verbose only controls tracing)
+    tracer = None
+    if args.verbose:
+        from lifeos.agent.tracer import JsonlTracer
+
+        tracer = JsonlTracer()
+        print(f"[ingest] Verbose mode: tracing to {tracer.trace_file}")
 
     # Step 1 — Transcribe
     print(f"[ingest] Transcribing {audio_path.name}...")
-    raw = transcribe_file(audio_path)
+    raw = transcribe_file(audio_path, config)
 
     # Step 2 — Store transcript
     transcript_id = str(uuid.uuid4())
@@ -140,17 +132,18 @@ def main():
     tools, declarations = build_tools(graph, store, recording_timestamp=recorded_at)
     wrapped_tools, modified_node_ids, modified_edge_ids = tracking_wrapper(tools)
 
+    # NOTE: AgentHarness will be fully migrated to litellm in plan 02.
+    # For now, harness construction stays compatible with current harness.py signature.
     harness = AgentHarness(
-        model="gemini-2.5-flash",
+        model=config.gemini_model,
         tools=wrapped_tools,
         declarations=declarations,
-        client=client,
         tracer=tracer,
-        thinking_config=thinking_config,
     )
 
     system_prompt = load_prompt("prompts/ingest.md")
     user_message = (
+        f"Transcript ID: {transcript_id}\n"
         f"Recording from {recorded_at.strftime('%Y-%m-%d %H:%M')}:\n\n{transcript.text}"
     )
 
@@ -159,14 +152,13 @@ def main():
 
     # Step 4 — Compression pass
     compressed = run_compression_pass(
-        graph, modified_node_ids, modified_edge_ids, client
+        graph, modified_node_ids, modified_edge_ids, model=config.gemini_model
     )
     print(f"[ingest] Compressed {compressed} log(s).")
 
     # Step 5 — Print summary
     # Reload transcript to get episode spans (agent may have written them)
-    stored_data = store.load(transcript_id) or {}
-    episode_spans = stored_data.get("episode_spans", [])
+    episode_spans = store.load(transcript_id).get("episode_spans", [])
     span_count = len(episode_spans)
 
     print("[ingest] === Ingestion Summary ===")

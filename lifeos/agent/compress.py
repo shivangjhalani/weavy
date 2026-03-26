@@ -3,9 +3,8 @@
 import json
 from pathlib import Path
 
+import litellm
 import tiktoken
-from google import genai
-from google.genai import types
 
 from lifeos.memory import graph as graph_module
 
@@ -29,11 +28,13 @@ def load_prompt(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def compress_log(log_entries: list[dict], client: genai.Client) -> list[dict]:
+def compress_log(
+    log_entries: list[dict], model: str
+) -> list[dict]:
     """Compress older log entries, keep last 3 intact. Returns new log list.
 
     Per COMP-03: recent (last 3) entries kept intact; older entries condensed.
-    Per D-16: standalone Gemini call with compression prompt. No tools.
+    Per D-16: standalone litellm completion call with compression prompt. No tools.
     """
     if len(log_entries) <= 3:
         return log_entries
@@ -44,16 +45,16 @@ def compress_log(log_entries: list[dict], client: genai.Client) -> list[dict]:
     prompt = load_prompt("prompts/compress.md")
     older_json = json.dumps(older, indent=2, default=str)
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"Compress these log entries:\n\n{older_json}",
-        config=types.GenerateContentConfig(
-            system_instruction=prompt,
-            response_mime_type="application/json",
-        ),
+    response = litellm.completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"Compress these log entries:\n\n{older_json}"},
+        ],
+        response_format={"type": "json_object"},
     )
 
-    compressed_entry = json.loads(response.text)
+    compressed_entry = json.loads(response.choices[0].message.content)
     return [compressed_entry] + recent
 
 
@@ -61,7 +62,7 @@ def run_compression_pass(
     graph,
     modified_node_ids: list[str],
     modified_edge_ids: list[str],
-    client: genai.Client,
+    model: str,
 ) -> int:
     """Compress logs for all over-budget nodes and edges.
 
@@ -75,10 +76,14 @@ def run_compression_pass(
     for node_id in modified_node_ids:
         node = graph_module.get_node(graph, node_id)
         if node and node.get("log"):
-            log_json = node["log"] if isinstance(node["log"], str) else json.dumps(node["log"])
+            log_json = (
+                node["log"] if isinstance(node["log"], str) else json.dumps(node["log"])
+            )
             if needs_compression(log_json):
-                log_entries = json.loads(log_json) if isinstance(log_json, str) else node["log"]
-                new_log = compress_log(log_entries, client)
+                log_entries = (
+                    json.loads(log_json) if isinstance(log_json, str) else node["log"]
+                )
+                new_log = compress_log(log_entries, model)
                 graph_module.set_node_log(graph, node_id, new_log)
                 compressed_count += 1
 
@@ -91,7 +96,7 @@ def run_compression_pass(
             log_json = edge_data.result_set[0][0]
             if needs_compression(log_json):
                 log_entries = json.loads(log_json)
-                new_log = compress_log(log_entries, client)
+                new_log = compress_log(log_entries, model)
                 graph_module.set_edge_log(graph, edge_id, new_log)
                 compressed_count += 1
 

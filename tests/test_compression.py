@@ -3,14 +3,21 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from lifeos.agent.compress import (
     compress_log,
     count_tokens,
     needs_compression,
     run_compression_pass,
 )
+
+TEST_MODEL = "gemini/gemini-2.5-flash"
+
+
+def _make_litellm_response(content: dict) -> MagicMock:
+    """Build a mock litellm completion response with the given content dict."""
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = json.dumps(content)
+    return mock_response
 
 
 def test_count_tokens_returns_int():
@@ -43,15 +50,15 @@ def test_compress_log_short_list_unchanged():
         {"recorded_at": "2024-01-01T00:00:00Z", "note": "first"},
         {"recorded_at": "2024-01-02T00:00:00Z", "note": "second"},
     ]
-    mock_client = MagicMock()
-    result = compress_log(entries, mock_client)
+    with patch("litellm.completion") as mock_completion:
+        result = compress_log(entries, TEST_MODEL)
     assert result == entries
-    # Gemini should NOT be called for short lists
-    mock_client.models.generate_content.assert_not_called()
+    # litellm should NOT be called for short lists
+    mock_completion.assert_not_called()
 
 
 def test_compress_log_splits_correctly():
-    """compress_log with 5 entries keeps last 3, compresses first 2 via Gemini."""
+    """compress_log with 5 entries keeps last 3, compresses first 2 via litellm."""
     entries = [
         {"recorded_at": "2024-01-01T00:00:00Z", "note": "entry1"},
         {"recorded_at": "2024-01-02T00:00:00Z", "note": "entry2"},
@@ -61,13 +68,10 @@ def test_compress_log_splits_correctly():
     ]
 
     compressed_entry = {"recorded_at": "2024-01-01T00:00:00Z", "note": "compressed"}
-    mock_response = MagicMock()
-    mock_response.text = json.dumps(compressed_entry)
+    mock_response = _make_litellm_response(compressed_entry)
 
-    mock_client = MagicMock()
-    mock_client.models.generate_content.return_value = mock_response
-
-    result = compress_log(entries, mock_client)
+    with patch("litellm.completion", return_value=mock_response):
+        result = compress_log(entries, TEST_MODEL)
 
     # Should be: [compressed_entry, entry3, entry4, entry5]
     assert len(result) == 4
@@ -77,8 +81,8 @@ def test_compress_log_splits_correctly():
     assert result[3] == entries[4]
 
 
-def test_compress_log_sends_only_older_to_gemini():
-    """compress_log sends only the first 2 entries (not last 3) to Gemini."""
+def test_compress_log_sends_only_older_to_litellm():
+    """compress_log sends only the first 2 entries (not last 3) to litellm."""
     entries = [
         {"recorded_at": "2024-01-01T00:00:00Z", "note": "old1"},
         {"recorded_at": "2024-01-02T00:00:00Z", "note": "old2"},
@@ -88,24 +92,22 @@ def test_compress_log_sends_only_older_to_gemini():
     ]
 
     compressed_entry = {"recorded_at": "2024-01-01T00:00:00Z", "note": "compressed"}
-    mock_response = MagicMock()
-    mock_response.text = json.dumps(compressed_entry)
+    mock_response = _make_litellm_response(compressed_entry)
 
-    mock_client = MagicMock()
-    mock_client.models.generate_content.return_value = mock_response
+    with patch("litellm.completion", return_value=mock_response) as mock_completion:
+        compress_log(entries, TEST_MODEL)
 
-    compress_log(entries, mock_client)
+    # Verify litellm.completion was called once
+    mock_completion.assert_called_once()
+    call_kwargs = mock_completion.call_args
 
-    # Verify Gemini was called
-    mock_client.models.generate_content.assert_called_once()
-    call_kwargs = mock_client.models.generate_content.call_args
-
-    # The contents string should include only the older entries (old1, old2)
-    contents_arg = call_kwargs.kwargs.get("contents") or call_kwargs.args[1] if len(call_kwargs.args) > 1 else call_kwargs.kwargs.get("contents", "")
-    assert "old1" in contents_arg
-    assert "old2" in contents_arg
-    assert "recent1" not in contents_arg
-    assert "recent3" not in contents_arg
+    # The user message content should include only the older entries (old1, old2)
+    messages = call_kwargs.kwargs.get("messages", [])
+    user_content = next((m["content"] for m in messages if m["role"] == "user"), "")
+    assert "old1" in user_content
+    assert "old2" in user_content
+    assert "recent1" not in user_content
+    assert "recent3" not in user_content
 
 
 def test_run_compression_pass_no_overbudget():
@@ -113,19 +115,18 @@ def test_run_compression_pass_no_overbudget():
     short_log = json.dumps([{"recorded_at": "2024-01-01T00:00:00Z", "note": "short"}])
 
     mock_graph = MagicMock()
-    mock_client = MagicMock()
 
     with patch("lifeos.agent.compress.graph_module") as mock_graph_module:
-        mock_graph_module.get_node.return_value = {"log": short_log}
-        result = run_compression_pass(
-            mock_graph,
-            modified_node_ids=["node-1"],
-            modified_edge_ids=[],
-            client=mock_client,
-        )
-
+        with patch("litellm.completion") as mock_completion:
+            mock_graph_module.get_node.return_value = {"log": short_log}
+            result = run_compression_pass(
+                mock_graph,
+                modified_node_ids=["node-1"],
+                modified_edge_ids=[],
+                model=TEST_MODEL,
+            )
     assert result == 0
-    mock_client.models.generate_content.assert_not_called()
+    mock_completion.assert_not_called()
 
 
 def test_run_compression_pass_compresses_node():
@@ -137,23 +138,21 @@ def test_run_compression_pass_compresses_node():
     ])
 
     mock_graph = MagicMock()
-    mock_client = MagicMock()
 
     compressed_entry = {"recorded_at": "2024-01-01T00:00:00Z", "note": "compressed history"}
-    mock_response = MagicMock()
-    mock_response.text = json.dumps(compressed_entry)
-    mock_client.models.generate_content.return_value = mock_response
+    mock_response = _make_litellm_response(compressed_entry)
 
     with patch("lifeos.agent.compress.graph_module") as mock_graph_module:
-        mock_graph_module.get_node.return_value = {"log": over_budget_log}
-        result = run_compression_pass(
-            mock_graph,
-            modified_node_ids=["node-1"],
-            modified_edge_ids=[],
-            client=mock_client,
-        )
-        # set_node_log must be called (not update_node)
-        mock_graph_module.set_node_log.assert_called_once()
-        mock_graph_module.update_node.assert_not_called()
+        with patch("litellm.completion", return_value=mock_response):
+            mock_graph_module.get_node.return_value = {"log": over_budget_log}
+            result = run_compression_pass(
+                mock_graph,
+                modified_node_ids=["node-1"],
+                modified_edge_ids=[],
+                model=TEST_MODEL,
+            )
+            # set_node_log must be called (not update_node)
+            mock_graph_module.set_node_log.assert_called_once()
+            mock_graph_module.update_node.assert_not_called()
 
     assert result == 1
