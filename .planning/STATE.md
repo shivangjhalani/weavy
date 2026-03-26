@@ -93,6 +93,10 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260326-n1u | Add JSONL tracing to AgentHarness with Tracer protocol | 2026-03-26 | 7b5c3f9 | [260326-n1u-add-jsonl-tracing-to-agentharness-with-t](./quick/260326-n1u-add-jsonl-tracing-to-agentharness-with-t/) |
 
+### Roadmap Evolution
+
+- Phase 6 added: Migrate from google-genai to litellm for provider-agnostic LLM calls and cost tracking
+
 ### Blockers/Concerns
 
 - [Research flag — Phase 2]: Fuzzy similarity threshold needs empirical calibration during Phase 2 planning
