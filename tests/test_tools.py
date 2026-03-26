@@ -318,7 +318,6 @@ def test_delete_edge_calls_graph():
 def test_create_episode_spans_embeds_summaries():
     """create_episode_spans generates embeddings for each span summary."""
     from lifeos.agent.tools import build_tools
-    import lifeos.core.embeddings as embeddings_module
 
     fake_embedding = [0.1, 0.2, 0.3]
     transcript_data = {"id": "t1", "text": "Full transcript text", "episode_spans": []}
@@ -326,7 +325,8 @@ def test_create_episode_spans_embeds_summaries():
     store = make_store(transcript_data)
     graph = make_graph()
 
-    with patch.object(embeddings_module, "embed_text", return_value=fake_embedding) as mock_embed:
+    # Patch embed_text in the tools module where it is imported
+    with patch("lifeos.agent.tools.embed_text", return_value=fake_embedding) as mock_embed:
         tools_dict, _ = build_tools(graph, store)
         spans = [
             {"start_offset": 0, "end_offset": 100, "summary": "Introduction segment"},
@@ -344,7 +344,6 @@ def test_create_episode_spans_embeds_summaries():
 def test_create_episode_spans_appends_to_existing():
     """create_episode_spans appends new spans to any existing episode_spans."""
     from lifeos.agent.tools import build_tools
-    import lifeos.core.embeddings as embeddings_module
 
     existing_span = {"start_offset": 0, "end_offset": 50, "summary": "old", "embedding": [0.1]}
     transcript_data = {"id": "t1", "text": "...", "episode_spans": [existing_span]}
@@ -352,7 +351,7 @@ def test_create_episode_spans_appends_to_existing():
     store = make_store(transcript_data)
     graph = make_graph()
 
-    with patch.object(embeddings_module, "embed_text", return_value=[0.5]):
+    with patch("lifeos.agent.tools.embed_text", return_value=[0.5]):
         tools_dict, _ = build_tools(graph, store)
         tools_dict["create_episode_spans"](
             transcript_id="t1",
