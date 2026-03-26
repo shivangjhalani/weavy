@@ -16,7 +16,7 @@ class LogEntry(BaseModel):
 
 class Node(BaseModel):
     id: str
-    type: str
+    name: str
     summary: str
     aliases: list[str] = Field(default_factory=list)
     log: list[LogEntry] = Field(default_factory=list)
@@ -26,10 +26,25 @@ class Node(BaseModel):
 
 class Edge(BaseModel):
     id: str
-    type: str
+    label: str
     source_id: str
     target_id: str
     summary: str
     log: list[LogEntry] = Field(default_factory=list)
     refs: list[TranscriptRef] = Field(default_factory=list)
     embedding: list[float] | None = None
+
+
+class EpisodeSpan(BaseModel):
+    start_offset: int
+    end_offset: int
+    summary: str
+    embedding: list[float] | None = None
+
+
+class Transcript(BaseModel):
+    id: str
+    recorded_at: datetime
+    text: str
+    segments: list[dict] = Field(default_factory=list)
+    episode_spans: list[EpisodeSpan] = Field(default_factory=list)
