@@ -147,7 +147,7 @@ def main():
         f"Recording from {recorded_at.strftime('%Y-%m-%d %H:%M')}:\n\n{transcript.text}"
     )
 
-    result = harness.run(system_prompt=system_prompt, user_message=user_message)
+    harness.run(system_prompt=system_prompt, user_message=user_message)
     print(f"[ingest] Agent processing complete. Cost: ${harness.last_run_cost:.4f}")
 
     # Step 4 — Compression pass
