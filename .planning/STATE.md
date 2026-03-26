@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 02-00-PLAN.md
-last_updated: "2026-03-26T05:43:00.156Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-26T05:48:09.161Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 02 (ingestion-agent) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: 2 of 5
 | Phase 01-infrastructure P02 | 4 | 1 tasks | 3 files |
 | Phase 01-infrastructure P03 | 5min | 2 tasks | 7 files |
 | Phase 02-ingestion-agent P00 | 1 | 1 tasks | 5 files |
+| Phase 02-ingestion-agent P01 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 01-infrastructure]: types.Part.from_function_response() lacks id kwarg in google-genai 1.68.0 — use types.Part(function_response=types.FunctionResponse(id=fc.id)) instead
 - [Phase 01-infrastructure]: hatchling build system added to pyproject.toml — missing [build-system] prevented uv sync from installing lifeos as editable package
 - [Phase 02-ingestion-agent]: Nyquist sampling: all test stubs must exist before any implementation plan runs — Wave 0 pattern
+- [Phase 02-ingestion-agent]: D-01 applied: Node.name replaces Node.type; Edge.label replaces Edge.type — LLM names entities and relationships freely without enum constraint
+- [Phase 02-ingestion-agent]: set_node_log/set_edge_log intentionally skip re-embedding — compression pass only touches log, summary/embedding unchanged
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T05:43:00.149Z
-Stopped at: Completed 02-00-PLAN.md
+Last session: 2026-03-26T05:48:09.155Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

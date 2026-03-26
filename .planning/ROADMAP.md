@@ -50,7 +50,7 @@ Plans:
 
 Plans:
 - [x] 02-00-PLAN.md — Wave 0: test stub files for Nyquist sampling continuity
-- [ ] 02-01-PLAN.md — Data model updates: drop type field, add name/label, Transcript model, graph.py extensions
+- [x] 02-01-PLAN.md — Data model updates: drop type field, add name/label, Transcript model, graph.py extensions
 - [ ] 02-02-PLAN.md — Agent harness budget removal, 9 ingestion tools with build_tools factory
 - [ ] 02-03-PLAN.md — Ingestion and compression prompts, log compression module
 - [ ] 02-04-PLAN.md — Full ingest.py pipeline wiring: transcribe -> store -> agent -> compress -> summary
