@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-03-26T10:04:39.010Z"
+status: Ready to execute
+stopped_at: "Completed 06-01-PLAN.md: Migrate leaf modules to litellm"
+last_updated: "2026-03-26T19:28:42.921Z"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 10
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Faithfully capture, organize, and retrieve a person's evolving inner life from spoken transcripts — without imposing rigid schemas or losing nuance over time.
-**Current focus:** Phase 03 — query-agent (not started)
+**Current focus:** Phase 06 — migrate-from-google-genai-to-litellm-for-provider-agnostic-llm-calls-and-cost-tracking
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
+Phase: 06 (migrate-from-google-genai-to-litellm-for-provider-agnostic-llm-calls-and-cost-tracking) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: Not started
 | Phase 02-ingestion-agent P01 | 4min | 2 tasks | 4 files |
 | Phase 02-ingestion-agent P02 | 4min | 2 tasks | 4 files |
 | Phase 02-ingestion-agent P03 | 3min | 2 tasks | 6 files |
+| Phase 06 P01 | 9min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Recent decisions affecting current work:
 - [Phase 02-ingestion-agent]: tiktoken cl100k_base for token counting with 2000-token compression threshold
 - [Phase 02-ingestion-agent]: compress_log keeps last 3 entries intact (COMP-03), compresses older via standalone Gemini call (D-16)
 - [Phase 02-ingestion-agent]: run_compression_pass uses set_node_log/set_edge_log not update_node — avoids spurious re-embedding
+- [Phase 06]: litellm requires gemini/ prefix for Google AI Studio routing — model names updated in config and .env
+- [Phase 06]: reasoning_effort string replaces thinking_budget integer — litellm maps effort levels to budget tokens internally
+- [Phase 06]: compress_log drops client param — litellm is stateless, no client object threading required
 
 ### Pending Todos
 
@@ -106,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T11:05:49.018Z
-Stopped at: Completed quick task 260326-n1u: Add JSONL tracing to AgentHarness
+Last session: 2026-03-26T19:28:42.914Z
+Stopped at: Completed 06-01-PLAN.md: Migrate leaf modules to litellm
 Resume file: None

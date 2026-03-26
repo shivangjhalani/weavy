@@ -108,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 **Plans:** 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Migrate leaf modules (embeddings, compress, tools) to litellm
+- [x] 06-01-PLAN.md — Migrate leaf modules (embeddings, compress, tools) to litellm
 - [ ] 06-02-PLAN.md — Rewrite AgentHarness and ingest.py for litellm, add cost tracking, rewrite tests
