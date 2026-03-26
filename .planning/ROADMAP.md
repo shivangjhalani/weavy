@@ -13,7 +13,7 @@ LifeOS builds a personal memory engine in five phases: lay the infrastructure fo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure** - Devenv, FalkorDB with indexes, atomic storage ops, LLM client, agent harness skeleton (completed 2026-03-25)
-- [ ] **Phase 2: Ingestion Agent** - Full audio-to-graph pipeline with disambiguation and log compression
+- [x] **Phase 2: Ingestion Agent** - Full audio-to-graph pipeline with disambiguation and log compression (completed 2026-03-26)
 - [ ] **Phase 3: Query Agent** - Vector search, agentic retrieval strategy, transcript-grounded answer synthesis
 - [ ] **Phase 4: Theme Layer + Memo Agent** - Derived theme map with heat/salience, memo agent pattern detection
 - [ ] **Phase 5: Evaluation** - RAGAS harness configured for Gemini, test dataset, temporal query suite
@@ -95,7 +95,18 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure | 3/3 | Complete   | 2026-03-25 |
-| 2. Ingestion Agent | 4/5 | In Progress|  |
+| 2. Ingestion Agent | 5/5 | Complete   | 2026-03-26 |
 | 3. Query Agent | 0/? | Not started | - |
 | 4. Theme Layer + Memo Agent | 0/? | Not started | - |
 | 5. Evaluation | 0/? | Not started | - |
+
+### Phase 6: Migrate from google-genai to litellm for provider-agnostic LLM calls and cost tracking
+
+**Goal:** All LLM completion, embedding, and function-calling calls use litellm instead of google-genai SDK — zero google-genai imports remain in production code, and per-run cost tracking is available via litellm.completion_cost()
+**Requirements**: MIGR-01, MIGR-02, MIGR-03, MIGR-04, MIGR-05, MIGR-06
+**Depends on:** Phase 2
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Migrate leaf modules (embeddings, compress, tools) to litellm
+- [ ] 06-02-PLAN.md — Rewrite AgentHarness and ingest.py for litellm, add cost tracking, rewrite tests
