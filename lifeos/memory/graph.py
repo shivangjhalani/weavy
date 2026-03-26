@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from falkordb import FalkorDB
 
 from lifeos.core.embeddings import embed_query, embed_text
-from lifeos.memory.models import Edge, LogEntry, Node
+from lifeos.memory.models import Edge, LogEntry, Node, TranscriptRef
 
 
 def init_graph(
@@ -20,8 +20,9 @@ def init_graph(
 ):
     """Connect to FalkorDB and initialize all indexes.
 
-    Creates range indexes on Node.name, Node.type, Node.transcript_id,
-    Node.aliases, and a vector index on Node.embedding (3072d, cosine).
+    Creates range indexes on Node.name, Node.aliases, Node.transcript_id,
+    an edge index on EDGE.label, and a vector index on Node.embedding
+    (3072d, cosine).
 
     Index creation is wrapped in try/except so calling init_graph twice
     (or when indexes already exist) does not raise.
@@ -34,9 +35,9 @@ def init_graph(
     # Range indexes for fast property lookups
     range_indexes = [
         "CREATE INDEX FOR (n:Node) ON (n.name)",
-        "CREATE INDEX FOR (n:Node) ON (n.type)",
         "CREATE INDEX FOR (n:Node) ON (n.transcript_id)",
         "CREATE INDEX FOR (n:Node) ON (n.aliases)",
+        "CREATE INDEX FOR ()-[r:EDGE]->() ON (r.label)",
     ]
     for ddl in range_indexes:
         try:
@@ -66,7 +67,6 @@ def create_node(graph, node: Node) -> None:
     """
     embedding = embed_text(node.summary)
     ts = datetime.now(timezone.utc).isoformat()
-    name = node.aliases[0] if node.aliases else node.id
     log_json = json.dumps([entry.model_dump(mode="json") for entry in node.log])
     refs_json = json.dumps([ref.model_dump(mode="json") for ref in node.refs])
 
@@ -75,7 +75,6 @@ def create_node(graph, node: Node) -> None:
         CREATE (n:Node {
             id: $id,
             name: $name,
-            type: $type,
             summary: $summary,
             aliases: $aliases,
             embedding: vecf32($embedding),
@@ -87,8 +86,7 @@ def create_node(graph, node: Node) -> None:
         """,
         {
             "id": node.id,
-            "name": name,
-            "type": node.type,
+            "name": node.name,
             "summary": node.summary,
             "aliases": node.aliases,
             "embedding": embedding,
@@ -105,18 +103,31 @@ def update_node(
     new_summary: str,
     log_entry: str,
     transcript_ref: dict | None = None,
+    new_aliases: list[str] | None = None,
+    new_refs: list[TranscriptRef] | None = None,
+    new_name: str | None = None,
+    recorded_at: datetime | None = None,
 ) -> None:
     """Update a node's summary and re-embed atomically (GRPH-05).
 
     Appends a new LogEntry to the node's log. Always re-embeds — no
     separate embedding update path exists.
+
+    Optional params:
+    - new_aliases: merged (union, no duplicates) with existing aliases
+    - new_refs: appended to existing refs
+    - new_name: replaces the node's name
+    - recorded_at: timestamp for the LogEntry (defaults to now)
     """
     # Always re-embed per GRPH-05
     embedding = embed_text(new_summary)
+    entry_ts = recorded_at if recorded_at is not None else datetime.now(timezone.utc)
     ts = datetime.now(timezone.utc).isoformat()
 
-    # Read existing log, append new entry, serialize back
+    # Read existing node for log, refs, aliases
     existing = get_node(graph, node_id)
+
+    # Merge log
     existing_log: list = []
     if existing and existing.get("log"):
         try:
@@ -124,12 +135,62 @@ def update_node(
         except (json.JSONDecodeError, TypeError):
             existing_log = []
 
-    new_entry = LogEntry(
-        recorded_at=datetime.now(timezone.utc),
-        note=log_entry,
-    )
+    new_entry = LogEntry(recorded_at=entry_ts, note=log_entry)
     existing_log.append(new_entry.model_dump(mode="json"))
     log_json = json.dumps(existing_log)
+
+    # Merge refs if provided
+    refs_json: str | None = None
+    if new_refs is not None:
+        existing_refs: list = []
+        if existing and existing.get("refs"):
+            try:
+                existing_refs = json.loads(existing["refs"])
+            except (json.JSONDecodeError, TypeError):
+                existing_refs = []
+        existing_refs.extend([r.model_dump(mode="json") for r in new_refs])
+        refs_json = json.dumps(existing_refs)
+
+    # Merge aliases if provided (union, no duplicates)
+    merged_aliases: list[str] | None = None
+    if new_aliases is not None:
+        existing_aliases: list[str] = []
+        if existing and existing.get("aliases"):
+            existing_aliases = list(existing["aliases"])
+        # Union preserving order
+        seen = set(existing_aliases)
+        for a in new_aliases:
+            if a not in seen:
+                existing_aliases.append(a)
+                seen.add(a)
+        merged_aliases = existing_aliases
+
+    # Build dynamic SET clause
+    set_parts = [
+        "n.summary = $summary",
+        "n.embedding = vecf32($embedding)",
+        "n.log = $log_json",
+        "n.updated_at = $ts",
+    ]
+    params: dict = {
+        "id": node_id,
+        "summary": new_summary,
+        "embedding": embedding,
+        "log_json": log_json,
+        "ts": ts,
+    }
+
+    if refs_json is not None:
+        set_parts.append("n.refs = $refs_json")
+        params["refs_json"] = refs_json
+
+    if merged_aliases is not None:
+        set_parts.append("n.aliases = $aliases")
+        params["aliases"] = merged_aliases
+
+    if new_name is not None:
+        set_parts.append("n.name = $new_name")
+        params["new_name"] = new_name
 
     # FalkorDB requires REMOVE before SET for vecf32 vector properties —
     # direct overwrite with SET does not update the stored vector value.
@@ -137,21 +198,10 @@ def update_node(
         "MATCH (n:Node {id: $id}) REMOVE n.embedding",
         {"id": node_id},
     )
+    set_clause = ", ".join(set_parts)
     graph.query(
-        """
-        MATCH (n:Node {id: $id})
-        SET n.summary = $summary,
-            n.embedding = vecf32($embedding),
-            n.log = $log_json,
-            n.updated_at = $ts
-        """,
-        {
-            "id": node_id,
-            "summary": new_summary,
-            "embedding": embedding,
-            "log_json": log_json,
-            "ts": ts,
-        },
+        f"MATCH (n:Node {{id: $id}}) SET {set_clause}",
+        params,
     )
 
 
@@ -167,7 +217,7 @@ def create_edge(graph, edge: Edge) -> None:
         MATCH (s:Node {id: $source_id}), (t:Node {id: $target_id})
         CREATE (s)-[r:EDGE {
             id: $id,
-            type: $type,
+            label: $label,
             summary: $summary,
             embedding: vecf32($embedding),
             log: $log_json,
@@ -178,7 +228,7 @@ def create_edge(graph, edge: Edge) -> None:
         """,
         {
             "id": edge.id,
-            "type": edge.type,
+            "label": edge.label,
             "source_id": edge.source_id,
             "target_id": edge.target_id,
             "summary": edge.summary,
@@ -195,53 +245,131 @@ def update_edge(
     edge_id: str,
     new_summary: str,
     log_entry: str,
+    new_refs: list[TranscriptRef] | None = None,
+    recorded_at: datetime | None = None,
 ) -> None:
     """Update an edge's summary and re-embed atomically (GRPH-05).
 
     Appends a new LogEntry to the edge's log. Always re-embeds.
+
+    Optional params:
+    - new_refs: appended to existing refs
+    - recorded_at: timestamp for the LogEntry (defaults to now)
     """
     embedding = embed_text(new_summary)
+    entry_ts = recorded_at if recorded_at is not None else datetime.now(timezone.utc)
     ts = datetime.now(timezone.utc).isoformat()
 
     # Read existing log
     existing = graph.query(
-        "MATCH ()-[r:EDGE {id: $id}]->() RETURN r.log",
+        "MATCH ()-[r:EDGE {id: $id}]->() RETURN r.log, r.refs",
         {"id": edge_id},
     )
     existing_log: list = []
-    if existing.result_set and existing.result_set[0][0]:
-        try:
-            existing_log = json.loads(existing.result_set[0][0])
-        except (json.JSONDecodeError, TypeError):
-            existing_log = []
+    existing_refs_raw: str | None = None
+    if existing.result_set:
+        row = existing.result_set[0]
+        if row[0]:
+            try:
+                existing_log = json.loads(row[0])
+            except (json.JSONDecodeError, TypeError):
+                existing_log = []
+        existing_refs_raw = row[1] if len(row) > 1 else None
 
-    new_entry = LogEntry(
-        recorded_at=datetime.now(timezone.utc),
-        note=log_entry,
-    )
+    new_entry = LogEntry(recorded_at=entry_ts, note=log_entry)
     existing_log.append(new_entry.model_dump(mode="json"))
     log_json = json.dumps(existing_log)
+
+    # Merge refs if provided
+    refs_json: str | None = None
+    if new_refs is not None:
+        existing_refs: list = []
+        if existing_refs_raw:
+            try:
+                existing_refs = json.loads(existing_refs_raw)
+            except (json.JSONDecodeError, TypeError):
+                existing_refs = []
+        existing_refs.extend([r.model_dump(mode="json") for r in new_refs])
+        refs_json = json.dumps(existing_refs)
+
+    # Build dynamic SET clause
+    set_parts = [
+        "r.summary = $summary",
+        "r.embedding = vecf32($embedding)",
+        "r.log = $log_json",
+        "r.updated_at = $ts",
+    ]
+    params: dict = {
+        "id": edge_id,
+        "summary": new_summary,
+        "embedding": embedding,
+        "log_json": log_json,
+        "ts": ts,
+    }
+
+    if refs_json is not None:
+        set_parts.append("r.refs = $refs_json")
+        params["refs_json"] = refs_json
 
     # FalkorDB requires REMOVE before SET for vecf32 vector properties.
     graph.query(
         "MATCH ()-[r:EDGE {id: $id}]->() REMOVE r.embedding",
         {"id": edge_id},
     )
+    set_clause = ", ".join(set_parts)
     graph.query(
-        """
-        MATCH ()-[r:EDGE {id: $id}]->()
-        SET r.summary = $summary,
-            r.embedding = vecf32($embedding),
-            r.log = $log_json,
-            r.updated_at = $ts
-        """,
-        {
-            "id": edge_id,
-            "summary": new_summary,
-            "embedding": embedding,
-            "log_json": log_json,
-            "ts": ts,
-        },
+        f"MATCH ()-[r:EDGE {{id: $id}}]->() SET {set_clause}",
+        params,
+    )
+
+
+def delete_node(graph, node_id: str) -> None:
+    """Delete a node and all its relationships from the graph."""
+    graph.query("MATCH (n:Node {id: $id}) DETACH DELETE n", {"id": node_id})
+
+
+def delete_edge(graph, edge_id: str) -> None:
+    """Delete an edge from the graph by its id."""
+    graph.query("MATCH ()-[r:EDGE {id: $id}]->() DELETE r", {"id": edge_id})
+
+
+def search_nodes_by_alias(graph, alias: str) -> list[dict]:
+    """Find nodes whose aliases list contains the given alias (exact match).
+
+    Returns a list of dicts with id, name, aliases, summary fields.
+    """
+    result = graph.query(
+        "MATCH (n:Node) WHERE $alias IN n.aliases "
+        "RETURN n.id, n.name, n.aliases, n.summary",
+        {"alias": alias},
+    )
+    return [
+        {"id": row[0], "name": row[1], "aliases": row[2], "summary": row[3]}
+        for row in result.result_set
+    ]
+
+
+def set_node_log(graph, node_id: str, log_entries: list[dict]) -> None:
+    """Replace a node's log with the given entries (for compression pass).
+
+    Does NOT re-embed — summary and embedding remain unchanged.
+    """
+    log_json = json.dumps(log_entries, default=str)
+    graph.query(
+        "MATCH (n:Node {id: $id}) SET n.log = $log_json, n.updated_at = $ts",
+        {"id": node_id, "log_json": log_json, "ts": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+def set_edge_log(graph, edge_id: str, log_entries: list[dict]) -> None:
+    """Replace an edge's log with the given entries (for compression pass).
+
+    Does NOT re-embed — summary and embedding remain unchanged.
+    """
+    log_json = json.dumps(log_entries, default=str)
+    graph.query(
+        "MATCH ()-[r:EDGE {id: $id}]->() SET r.log = $log_json, r.updated_at = $ts",
+        {"id": edge_id, "log_json": log_json, "ts": datetime.now(timezone.utc).isoformat()},
     )
 
 

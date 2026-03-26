@@ -70,7 +70,7 @@ def test_create_and_get_node(graph):
 
     node = Node(
         id="test-node-001",
-        type="person",
+        name="Alice",
         summary="Alice is a software engineer who loves distributed systems.",
         aliases=["Alice", "alice@example.com"],
         log=[
@@ -93,7 +93,7 @@ def test_create_and_get_node(graph):
     result = get_node(graph, "test-node-001")
     assert result is not None
     assert result["id"] == "test-node-001"
-    assert result["type"] == "person"
+    assert result["name"] == "Alice"
     assert "Alice" in result["summary"]
 
 
@@ -108,7 +108,7 @@ def test_update_node_reembeds(graph):
 
     node = Node(
         id="test-node-002",
-        type="concept",
+        name="ML Concept",
         summary="Machine learning is a subset of artificial intelligence.",
         aliases=["ML"],
     )
@@ -148,7 +148,7 @@ def test_vector_search_finds_updated(graph):
 
     node = Node(
         id="test-node-003",
-        type="topic",
+        name="Pasta Topic",
         summary="Cooking pasta requires boiling water and adding salt.",
         aliases=["pasta cooking"],
     )
@@ -181,13 +181,13 @@ def test_create_edge(graph):
 
     node_a = Node(
         id="test-edge-node-a",
-        type="person",
+        name="Bob",
         summary="Bob is a physicist.",
         aliases=["Bob"],
     )
     node_b = Node(
         id="test-edge-node-b",
-        type="concept",
+        name="Quantum Mechanics",
         summary="Quantum mechanics is Bob's main research area.",
         aliases=["QM"],
     )
@@ -197,7 +197,7 @@ def test_create_edge(graph):
 
     edge = Edge(
         id="test-edge-001",
-        type="studies",
+        label="studies",
         source_id="test-edge-node-a",
         target_id="test-edge-node-b",
         summary="Bob studies quantum mechanics as his primary research topic.",
@@ -207,7 +207,7 @@ def test_create_edge(graph):
 
     # Verify edge exists by querying it directly
     result = graph.query(
-        "MATCH ()-[r:EDGE {id: $id}]->() RETURN r.id, r.type, r.summary",
+        "MATCH ()-[r:EDGE {id: $id}]->() RETURN r.id, r.label, r.summary",
         {"id": "test-edge-001"},
     )
     rows = result.result_set
@@ -227,13 +227,13 @@ def test_update_edge_reembeds(graph):
 
     node_c = Node(
         id="test-edge-node-c",
-        type="person",
+        name="Carol",
         summary="Carol is a data scientist.",
         aliases=["Carol"],
     )
     node_d = Node(
         id="test-edge-node-d",
-        type="concept",
+        name="Deep Learning",
         summary="Deep learning is Carol's specialty.",
         aliases=["DL"],
     )
@@ -243,7 +243,7 @@ def test_update_edge_reembeds(graph):
 
     edge = Edge(
         id="test-edge-002",
-        type="works_on",
+        label="works_on",
         source_id="test-edge-node-c",
         target_id="test-edge-node-d",
         summary="Carol works on deep learning model architectures.",
@@ -294,3 +294,177 @@ def test_vector_search_return_format(graph):
         assert isinstance(first[0], str)  # node_id
         assert isinstance(first[1], str)  # summary
         assert isinstance(first[2], float)  # score
+
+
+# ---------------------------------------------------------------------------
+# Test 9: delete_node removes the node from the graph
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_delete_node(graph):
+    """create_node then delete_node: get_node returns None after deletion."""
+    from lifeos.memory.graph import create_node, delete_node, get_node
+
+    node = Node(
+        id="test-delete-node-001",
+        name="TempNode",
+        summary="This node will be deleted.",
+    )
+    create_node(graph, node)
+
+    # Confirm it exists
+    assert get_node(graph, "test-delete-node-001") is not None
+
+    # Delete it
+    delete_node(graph, "test-delete-node-001")
+
+    # Confirm it's gone
+    assert get_node(graph, "test-delete-node-001") is None
+
+
+# ---------------------------------------------------------------------------
+# Test 10: delete_edge removes the edge but leaves nodes intact
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_delete_edge(graph):
+    """create_edge then delete_edge: edge gone, both nodes still exist."""
+    from lifeos.memory.graph import create_edge, create_node, delete_edge, get_node
+
+    node_x = Node(
+        id="test-delete-edge-node-x",
+        name="NodeX",
+        summary="Source node for edge deletion test.",
+    )
+    node_y = Node(
+        id="test-delete-edge-node-y",
+        name="NodeY",
+        summary="Target node for edge deletion test.",
+    )
+    create_node(graph, node_x)
+    create_node(graph, node_y)
+
+    edge = Edge(
+        id="test-delete-edge-001",
+        label="connected_to",
+        source_id="test-delete-edge-node-x",
+        target_id="test-delete-edge-node-y",
+        summary="X connects to Y.",
+    )
+    create_edge(graph, edge)
+
+    # Confirm edge exists
+    result = graph.query(
+        "MATCH ()-[r:EDGE {id: $id}]->() RETURN r.id",
+        {"id": "test-delete-edge-001"},
+    )
+    assert len(result.result_set) > 0
+
+    # Delete the edge
+    delete_edge(graph, "test-delete-edge-001")
+
+    # Confirm edge is gone
+    result = graph.query(
+        "MATCH ()-[r:EDGE {id: $id}]->() RETURN r.id",
+        {"id": "test-delete-edge-001"},
+    )
+    assert len(result.result_set) == 0
+
+    # Confirm nodes still exist
+    assert get_node(graph, "test-delete-edge-node-x") is not None
+    assert get_node(graph, "test-delete-edge-node-y") is not None
+
+
+# ---------------------------------------------------------------------------
+# Test 11: search_nodes_by_alias finds nodes by alias membership
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_search_nodes_by_alias(graph):
+    """search_nodes_by_alias returns nodes whose aliases list contains the given alias."""
+    from lifeos.memory.graph import create_node, search_nodes_by_alias
+
+    node = Node(
+        id="test-alias-node-001",
+        name="Alice Full Name",
+        summary="Alice is a person with multiple aliases.",
+        aliases=["Alice", "Ali", "al@example.com"],
+    )
+    create_node(graph, node)
+
+    # Search by middle alias
+    results = search_nodes_by_alias(graph, "Ali")
+    node_ids = [r["id"] for r in results]
+    assert "test-alias-node-001" in node_ids
+
+    # Result must include name and summary
+    match = next(r for r in results if r["id"] == "test-alias-node-001")
+    assert match["name"] == "Alice Full Name"
+    assert "Alice" in match["summary"]
+
+
+# ---------------------------------------------------------------------------
+# Test 12: set_node_log replaces log without touching summary/embedding
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_set_node_log(graph):
+    """set_node_log replaces the log entries without changing summary or embedding."""
+    from lifeos.memory.graph import create_node, get_node, set_node_log
+
+    node = Node(
+        id="test-set-log-node-001",
+        name="LogNode",
+        summary="A node used to test set_node_log.",
+    )
+    create_node(graph, node)
+
+    before = get_node(graph, "test-set-log-node-001")
+    original_summary = before["summary"]
+
+    # Set a new log
+    new_entries = [
+        {"recorded_at": "2026-01-01T00:00:00+00:00", "note": "Compressed entry A"},
+        {"recorded_at": "2026-01-02T00:00:00+00:00", "note": "Compressed entry B"},
+    ]
+    set_node_log(graph, "test-set-log-node-001", new_entries)
+
+    after = get_node(graph, "test-set-log-node-001")
+    # Summary must be unchanged
+    assert after["summary"] == original_summary
+    # Log must be updated
+    import json
+    stored_log = json.loads(after["log"])
+    assert len(stored_log) == 2
+    assert stored_log[0]["note"] == "Compressed entry A"
+
+
+# ---------------------------------------------------------------------------
+# Test 13: update_node with new_aliases merges without duplicates
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_update_node_with_new_aliases(graph):
+    """update_node with new_aliases=["Ali"] extends aliases to include both."""
+    from lifeos.memory.graph import create_node, get_node, update_node
+
+    node = Node(
+        id="test-alias-update-node-001",
+        name="AliasTest",
+        summary="Testing alias extension.",
+        aliases=["Alice"],
+    )
+    create_node(graph, node)
+
+    update_node(
+        graph,
+        node_id="test-alias-update-node-001",
+        new_summary="Testing alias extension — updated.",
+        log_entry="Updated aliases.",
+        new_aliases=["Ali"],
+    )
+
+    after = get_node(graph, "test-alias-update-node-001")
+    stored_aliases = after["aliases"]
+    assert "Alice" in stored_aliases
+    assert "Ali" in stored_aliases
