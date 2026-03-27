@@ -1,6 +1,5 @@
-"""Unit tests for build_tools factory — all 9 agent tools with mocked graph."""
+"""Unit tests for build_tools factory — all 13 agent tools with mocked graph."""
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 
@@ -25,28 +24,28 @@ def make_graph():
 # Test: build_tools returns correct counts
 # ---------------------------------------------------------------------------
 
-def test_build_tools_returns_9_tools():
-    """build_tools returns a dict with exactly 9 tool callables."""
+def test_build_tools_returns_13_tools():
+    """build_tools returns a dict with exactly 13 tool callables."""
     from lifeos.agent.tools import build_tools
 
     graph = make_graph()
     store = make_store()
     tools_dict, declarations = build_tools(graph, store)
-    assert len(tools_dict) == 9, f"Expected 9 tools, got {len(tools_dict)}: {list(tools_dict.keys())}"
+    assert len(tools_dict) == 13, f"Expected 13 tools, got {len(tools_dict)}: {list(tools_dict.keys())}"
 
 
-def test_build_tools_returns_9_declarations():
-    """build_tools returns a list with exactly 9 FunctionDeclaration objects."""
+def test_build_tools_returns_13_declarations():
+    """build_tools returns a list with exactly 13 FunctionDeclaration objects."""
     from lifeos.agent.tools import build_tools
 
     graph = make_graph()
     store = make_store()
     tools_dict, declarations = build_tools(graph, store)
-    assert len(declarations) == 9, f"Expected 9 declarations, got {len(declarations)}"
+    assert len(declarations) == 13, f"Expected 13 declarations, got {len(declarations)}"
 
 
 def test_build_tools_tool_names():
-    """build_tools returns all 9 expected tool names."""
+    """build_tools returns all 13 expected tool names."""
     from lifeos.agent.tools import build_tools
 
     graph = make_graph()
@@ -55,12 +54,16 @@ def test_build_tools_tool_names():
     expected = {
         "search_nodes_by_alias",
         "search_nodes_by_embedding",
+        "get_node",
+        "search_edges_by_embedding",
         "create_node",
         "update_node",
         "delete_node",
+        "get_node_edges",
         "create_edge",
         "update_edge",
         "delete_edge",
+        "get_edge",
         "create_episode_spans",
     }
     assert set(tools_dict.keys()) == expected
@@ -91,12 +94,15 @@ def test_search_nodes_by_alias_calls_graph():
 # Test: search_nodes_by_embedding
 # ---------------------------------------------------------------------------
 
-def test_search_nodes_by_embedding_calls_vector_search():
-    """search_nodes_by_embedding calls graph_module.vector_search and returns correct structure."""
+def test_search_nodes_by_embedding_enriched():
+    """search_nodes_by_embedding returns name and aliases in each match (D-01)."""
     from lifeos.agent.tools import build_tools
     import lifeos.memory.graph as graph_module
 
-    fake_results = [("n1", "A friend", 0.92), ("n2", "Another person", 0.78)]
+    fake_results = [
+        ("n1", "Alice", ["Alice", "ali"], "A friend", 0.92),
+        ("n2", "Bob", ["Bob"], "Another person", 0.78),
+    ]
     with patch.object(graph_module, "vector_search", return_value=fake_results) as mock_fn:
         graph = make_graph()
         store = make_store()
@@ -107,6 +113,9 @@ def test_search_nodes_by_embedding_calls_vector_search():
     matches = result["matches"]
     assert len(matches) == 2
     assert matches[0]["node_id"] == "n1"
+    assert matches[0]["name"] == "Alice"
+    assert matches[0]["aliases"] == ["Alice", "ali"]
+    assert matches[0]["summary"] == "A friend"
     assert matches[0]["score"] == 0.92
 
 
@@ -156,7 +165,6 @@ def test_create_node_calls_graph_create():
 def test_create_node_default_aliases():
     """create_node defaults aliases to [name] when not provided."""
     from lifeos.agent.tools import build_tools
-    from lifeos.memory.models import Node
     import lifeos.memory.graph as graph_module
 
     with patch.object(graph_module, "create_node", return_value=None) as mock_fn:
@@ -375,3 +383,153 @@ def test_declaration_names_match_tool_keys():
     tools_dict, declarations = build_tools(graph, store)
     decl_names = {d["function"]["name"] for d in declarations}
     assert decl_names == set(tools_dict.keys())
+
+
+# ---------------------------------------------------------------------------
+# Test: get_node tool
+# ---------------------------------------------------------------------------
+
+def test_get_node_tool_strips_embedding_and_parses_log():
+    """get_node tool returns name/aliases/summary/log/refs, excludes embedding."""
+    from lifeos.agent.tools import build_tools
+    import lifeos.memory.graph as graph_module
+
+    raw_node = {
+        "name": "Alice",
+        "aliases": ["Alice", "ali"],
+        "summary": "A close friend",
+        "log": '[{"recorded_at": "2026-01-01T00:00:00+00:00", "note": "First mention"}]',
+        "refs": '[{"transcript_id": "t1", "start_offset": 0, "end_offset": 100}]',
+        "embedding": [0.1, 0.2, 0.3],  # should be stripped
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+    with patch.object(graph_module, "get_node", return_value=raw_node):
+        graph = make_graph()
+        store = make_store()
+        tools_dict, _ = build_tools(graph, store)
+        result = tools_dict["get_node"](node_id="n1")
+
+    assert result["name"] == "Alice"
+    assert result["aliases"] == ["Alice", "ali"]
+    assert isinstance(result["log"], list), "log must be parsed list"
+    assert result["log"][0]["note"] == "First mention"
+    assert isinstance(result["refs"], list), "refs must be parsed list"
+    assert result["refs"][0]["transcript_id"] == "t1"
+    assert "embedding" not in result, "embedding must be excluded from tool response"
+
+
+def test_get_node_tool_not_found():
+    """get_node tool returns error dict when node does not exist."""
+    from lifeos.agent.tools import build_tools
+    import lifeos.memory.graph as graph_module
+
+    with patch.object(graph_module, "get_node", return_value=None):
+        graph = make_graph()
+        store = make_store()
+        tools_dict, _ = build_tools(graph, store)
+        result = tools_dict["get_node"](node_id="nonexistent")
+
+    assert result == {"error": "not found"}
+
+
+# ---------------------------------------------------------------------------
+# Test: get_node_edges tool
+# ---------------------------------------------------------------------------
+
+def test_get_node_edges_tool_returns_correct_shape():
+    """get_node_edges tool wraps graph_module.get_node_edges and returns count."""
+    from lifeos.agent.tools import build_tools
+    import lifeos.memory.graph as graph_module
+
+    fake_edges = [
+        {
+            "edge_id": "e1",
+            "label": "fears",
+            "summary": "fears X",
+            "source": {"id": "n1", "name": "Alice"},
+            "target": {"id": "n2", "name": "Fear"},
+            "direction": "outgoing",
+        }
+    ]
+    with patch.object(graph_module, "get_node_edges", return_value=fake_edges) as mock_fn:
+        graph = make_graph()
+        store = make_store()
+        tools_dict, _ = build_tools(graph, store)
+        result = tools_dict["get_node_edges"](node_id="n1")
+
+    mock_fn.assert_called_once()
+    assert result["node_id"] == "n1"
+    assert result["count"] == 1
+    assert result["edges"][0]["direction"] == "outgoing"
+    assert result["edges"][0]["label"] == "fears"
+
+
+# ---------------------------------------------------------------------------
+# Test: get_edge tool
+# ---------------------------------------------------------------------------
+
+def test_get_edge_tool_returns_edge_state():
+    """get_edge tool wraps graph_module.get_edge and returns full state."""
+    from lifeos.agent.tools import build_tools
+    import lifeos.memory.graph as graph_module
+
+    fake_edge = {
+        "edge_id": "e1",
+        "label": "fears",
+        "summary": "fears X",
+        "source_id": "n1",
+        "target_id": "n2",
+        "log": [{"recorded_at": "2026-01-01T00:00:00+00:00", "note": "Created"}],
+        "refs": [],
+        "created_at": "2026-01-01",
+        "updated_at": "2026-01-01",
+    }
+    with patch.object(graph_module, "get_edge", return_value=fake_edge) as mock_fn:
+        graph = make_graph()
+        store = make_store()
+        tools_dict, _ = build_tools(graph, store)
+        result = tools_dict["get_edge"](edge_id="e1")
+
+    mock_fn.assert_called_once()
+    assert result["edge_id"] == "e1"
+    assert result["label"] == "fears"
+    assert isinstance(result["log"], list)
+
+
+def test_get_edge_tool_not_found():
+    """get_edge tool returns error dict when edge does not exist."""
+    from lifeos.agent.tools import build_tools
+    import lifeos.memory.graph as graph_module
+
+    with patch.object(graph_module, "get_edge", return_value=None):
+        graph = make_graph()
+        store = make_store()
+        tools_dict, _ = build_tools(graph, store)
+        result = tools_dict["get_edge"](edge_id="nonexistent")
+
+    assert result == {"error": "not found"}
+
+
+# ---------------------------------------------------------------------------
+# Test: search_edges_by_embedding tool
+# ---------------------------------------------------------------------------
+
+def test_search_edges_by_embedding_tool_returns_matches():
+    """search_edges_by_embedding delegates to graph_module.vector_search_edges."""
+    from lifeos.agent.tools import build_tools
+    import lifeos.memory.graph as graph_module
+
+    fake_results = [("e1", "fears change", 0.88), ("e2", "resists growth", 0.74)]
+    with patch.object(graph_module, "vector_search_edges", return_value=fake_results) as mock_fn:
+        graph = make_graph()
+        store = make_store()
+        tools_dict, _ = build_tools(graph, store)
+        result = tools_dict["search_edges_by_embedding"](query="avoiding change", k=5)
+
+    mock_fn.assert_called_once()
+    matches = result["matches"]
+    assert len(matches) == 2
+    assert matches[0]["edge_id"] == "e1"
+    assert matches[0]["summary"] == "fears change"
+    assert matches[0]["score"] == 0.88
