@@ -116,9 +116,9 @@ Plans:
 **Goal:** The ingestion agent's tool set is complete — vector search results include node names, the agent can read full node and edge state before writing, can traverse a node's existing edges before creating new ones, and can search edges semantically
 **Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
 **Depends on:** Phase 6
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 07-01-PLAN.md — Graph layer: enrich vector_search, add get_node_edges, get_edge, vector_search_edges
-- [ ] 07-02-PLAN.md — Tool layer: enrich search_nodes_by_embedding, add get_node/get_node_edges/get_edge/search_edges_by_embedding tools (9 -> 14)
+- [x] 07-02-PLAN.md — Tool layer: enrich search_nodes_by_embedding, add get_node/get_node_edges/get_edge/search_edges_by_embedding tools (9 -> 14)
 - [ ] 07-03-PLAN.md — Tests: fix broken vector_search tests, add coverage for all new graph functions and tools
