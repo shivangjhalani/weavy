@@ -278,22 +278,25 @@ def test_update_edge_reembeds(graph):
 
 
 # ---------------------------------------------------------------------------
-# Test 8: vector_search returns (id, summary, score) tuples
+# Test 8: vector_search returns (node_id, name, aliases, summary, score) tuples
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 def test_vector_search_return_format(graph):
-    """vector_search returns list of (node_id, summary, score) tuples."""
+    """vector_search returns list of (node_id, name, aliases, summary, score) 5-tuples."""
     from lifeos.memory.graph import vector_search
 
     results = vector_search(graph, "software engineering", k=5)
     assert isinstance(results, list)
     if results:
         first = results[0]
-        assert len(first) == 3
-        assert isinstance(first[0], str)  # node_id
-        assert isinstance(first[1], str)  # summary
-        assert isinstance(first[2], float)  # score
+        assert len(first) == 5
+        assert isinstance(first[0], str)   # node_id
+        assert isinstance(first[1], str)   # name
+        # aliases is a list (may be empty list)
+        assert isinstance(first[2], (list, type(None)))  # aliases
+        assert isinstance(first[3], str)   # summary
+        assert isinstance(first[4], float)  # score
 
 
 # ---------------------------------------------------------------------------
@@ -468,3 +471,114 @@ def test_update_node_with_new_aliases(graph):
     stored_aliases = after["aliases"]
     assert "Alice" in stored_aliases
     assert "Ali" in stored_aliases
+
+
+# ---------------------------------------------------------------------------
+# Test 14: get_node_edges returns correct shape
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_get_node_edges_returns_correct_shape(graph):
+    """get_node_edges returns edges with edge_id, label, summary, source, target, direction."""
+    from lifeos.memory.graph import create_edge, create_node, get_node_edges
+
+    node_p = Node(
+        id="test-edges-node-p",
+        name="PersonP",
+        summary="Person P for edge traversal test.",
+        aliases=["PersonP"],
+    )
+    node_q = Node(
+        id="test-edges-node-q",
+        name="PersonQ",
+        summary="Person Q for edge traversal test.",
+        aliases=["PersonQ"],
+    )
+    create_node(graph, node_p)
+    create_node(graph, node_q)
+
+    edge = Edge(
+        id="test-traversal-edge-001",
+        label="mentors",
+        source_id="test-edges-node-p",
+        target_id="test-edges-node-q",
+        summary="PersonP mentors PersonQ.",
+    )
+    create_edge(graph, edge)
+
+    # get edges from P's perspective — should be outgoing
+    edges = get_node_edges(graph, "test-edges-node-p")
+    assert isinstance(edges, list)
+    assert len(edges) >= 1
+
+    match = next((e for e in edges if e["edge_id"] == "test-traversal-edge-001"), None)
+    assert match is not None, "Expected edge not found in results"
+    assert match["label"] == "mentors"
+    assert match["direction"] == "outgoing"
+    assert match["source"]["id"] == "test-edges-node-p"
+    assert match["source"]["name"] == "PersonP"
+    assert match["target"]["id"] == "test-edges-node-q"
+    assert match["target"]["name"] == "PersonQ"
+
+    # get edges from Q's perspective — should be incoming
+    edges_q = get_node_edges(graph, "test-edges-node-q")
+    match_q = next((e for e in edges_q if e["edge_id"] == "test-traversal-edge-001"), None)
+    assert match_q is not None
+    assert match_q["direction"] == "incoming"
+
+
+# ---------------------------------------------------------------------------
+# Test 15: get_edge returns full edge state with parsed log
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_get_edge_returns_full_state(graph):
+    """get_edge returns edge dict with log parsed from JSON and no embedding field."""
+    from lifeos.memory.graph import create_edge, create_node, get_edge
+
+    node_r = Node(
+        id="test-get-edge-node-r",
+        name="NodeR",
+        summary="Source node for get_edge test.",
+    )
+    node_s = Node(
+        id="test-get-edge-node-s",
+        name="NodeS",
+        summary="Target node for get_edge test.",
+    )
+    create_node(graph, node_r)
+    create_node(graph, node_s)
+
+    edge = Edge(
+        id="test-get-edge-001",
+        label="collaborates_with",
+        source_id="test-get-edge-node-r",
+        target_id="test-get-edge-node-s",
+        summary="R and S collaborate on projects.",
+        log=[LogEntry(recorded_at=datetime(2026, 1, 1, tzinfo=timezone.utc), note="First noted")],
+    )
+    create_edge(graph, edge)
+
+    result = get_edge(graph, "test-get-edge-001")
+    assert result is not None
+    assert result["edge_id"] == "test-get-edge-001"
+    assert result["label"] == "collaborates_with"
+    assert result["source_id"] == "test-get-edge-node-r"
+    assert result["target_id"] == "test-get-edge-node-s"
+    # log must be a parsed list, not a JSON string
+    assert isinstance(result["log"], list)
+    assert len(result["log"]) == 1
+    assert result["log"][0]["note"] == "First noted"
+    # refs must be a parsed list
+    assert isinstance(result["refs"], list)
+    # embedding must NOT be present
+    assert "embedding" not in result
+
+
+@pytest.mark.integration
+def test_get_edge_returns_none_for_missing(graph):
+    """get_edge returns None when no edge with the given id exists."""
+    from lifeos.memory.graph import get_edge
+
+    result = get_edge(graph, "nonexistent-edge-id-xyz")
+    assert result is None
