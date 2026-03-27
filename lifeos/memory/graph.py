@@ -472,10 +472,14 @@ def get_node_edges(graph, node_id: str) -> list[dict]:
     result = graph.query(
         """
         MATCH (n:Node {id: $id})-[r:EDGE]->(m:Node)
-        RETURN r.id, r.label, r.summary, n.id, n.name, m.id, m.name, 'outgoing'
+        RETURN r.id AS edge_id, r.label AS label, r.summary AS summary,
+               n.id AS src_id, n.name AS src_name, m.id AS tgt_id, m.name AS tgt_name,
+               'outgoing' AS direction
         UNION
         MATCH (n:Node {id: $id})<-[r:EDGE]-(m:Node)
-        RETURN r.id, r.label, r.summary, m.id, m.name, n.id, n.name, 'incoming'
+        RETURN r.id AS edge_id, r.label AS label, r.summary AS summary,
+               m.id AS src_id, m.name AS src_name, n.id AS tgt_id, n.name AS tgt_name,
+               'incoming' AS direction
         """,
         {"id": node_id},
     )
