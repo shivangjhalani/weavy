@@ -71,9 +71,36 @@ def build_tools(
         results = graph_module.vector_search(graph, query, k=k)
         return {
             "matches": [
-                {"node_id": r[0], "summary": r[1], "score": r[2]}
+                {"node_id": r[0], "name": r[1], "aliases": r[2], "summary": r[3], "score": r[4]}
                 for r in results
             ]
+        }
+
+    # -----------------------------------------------------------------------
+    # Tool: get_node
+    # -----------------------------------------------------------------------
+
+    def get_node(node_id: str) -> dict:
+        """Read full node state before deciding to update or create.
+
+        Returns name, aliases, summary, refs, and log entries (as parsed
+        objects, not raw JSON strings). Embedding is excluded.
+        Returns {"error": "not found"} if no node with that id exists.
+        """
+        import json as _json
+        raw = graph_module.get_node(graph, node_id)
+        if raw is None:
+            return {"error": "not found"}
+        log_raw = raw.get("log") or "[]"
+        refs_raw = raw.get("refs") or "[]"
+        return {
+            "name": raw.get("name"),
+            "aliases": raw.get("aliases", []),
+            "summary": raw.get("summary"),
+            "refs": _json.loads(refs_raw) if isinstance(refs_raw, str) else refs_raw,
+            "log": _json.loads(log_raw) if isinstance(log_raw, str) else log_raw,
+            "created_at": raw.get("created_at"),
+            "updated_at": raw.get("updated_at"),
         }
 
     # -----------------------------------------------------------------------
@@ -240,6 +267,7 @@ def build_tools(
     tools_dict = {
         "search_nodes_by_alias": search_nodes_by_alias,
         "search_nodes_by_embedding": search_nodes_by_embedding,
+        "get_node": get_node,
         "create_node": create_node,
         "update_node": update_node,
         "delete_node": delete_node,
@@ -285,6 +313,18 @@ def build_tools(
                         "k": {"type": "integer"},
                     },
                     "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_node",
+                "description": "Read the full current state of a node before deciding to update or create. Returns name, aliases, summary, log entries, and transcript refs. Use before update_node to understand what already exists.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"node_id": {"type": "string"}},
+                    "required": ["node_id"],
                 },
             },
         },
