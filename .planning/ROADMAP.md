@@ -110,3 +110,15 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 Plans:
 - [x] 06-01-PLAN.md — Migrate leaf modules (embeddings, compress, tools) to litellm
 - [x] 06-02-PLAN.md — Rewrite AgentHarness and ingest.py for litellm, add cost tracking, rewrite tests
+
+### Phase 7: Agent tool capability gaps: enrich node search results, add node relations and log inspection tools
+
+**Goal:** The ingestion agent's tool set is complete — vector search results include node names, the agent can read full node and edge state before writing, can traverse a node's existing edges before creating new ones, and can search edges semantically
+**Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
+**Depends on:** Phase 6
+**Plans:** 3 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Graph layer: enrich vector_search, add get_node_edges, get_edge, vector_search_edges
+- [ ] 07-02-PLAN.md — Tool layer: enrich search_nodes_by_embedding, add get_node/get_node_edges/get_edge/search_edges_by_embedding tools (9 -> 14)
+- [ ] 07-03-PLAN.md — Tests: fix broken vector_search tests, add coverage for all new graph functions and tools
