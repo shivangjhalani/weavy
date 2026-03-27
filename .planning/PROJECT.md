@@ -24,6 +24,7 @@ The memory system must faithfully capture, organize, and retrieve a person's evo
 - [x] Log compression: token-budgeted compression preserving arc of change — Validated in Phase 2: Ingestion Agent (compress.py, 2000-token threshold, last-3-intact, inflection/reversal preservation)
 - [x] Ingestion agent: reads full transcript, builds/updates graph, creates episode spans, exercises judgment — Validated in Phase 2: Ingestion Agent (9 tools, ingest prompt with selectivity guidance)
 - [x] Agent tools: 9 graph tools (search, create, update, delete for nodes/edges + episode spans) — Validated in Phase 2: Ingestion Agent (build_tools factory)
+- [x] Agent tools: enriched search results with name+aliases; 4 new inspection tools (get_node, get_node_edges, get_edge, search_edges_by_embedding) — Validated in Phase 7: Agent Tool Capability Gaps (13 tools total; edge vector index added)
 
 ### Active
 
@@ -95,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-27 after Phase 6 (litellm migration) completion*
+*Last updated: 2026-03-27 after Phase 7 (agent tool capability gaps) completion*
