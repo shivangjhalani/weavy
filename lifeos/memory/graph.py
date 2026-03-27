@@ -57,6 +57,16 @@ def init_graph(
         if "already indexed" not in str(e).lower():
             raise
 
+    # Vector index on EDGE embedding (3072 dims, cosine similarity)
+    try:
+        graph.query(
+            "CREATE VECTOR INDEX FOR ()-[r:EDGE]->() ON (r.embedding) "
+            "OPTIONS {dimension:3072, similarityFunction:'cosine'}"
+        )
+    except ResponseError as e:
+        if "already indexed" not in str(e).lower():
+            raise
+
     return graph
 
 
@@ -378,6 +388,60 @@ def vector_search(
         (row[0], row[1], row[2], row[3], float(row[4]))
         for row in result.result_set
     ]
+
+
+def vector_search_edges(
+    graph, query_text: str, k: int = 5
+) -> list[tuple[str, str, float]]:
+    """Semantic KNN search over edge summaries.
+
+    Attempts to use FalkorDB's native EDGE vector index via
+    db.idx.vector.queryRelationships. Falls back to a full-scan
+    cosine comparison if the procedure is unavailable.
+
+    Returns a list of (edge_id, summary, score) tuples ordered by score DESC.
+    """
+    query_embedding = embed_query(query_text)
+
+    try:
+        result = graph.query(
+            "CALL db.idx.vector.queryRelationships('EDGE', 'embedding', $k, vecf32($embedding)) "
+            "YIELD relationship, score "
+            "RETURN relationship.id, relationship.summary, score "
+            "ORDER BY score DESC",
+            {"k": k, "embedding": query_embedding},
+        )
+        return [
+            (row[0], row[1], float(row[2]))
+            for row in result.result_set
+        ]
+    except (ResponseError, Exception):
+        # Fallback: full-scan cosine comparison
+        all_edges = graph.query(
+            "MATCH ()-[r:EDGE]->() RETURN r.id, r.summary, r.embedding",
+        )
+        if not all_edges.result_set:
+            return []
+
+        import math
+
+        def cosine_sim(a: list, b: list) -> float:
+            dot = sum(x * y for x, y in zip(a, b))
+            mag_a = math.sqrt(sum(x * x for x in a))
+            mag_b = math.sqrt(sum(y * y for y in b))
+            if mag_a == 0 or mag_b == 0:
+                return 0.0
+            return dot / (mag_a * mag_b)
+
+        scored = []
+        for row in all_edges.result_set:
+            edge_id, summary, embedding = row[0], row[1], row[2]
+            if embedding is not None:
+                score = cosine_sim(list(query_embedding), list(embedding))
+                scored.append((edge_id, summary, float(score)))
+
+        scored.sort(key=lambda x: x[2], reverse=True)
+        return scored[:k]
 
 
 def get_node(graph, node_id: str) -> dict | None:
