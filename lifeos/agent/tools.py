@@ -1,4 +1,4 @@
-"""build_tools factory — returns 9 agent tool callables and OpenAI-format declarations.
+"""build_tools factory — returns 13 agent tool callables and OpenAI-format declarations.
 
 Each tool is a closure over the graph and store objects, bridging the agent's
 LLM decisions to graph.py operations.
@@ -22,7 +22,7 @@ def build_tools(
     store: TranscriptStore,
     recording_timestamp: datetime | None = None,
 ) -> tuple[dict, list]:
-    """Build and return the 9 ingestion agent tools.
+    """Build and return the 13 ingestion agent tools.
 
     Args:
         graph: FalkorDB graph object (from init_graph).
@@ -32,7 +32,7 @@ def build_tools(
 
     Returns:
         (tools_dict, declarations_list) where tools_dict maps tool name to
-        callable and declarations_list contains 9 OpenAI-format tool dicts.
+        callable and declarations_list contains 13 OpenAI-format tool dicts.
     """
 
     def _ts() -> datetime:
@@ -104,6 +104,24 @@ def build_tools(
         }
 
     # -----------------------------------------------------------------------
+    # Tool: search_edges_by_embedding
+    # -----------------------------------------------------------------------
+
+    def search_edges_by_embedding(query: str, k: int = 5) -> dict:
+        """Semantic similarity search over edge summaries using vector index.
+
+        Use when looking for a relationship without a node ID anchor.
+        Returns edges with similarity scores.
+        """
+        results = graph_module.vector_search_edges(graph, query, k=k)
+        return {
+            "matches": [
+                {"edge_id": r[0], "summary": r[1], "score": r[2]}
+                for r in results
+            ]
+        }
+
+    # -----------------------------------------------------------------------
     # Tool 3: create_node
     # -----------------------------------------------------------------------
 
@@ -168,6 +186,19 @@ def build_tools(
         """Delete a node and all its relationships from the graph."""
         graph_module.delete_node(graph, node_id)
         return {"node_id": node_id, "deleted": True}
+
+    # -----------------------------------------------------------------------
+    # Tool: get_node_edges
+    # -----------------------------------------------------------------------
+
+    def get_node_edges(node_id: str) -> dict:
+        """Get all edges connected to a node (both outgoing and incoming).
+
+        Each edge includes edge_id, label, summary, source and target node
+        id+name, and direction ('outgoing' or 'incoming' from this node).
+        """
+        edges = graph_module.get_node_edges(graph, node_id)
+        return {"node_id": node_id, "edges": edges, "count": len(edges)}
 
     # -----------------------------------------------------------------------
     # Tool 6: create_edge
@@ -235,6 +266,22 @@ def build_tools(
         return {"edge_id": edge_id, "deleted": True}
 
     # -----------------------------------------------------------------------
+    # Tool: get_edge
+    # -----------------------------------------------------------------------
+
+    def get_edge(edge_id: str) -> dict:
+        """Read the full current state of an edge before deciding to update.
+
+        Returns edge_id, label, summary, source_id, target_id, log entries
+        (as parsed objects), and transcript refs. Use before update_edge.
+        Returns {"error": "not found"} if no edge with that id exists.
+        """
+        raw = graph_module.get_edge(graph, edge_id)
+        if raw is None:
+            return {"error": "not found"}
+        return raw
+
+    # -----------------------------------------------------------------------
     # Tool 9: create_episode_spans
     # -----------------------------------------------------------------------
 
@@ -268,12 +315,15 @@ def build_tools(
         "search_nodes_by_alias": search_nodes_by_alias,
         "search_nodes_by_embedding": search_nodes_by_embedding,
         "get_node": get_node,
+        "search_edges_by_embedding": search_edges_by_embedding,
         "create_node": create_node,
         "update_node": update_node,
         "delete_node": delete_node,
+        "get_node_edges": get_node_edges,
         "create_edge": create_edge,
         "update_edge": update_edge,
         "delete_edge": delete_edge,
+        "get_edge": get_edge,
         "create_episode_spans": create_episode_spans,
     }
 
@@ -331,6 +381,21 @@ def build_tools(
         {
             "type": "function",
             "function": {
+                "name": "search_edges_by_embedding",
+                "description": "Semantic similarity search over edge summaries using vector KNN. Use when looking for a relationship without a known node ID anchor.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "k": {"type": "integer"},
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "create_node",
                 "description": "Create a new node in the semantic graph. Only call after confirming via search that no existing node represents this entity. Only persist things that matter to the person's evolving inner life.",
                 "parameters": {
@@ -379,6 +444,18 @@ def build_tools(
         {
             "type": "function",
             "function": {
+                "name": "get_node_edges",
+                "description": "Get all edges connected to a node (both outgoing and incoming). Each result includes edge_id, label, summary, source/target node names, and direction. Use before create_edge to avoid duplicating existing relationships.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"node_id": {"type": "string"}},
+                    "required": ["node_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "create_edge",
                 "description": "Create a directed relationship edge between two existing nodes. The label is a concise descriptor (e.g. 'fears', 'is_mentor_of', 'evolved_into').",
                 "parameters": {
@@ -417,6 +494,18 @@ def build_tools(
             "function": {
                 "name": "delete_edge",
                 "description": "Delete a relationship edge from the graph by its id.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"edge_id": {"type": "string"}},
+                    "required": ["edge_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_edge",
+                "description": "Read the full current state of an edge before updating. Returns label, summary, source/target ids, log entries, and transcript refs. Use before update_edge to understand existing relationship state.",
                 "parameters": {
                     "type": "object",
                     "properties": {"edge_id": {"type": "string"}},
