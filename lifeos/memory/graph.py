@@ -8,6 +8,7 @@ import json
 from datetime import datetime, timezone
 
 from falkordb import FalkorDB
+from redis.exceptions import ResponseError
 
 from lifeos.core.embeddings import embed_query, embed_text
 from lifeos.memory.models import Edge, LogEntry, Node, TranscriptRef
@@ -42,9 +43,9 @@ def init_graph(
     for ddl in range_indexes:
         try:
             graph.query(ddl)
-        except Exception:
-            # "Index already exists" — safe to ignore
-            pass
+        except ResponseError as e:
+            if "already indexed" not in str(e).lower():
+                raise
 
     # Vector index on embedding (3072 dims, cosine similarity)
     try:
@@ -52,9 +53,9 @@ def init_graph(
             "CREATE VECTOR INDEX FOR (n:Node) ON (n.embedding) "
             "OPTIONS {dimension:3072, similarityFunction:'cosine'}"
         )
-    except Exception:
-        # Already exists — safe to ignore
-        pass
+    except ResponseError as e:
+        if "already indexed" not in str(e).lower():
+            raise
 
     return graph
 
@@ -128,13 +129,7 @@ def update_node(
     existing = get_node(graph, node_id)
 
     # Merge log
-    existing_log: list = []
-    if existing and existing.get("log"):
-        try:
-            existing_log = json.loads(existing["log"])
-        except (json.JSONDecodeError, TypeError):
-            existing_log = []
-
+    existing_log: list = json.loads(existing["log"]) if existing and existing.get("log") else []
     new_entry = LogEntry(recorded_at=entry_ts, note=log_entry)
     existing_log.append(new_entry.model_dump(mode="json"))
     log_json = json.dumps(existing_log)
@@ -142,12 +137,7 @@ def update_node(
     # Merge refs if provided
     refs_json: str | None = None
     if new_refs is not None:
-        existing_refs: list = []
-        if existing and existing.get("refs"):
-            try:
-                existing_refs = json.loads(existing["refs"])
-            except (json.JSONDecodeError, TypeError):
-                existing_refs = []
+        existing_refs: list = json.loads(existing["refs"]) if existing and existing.get("refs") else []
         existing_refs.extend([r.model_dump(mode="json") for r in new_refs])
         refs_json = json.dumps(existing_refs)
 
@@ -269,11 +259,7 @@ def update_edge(
     existing_refs_raw: str | None = None
     if existing.result_set:
         row = existing.result_set[0]
-        if row[0]:
-            try:
-                existing_log = json.loads(row[0])
-            except (json.JSONDecodeError, TypeError):
-                existing_log = []
+        existing_log = json.loads(row[0]) if row[0] else []
         existing_refs_raw = row[1] if len(row) > 1 else None
 
     new_entry = LogEntry(recorded_at=entry_ts, note=log_entry)
@@ -283,12 +269,7 @@ def update_edge(
     # Merge refs if provided
     refs_json: str | None = None
     if new_refs is not None:
-        existing_refs: list = []
-        if existing_refs_raw:
-            try:
-                existing_refs = json.loads(existing_refs_raw)
-            except (json.JSONDecodeError, TypeError):
-                existing_refs = []
+        existing_refs: list = json.loads(existing_refs_raw) if existing_refs_raw else []
         existing_refs.extend([r.model_dump(mode="json") for r in new_refs])
         refs_json = json.dumps(existing_refs)
 
@@ -375,26 +356,26 @@ def set_edge_log(graph, edge_id: str, log_entries: list[dict]) -> None:
 
 def vector_search(
     graph, query_text: str, k: int = 5
-) -> list[tuple[str, str, float]]:
+) -> list[tuple[str, str, list, str, float]]:
     """Semantic KNN search over node summaries.
 
     Uses embed_query() (RETRIEVAL_QUERY task type) for the query embedding,
     then calls FalkorDB's native vector index procedure.
 
-    Returns a list of (node_id, summary, score) tuples ordered by score DESC.
+    Returns a list of (node_id, name, aliases, summary, score) tuples ordered by score DESC.
     """
     query_embedding = embed_query(query_text)
 
     result = graph.query(
         "CALL db.idx.vector.queryNodes('Node', 'embedding', $k, vecf32($embedding)) "
         "YIELD node, score "
-        "RETURN node.id, node.summary, score "
+        "RETURN node.id, node.name, node.aliases, node.summary, score "
         "ORDER BY score DESC",
         {"k": k, "embedding": query_embedding},
     )
 
     return [
-        (row[0], row[1], float(row[2]))
+        (row[0], row[1], row[2], row[3], float(row[4]))
         for row in result.result_set
     ]
 
@@ -409,10 +390,76 @@ def get_node(graph, node_id: str) -> dict | None:
         return None
 
     node = result.result_set[0][0]
-    # FalkorDB returns a Node object; extract its properties
-    props = {}
-    if hasattr(node, "properties"):
-        props = dict(node.properties)
-    elif isinstance(node, dict):
-        props = node
-    return props
+    return dict(node.properties)
+
+
+def get_node_edges(graph, node_id: str) -> list[dict]:
+    """Retrieve all edges connected to a node (both outgoing and incoming).
+
+    Direction is from the perspective of node_id:
+    - 'outgoing': node_id is the source
+    - 'incoming': node_id is the target
+
+    Returns list of dicts, each with:
+        edge_id, label, summary, source (dict with id+name),
+        target (dict with id+name), direction
+    Does NOT include per-edge refs or log (use get_edge for those).
+    """
+    result = graph.query(
+        """
+        MATCH (n:Node {id: $id})-[r:EDGE]->(m:Node)
+        RETURN r.id, r.label, r.summary, n.id, n.name, m.id, m.name, 'outgoing'
+        UNION
+        MATCH (n:Node {id: $id})<-[r:EDGE]-(m:Node)
+        RETURN r.id, r.label, r.summary, m.id, m.name, n.id, n.name, 'incoming'
+        """,
+        {"id": node_id},
+    )
+    edges = []
+    for row in result.result_set:
+        edges.append({
+            "edge_id": row[0],
+            "label": row[1],
+            "summary": row[2],
+            "source": {"id": row[3], "name": row[4]},
+            "target": {"id": row[5], "name": row[6]},
+            "direction": row[7],
+        })
+    return edges
+
+
+def get_edge(graph, edge_id: str) -> dict | None:
+    """Retrieve a full edge by id, or None if not found.
+
+    Returns dict with:
+        edge_id, label, summary, source_id, target_id,
+        log (parsed list of {recorded_at, note} dicts),
+        refs (parsed list of {transcript_id, start_offset, end_offset} dicts),
+        created_at, updated_at
+
+    Embedding is excluded — internal FalkorDB artifact with no meaning to the LLM.
+    """
+    result = graph.query(
+        """
+        MATCH (s:Node)-[r:EDGE {id: $id}]->(t:Node)
+        RETURN r.id, r.label, r.summary, s.id, t.id,
+               r.log, r.refs, r.created_at, r.updated_at
+        """,
+        {"id": edge_id},
+    )
+    if not result.result_set:
+        return None
+    row = result.result_set[0]
+    log_entries = json.loads(row[5]) if row[5] else []
+    refs_list = json.loads(row[6]) if row[6] else []
+    return {
+        "edge_id": row[0],
+        "label": row[1],
+        "summary": row[2],
+        "source_id": row[3],
+        "target_id": row[4],
+        "log": log_entries,
+        "refs": refs_list,
+        "created_at": row[7],
+        "updated_at": row[8],
+    }
