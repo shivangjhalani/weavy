@@ -19,13 +19,13 @@
 ### Phase 1: Backend Foundation
 **Goal**: The storage schema, tool functions, and harness invariants are in place and independently tested — any agent can be wired up on top without revisiting this layer
 **Depends on**: Nothing (first phase)
-**Requirements**: GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05, TOOL-06, TOOL-07, TOOL-08, TOOL-09, TOOL-10, HARN-01, HARN-02, HARN-03, HARN-04, HARN-05, PRIV-01, PRIV-02
+**Requirements**: GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05, TOOL-06, TOOL-07, TOOL-08, TOOL-09, HARN-01, HARN-02, HARN-03, HARN-04, HARN-05, PRIV-01, PRIV-02
 **Success Criteria** (what must be TRUE):
   1. FalkorDB initializes with the correct schema (nodes, edges, themes, token registry, vector index) and all round-trip array field serialization tests pass — no silent data corruption
-  2. Every tool function (`search_graph` through `complete_ingestion`) can be called against a live FalkorDB fixture and returns the correct shape; hybrid search matches aliases, not just embeddings
+  2. Every v1 tool function plus the `complete_ingestion` control call can be called against a live FalkorDB fixture and returns the correct shape; hybrid search matches aliases, not just embeddings
   3. The harness rejects any write that lacks valid provenance (null offsets, out-of-bounds, or span returning empty text) and mints sequential tokens the agent never picks itself
-  4. Hard call budget (60 calls) and wall-clock timeout terminate a runaway loop with `partial=true` before any agent is wired in
-  5. All data is local; FalkorDB AOF persistence is configured so a crash does not lose journal entries
+  4. Hard call budget (60 calls) and wall-clock timeout prevent runaway loops before any agent is wired in
+  5. Journal data is persisted in user-controlled storage; FalkorDB AOF persistence is configured so a crash does not lose journal entries
 **Plans**: TBD
 
 **Key risks**:
@@ -37,7 +37,7 @@
 ### Phase 2: Agent Pipeline
 **Goal**: A real transcript can be ingested into the semantic graph, themes emerge in the background, and a user can ask a natural language question and receive an answer grounded in cited transcript spans
 **Depends on**: Phase 1
-**Requirements**: INGEST-01, INGEST-02, INGEST-03, INGEST-04, INGEST-05, INGEST-06, THEME-01, THEME-02, THEME-03, THEME-04, QUERY-01, QUERY-02, QUERY-03, QUERY-04
+**Requirements**: INGEST-01, INGEST-02, INGEST-03, INGEST-04, INGEST-05, INGEST-06, THEME-01, THEME-02, THEME-03, THEME-04, QUERY-01, QUERY-02, QUERY-03, QUERY-04, MEMO-01
 **Success Criteria** (what must be TRUE):
   1. Ingesting a real transcript populates the graph with nodes and edges, fires `complete_ingestion`, and populates the bidirectional index — the create:update ratio health metric is surfaced per session
   2. The ingestion agent searches before creating; a 5-transcript integration run shows no obvious duplicate nodes for the same concept across different surface forms
@@ -78,4 +78,4 @@
 
 ---
 *Roadmap created: 2026-04-01*
-*Last updated: 2026-04-01 after initial creation*
+*Last updated: 2026-04-01 after adding MEMO-01 to Phase 2*
