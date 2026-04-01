@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Arachne is a mobile app that lets users speak their thoughts out loud — ambitions, worries, decisions, emotions — and captures them into an evolving, queryable record of their inner life. You record voice, the system ingests it into a semantic graph, and you can later ask it questions like "what have I been struggling with most this quarter?" — answered directly from your own words.
+Arachne is a Python backend that processes audio recordings of spoken thoughts — ambitions, worries, decisions, emotions — and captures them into an evolving, queryable semantic graph. An audio file goes in, Whisper transcribes it, the ingestion agent builds the graph, and a query script answers questions like "what have I been struggling with most this quarter?" — answered directly from your own words. The backend is designed as callable Python scripts, structured to be easily wrapped in an API when a frontend is ready.
 
 ## Core Value
 
@@ -16,9 +16,8 @@ When a user speaks, their words must be captured, understood, and made retrievab
 
 ### Active
 
-**Voice Capture & Transcription**
-- [ ] VOICE-01: User can record voice memos from mobile app
-- [ ] VOICE-02: Whisper transcribes audio with inline sentence-level timestamps (seconds into recording)
+**Transcription Pipeline**
+- [ ] VOICE-02: Whisper transcribes an audio file with inline sentence-level timestamps (seconds into recording)
 
 **Ingestion Agent**
 - [ ] INGEST-01: Ingestion agent reads full transcript and builds/updates semantic graph in one pass
@@ -65,6 +64,8 @@ When a user speaks, their words must be captured, understood, and made retrievab
 
 ### Out of Scope
 
+- Mobile app / frontend — backend Python scripts only; structure makes it easy to wrap in an API later
+- HTTP API (FastAPI, uvicorn) — not in this milestone; scripts are the interface
 - Checklists, deadlines, kanban boards — this is not a productivity/task manager
 - Streaks, points, gamification — no guilt mechanics
 - Clinical or diagnostic features — not therapy
@@ -76,7 +77,7 @@ When a user speaks, their words must be captured, understood, and made retrievab
 
 - **Language/runtime:** Python (uv), project initialized as `arachne`
 - **Graph DB:** FalkorDB (already in devenv.nix)
-- **Transcription:** Whisper (word-level timestamps, rendered at sentence boundaries)
+- **Transcription:** Whisper via Groq (`whisper-large-v3-turbo`) — segment-level timestamps only; word-level timestamps are silently null on this model
 - **LLM:** Agentic loop — same harness across ingestion, query, and theme modes; different system prompts
 - **ID scheme:** Sequential readable tokens per entity type (node:N, edge:N, rec:N) — no UUIDs; LLMs hallucinate high-entropy identifiers
 - **Architecture:** Three memory layers — transcripts (canonical), semantic graph (derived cache), themes (derived orientation map). Graph and themes are rebuildable from transcripts.

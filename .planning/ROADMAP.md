@@ -10,7 +10,7 @@
 
 - [ ] **Phase 1: Backend Foundation** - Storage schema, tool layer, and agent harness — everything agents sit on top of
 - [ ] **Phase 2: Agent Pipeline** - Ingestion agent, theme agent, query agent, and log compression — the full intelligence layer
-- [ ] **Phase 3: Transcription, API & Mobile** - Whisper pipeline, FastAPI backend, and React Native/Expo client — the user-facing surface
+- [ ] **Phase 3: Transcription Pipeline** - Whisper pipeline as a Python script — takes an audio file, returns a structured transcript ready for ingestion
 
 ---
 
@@ -52,22 +52,19 @@
 - Summary drift — node summaries become bland over time; enforced via prompt constraints on when rewrite is allowed
 
 
-### Phase 3: Transcription, API & Mobile
-**Goal**: A user can open the mobile app, tap to record a voice memo, and have it transcribed, ingested, and queryable — the complete end-to-end loop is accessible from an iOS device
+### Phase 3: Transcription Pipeline
+**Goal**: A Python script accepts an audio file path and produces a structured transcript (text with `[MM:SS]` sentence timestamps and `rec:N` ID) ready to be passed directly into the ingestion agent
 **Depends on**: Phase 2
-**Requirements**: VOICE-01, VOICE-02, VOICE-03
+**Requirements**: VOICE-02, VOICE-03
 **Success Criteria** (what must be TRUE):
-  1. User taps once to start recording on iOS; recording stops on second tap; the app shows a processing indicator and the transcript appears in the chronological entry list within a reasonable time
-  2. Whisper transcription renders sentence-level timestamps in `[MM:SS]` format from segment boundaries; low-confidence segments and meta-tokens (`[MUSIC]`, `[APPLAUSE]`) are stripped; recordings under 5 seconds of non-silence are rejected before upload
-  3. User types a natural language question in the app and receives a cited answer with exact transcript quotes displayed inline — the full loop (record → ingest → theme → query) is exercised end-to-end on a real device
+  1. Running `python ingest_audio.py <file.m4a>` produces a transcript with `[MM:SS]` sentence-level timestamps derived from Whisper segment boundaries
+  2. Low-confidence segments and meta-tokens (`[MUSIC]`, `[APPLAUSE]`) are stripped; audio under 5 seconds of non-silence is rejected with a clear error
+  3. The output transcript is passed end-to-end through the ingestion agent — the full pipeline (audio file → transcript → graph → themes) runs from a single script call
 **Plans**: TBD
 
-**UI hint**: yes
-
 **Key risks**:
-- Expo SDK 53 background audio on iOS requires `UIBackgroundModes: audio` in `app.json` and `Audio.setAudioModeAsync` configuration — verify against current SDK docs before implementation; do not assume prior SDK behavior
-- Whisper hallucination on silence and noise — confidence filtering and minimum duration gate must be in place before first real user session
-- FastAPI not yet in `pyproject.toml` — add `fastapi>=0.120`, `uvicorn[standard]`, `python-multipart` before this phase begins
+- Whisper hallucination on silence and noise — confidence filtering and minimum duration gate must be in place before processing real audio
+- `whisper-large-v3-turbo` returns `words: null` despite accepting `timestamp_granularities=["word"]` — segment boundaries only; do not depend on word-level
 
 ---
 
@@ -77,7 +74,7 @@
 |-------|----------------|--------|-----------|
 | 1. Backend Foundation | 0/? | Not started | - |
 | 2. Agent Pipeline | 0/? | Not started | - |
-| 3. Transcription, API & Mobile | 0/? | Not started | - |
+| 3. Transcription Pipeline | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-04-01*

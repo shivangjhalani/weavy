@@ -5,11 +5,10 @@
 
 ## v1 Requirements
 
-### Voice Capture
+### Transcription Pipeline
 
-- [ ] **VOICE-01**: User can record voice memos from a mobile app with one tap
-- [ ] **VOICE-02**: Whisper transcribes audio with sentence-level inline timestamps (`[MM:SS]` format, using segment boundaries — word-level timestamps are not available on `whisper-large-v3-turbo`)
-- [ ] **VOICE-03**: Transcription strips low-confidence segments and meta-tokens (`[MUSIC]`, `[APPLAUSE]`); recordings under 5 seconds of non-silence are rejected
+- [ ] **VOICE-02**: Whisper transcribes an audio file with sentence-level inline timestamps (`[MM:SS]` format, using segment boundaries — word-level timestamps are not available on `whisper-large-v3-turbo`)
+- [ ] **VOICE-03**: Transcription strips low-confidence segments and meta-tokens (`[MUSIC]`, `[APPLAUSE]`); audio under 5 seconds of non-silence is rejected
 
 ### Graph Storage
 
@@ -91,6 +90,8 @@
 
 | Feature | Reason |
 |---------|--------|
+| Mobile app / frontend | Out of scope for this milestone — backend Python scripts only; designed to be callable as API later |
+| HTTP API (FastAPI, uvicorn) | Not in this milestone — scripts are the interface; API layer added when frontend is ready |
 | Streaks / gamification | Explicitly anti-vision — no guilt mechanics; this is the antithesis of the product |
 | Social / sharing features | Private personal record only; multi-user violates the trust model |
 | Real-time streaming transcription | Batch processing is sufficient; adds complexity without value |
@@ -108,7 +109,6 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VOICE-01 | Phase 3 | Pending |
 | VOICE-02 | Phase 3 | Pending |
 | VOICE-03 | Phase 3 | Pending |
 | GRAPH-01 | Phase 1 | Pending |
@@ -149,8 +149,8 @@
 | PRIV-02 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 38 total
-- Mapped to phases: 38
+- v1 requirements: 37 total
+- Mapped to phases: 37
 - Unmapped: 0 ✓
 
 ---
