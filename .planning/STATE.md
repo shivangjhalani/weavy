@@ -80,7 +80,7 @@ None.
 **To resume:** Read ROADMAP.md, then run `/gsd:plan-phase 1` to begin Phase 1 planning.
 
 **Context for next session:**
-- Phase 1 covers 22 requirements: the FalkorDB schema and DAL, all tool functions, and the shared ~80-line agent harness
+- Phase 1 covers 21 requirements: the FalkorDB schema and DAL, all tool functions, and the shared ~80-line agent harness
 - The harness is the most critical component — it owns provenance validation, token minting, call budget, and termination detection
 - Research SUMMARY.md contains production-validated specifics: FalkorDB REMOVE-before-SET quirk, litellm embedding `task_type`, Whisper `words: null` on turbo model
 - No mobile app or API in this milestone — Python scripts only, structured to be easily wrapped as API endpoints later
