@@ -1,86 +1,78 @@
-# LifeOS
+# Arachne
 
-> **Build a garden for your life.**
+A web of your thoughts
 
----
+> **Speak your mind out**
 
 ## What It Is
 
-LifeOS is an audio journaling app. You talk, it listens, it remembers.
+Arachne is a simple mobile app that lets you talk out loud about whatever is on your mind—ambitions, worries, decisions, emotions, half-formed ideas—and captures those spoken thoughts into something clear, organized, and lasting.
 
-Most people have a lot going on in their heads and no good way to get it out. Written
-journaling is slow and formal. Voice memos disappear into a black hole. Nothing out
-there gives you the feeling of building something cumulative. LifeOS fills that gap —
-it makes speaking your thoughts worth doing, because what you say gets organized,
-held, and stays findable.
+You open the app, hit record, and just speak. While driving, walking the dog, or lying in bed at night. The app listens and understands everything deeply. It can recognize connections, realise the questions you keep circling back to, and understands how your thinking is actually evolving.
 
----
+Over weeks and months, it quietly builds a private record of _you_—not just what happened, but how you think, feel, and change.
 
-## The Problem It Solves
+It is just a reliable way to get your inner world out of your head and into a place where it finally makes sense.
 
-Thinking without externalizing tends to circle.
-Not from lack of reflection — but because **the mind is a poor witness to its own changes over time.**
+YOU can talk to your thoughts!
 
-Talking is the most natural way most people process things.
-LifeOS catches what you say, organizes it, and gives it back in a way that's actually useful — so the thinking you're already doing doesn't get lost.
+## The Real Problem It Solves
 
----
+Most of us walk around with a lot going on inside our heads. We think about work, relationships, goals, doubts, and life changes almost constantly. But the mind is terrible at keeping track of its own progress.
 
-## Who It's For
+You might spend an hour mentally working through a tough decision, only to forget the key insights two days later. Or you realize you’ve been stuck on the same worry for months without noticing the pattern. Writing it down feels slow and forced. Voice memos pile up and get forgotten. The thoughts stay trapped, looping endlessly.
 
-The user has a full inner life but no good outlet for it.
+Arachne fixes this by catching what you say in the moment, organizing it automatically, and giving it back to you in a way that’s actually useful. You externalize the noise, and the app turns it into clarity—so your thinking doesn’t disappear.
 
-- **The Striver** — Seeking better work, clearer goals, a more intentional life.
-  Needs to untangle ambitions and track the decisions behind them.
+## Who It’s For
 
-- **The Processor** — Going through something difficult: grief, a breakup, a career
-  change. Trying to make sense of complex, shifting emotions.
+Arachne is built for people who have a rich inner life but no good way to handle it.
 
-- **The Thinker** — Constantly losing the thread of their own ideas. Needs to
-  offload just to find peace.
+- **The Striver**: You’re ambitious and always thinking about your next move—career growth, side projects, becoming a better version of yourself. You need to untangle your goals and remember why you made certain choices.
 
-What they share: a full inner life, no good outlet, and a quiet cost from keeping
-everything inside their head.
+- **The Processor**: You’re going through something heavy—a breakup, grief, a major life transition, or just a rough patch. Talking helps you make sense of shifting emotions, but you want those conversations preserved and visible later.
 
----
+- **The Thinker**: Your mind never stops. Ideas, questions, and observations bubble up all day, but they vanish or get tangled. You just want a place to offload them and find peace.
+
+What these people share is simple: a full head and no reliable outlet. They’re not looking for another to-do list or habit tracker. They want their own thoughts held safely so their mind can finally rest.
 
 ## What It Does Over Time
 
-LifeOS builds a record of your thinking. Not a log of events — a record of _you_.
+The real power shows up after consistent use.
 
-- Your open questions and unresolved tensions
-- Your recurring themes and how they evolve emotionally over time
-- The decisions you made and and what was driving them
-- Insights - moments of realization - accumulated and held
-- The things you keep coming back to without realizing it.
+After a few weeks, Arachne starts showing you patterns you didn’t notice: the open questions that keep returning, the emotions that shift around certain topics, and the decisions you made when you were feeling a particular way.
 
-Six months from now, you can look back at yourself and understand your own arc. You can ask it things about yourself and get answers grounded in what you've actually said.
+After a few months, it becomes a living record of your personal growth. You can ask the app things like:
 
----
+- “What have I been struggling with most in the last quarter?”
+- “How has my thinking about my career changed since January?”
+- “What insights keep coming up about my relationships?”
+
+The answers are pulled directly from your own spoken words—no generic advice, no hallucinations. It’s simply a clearer mirror of who you’ve been.
+
+Six months in, you’ll look back and see your own arc: how you’ve grown, what you’ve resolved, and what still needs attention. It’s like having a wise, non-judgmental friend who has listened to every version of you and remembers it all perfectly.
 
 ## The Feeling
 
-> _"Calm and safe. Like a personal garden — private, cumulative, yours."_
+People describe using Arachne as “calm and safe.”
 
-The metaphor is a garden: organic, tended over time, growing more beautiful the longer
-it exists. It is a private sanctuary, not a dashboard.
+Imagine a private garden that belongs only to you. Every time you speak into the app, you’re planting something real. Over time the garden grows richer, more organized, and more beautiful—not because it’s been forced, but because it’s been tended naturally.
 
-The emotion the product must deliver: **quiet confidence**. The user leaves feeling
-lighter — knowing their thoughts are held somewhere safe, so their head no longer has
-to hold all of it.
+There are no streaks to maintain, no notifications guilt-tripping you, no dashboards. You leave every session feeling lighter, knowing your thoughts are held somewhere secure. Your head no longer has to carry everything.
 
----
+That quiet confidence is the entire point.
 
-## What It Is NOT
+## What Arachne Is Not
 
-These anti-goals are as important as the goals. Any design decision that drifts toward
-these must be rejected.
+To stay true to the vision, we deliberately avoid certain things:
 
-| Not This            | Why It's Wrong                                                                 |
-| ------------------- | ------------------------------------------------------------------------------ |
-| A productivity tool | No checklists, due dates, or kanban boards. Not Notion. Not Slack.             |
-| A tracker           | No streaks, no gamification, no guilt-trip notifications.                      |
-| Therapy             | Not clinical, not diagnostic. A tool for self-witnessing, not treatment.       |
-| A black hole        | Never a list of raw audio files. The design must surface _meaning_, not files. |
+| Not This            | Why It’s Wrong                                                                    |
+| ------------------- | --------------------------------------------------------------------------------- |
+| A productivity tool | No checklists, deadlines, or kanban boards. It is not Notion or a task manager.   |
+| A tracker           | No streaks, points, or gamification. No guilt if you miss a day.                  |
+| Therapy             | Not clinical or diagnostic. It helps you witness yourself; it does not treat you. |
+| A black hole        | Never just a pile of raw audio files. It always surfaces meaning and clarity.     |
 
----
+Arachne exists for one reason only: to give you a better relationship with your own mind—by letting you speak freely and then handing back an organized, evolving reflection of who you are becoming.
+
+This is the app that finally makes your inner life feel manageable, visible, and yours.

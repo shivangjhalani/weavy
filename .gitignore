@@ -1,11 +1,12 @@
-private
+private/
+.old/
 .claude
 .chromadb/
 .neo4j/
 traces/
 raw_results.json
 *queries.json
-experiments-old
+data
 
 # Experiments (eval data)
 eval_raw_results.json
@@ -26,6 +27,7 @@ devenv.local.yaml
 __pycache__/
 *.py[codz]
 *$py.class
+.ruff_cache
 
 # C extensions
 *.so

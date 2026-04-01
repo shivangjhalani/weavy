@@ -26,6 +26,34 @@
     };
   };
 
+  # devenv up starts all processes
+  processes = {
+    falkordb = {
+      exec = ''
+        cleanup() {
+          docker stop falkordb-dev 2>/dev/null || true
+        }
+        trap cleanup EXIT INT TERM
+
+        docker stop falkordb-dev 2>/dev/null || true
+        docker rm falkordb-dev 2>/dev/null || true
+
+        # Current FalkorDB images persist Redis data under /var/lib/falkordb/data.
+        docker run --rm \
+          --name falkordb-dev \
+          -p 6379:6379 \
+          -p 3000:3000 \
+          -v "${config.devenv.root}/.devenv/falkordb-data:/var/lib/falkordb/data" \
+          falkordb/falkordb:latest \
+          --appendonly yes
+      '';
+    };
+  };
+
+  enterShell = ''
+    mkdir -p .devenv/falkordb-data
+  '';
+
   env.LD_LIBRARY_PATH = lib.makeLibraryPath [
     pkgs.stdenv.cc.cc.lib
     pkgs.zlib
@@ -40,12 +68,6 @@
   # https://devenv.sh/scripts/
   scripts.hello.exec = ''
     echo hello from $GREET
-  '';
-
-  # https://devenv.sh/basics/
-  enterShell = ''
-    hello         # Run scripts directly
-    echo "$(python --version | cut -d' ' -f2), uv $(uv --version | cut -d' ' -f2)"
   '';
 
   # https://devenv.sh/tasks/

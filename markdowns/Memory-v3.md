@@ -41,14 +41,6 @@ Each transcript is a record with the following fields:
 1. Unique transcript ID
 2. Recording timestamp — when the user made this recording. This is the only timestamp that matters; it represents the user's lived time and is passed to the ingest agent in the prompt so the LLM can reason about relative time naturally.
 3. Raw text (from Whisper JSON)
-4. Episode spans: ranges inside the transcript, where each range covers one coherent theme / topic completely.
-   For each episode span:
-   - `start_offset`
-   - `end_offset`
-   - a 1-2 line summary
-   - an embedding of that summary (to help in retrieval)
-
-These episode spans are created during ingestion as a side effect of graph writing. They are only a retrieval aid. They are not a source-of-truth memory layer.
 
 The graph carries provenance back to the transcript using:
 
@@ -89,7 +81,8 @@ Node disambiguation is the hardest part. The approach is three-tiered:
 
 1. **Exact match against alias sets** — every node maintains a set of all surface forms that have resolved to it (e.g. `["Father", "Vishal", "Dad", "Papa"]`). New candidates are checked against all alias sets first. This is cheap and fast.
 2. **Fuzzy similarity scoring** — handles typos, abbreviations, and close variations that exact match misses.
-3. **LLM reasoning** — for genuinely ambiguous cases, the LLM decides whether two candidates refer to the same thing.
+3. **Semantic search**
+4. **LLM reasoning** — the LLM calls these tools and through the results decides whether two candidates refer to the same thing.
 
 When the LLM merges two nodes, their alias sets are unioned. When a new surface form resolves to an existing node, it is added to that node's alias set.
 
