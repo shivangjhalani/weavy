@@ -61,21 +61,21 @@
 
 ### Component Responsibilities
 
-| Component | Responsibility | Boundary |
-|-----------|----------------|----------|
-| Mobile Client | Voice capture, audio upload, question input, answer display | Sends audio/text to backend; receives structured answers |
-| Backend API | HTTP entry points for record upload and query; orchestrates harness launch | Does not contain agent logic; delegates to harness |
-| Agent Harness | Runs the LLM tool-calling loop; owns termination detection; validates provenance on writes; mints sequential tokens | Single Python class or function; shared across all three agent modes |
-| Ingestion Prompt Config | System prompt for ingestion mode; determines agent behavior during graph build | Data, not code — swap prompt to change behavior |
-| Query Prompt Config | System prompt for query mode; instructs progressive retrieval and citation grounding | Data, not code |
-| Theme Prompt Config | System prompt for theme maintenance; operates on delta, not full graph | Data, not code |
-| Tool Layer | Python functions registered as LLM tools; reads/writes to FalkorDB and transcript store | Each tool is independently testable; harness calls them by name |
-| Harness Core | Loop execution: call LLM → execute tool → append result → loop; provenance guard on writes | Does not know semantics — only routes calls and enforces harness-level invariants |
-| Token Registry | Global counter per entity type (node:N, edge:N, rec:N); mints next ID on create calls | Persisted in FalkorDB; never delegated to LLM |
-| Background Job Queue | Async queue for theme agent runs and log compression; serializes theme runs | Prevents race conditions; user never waits on these |
-| FalkorDB | Native graph storage: nodes, edges with logs, themes, token counters, bidirectional index | All graph state lives here; can be fully rebuilt from transcripts |
-| Transcript Store | Canonical text records with sentence-level timestamps; append-only | Source of truth; never mutated after write |
-| Cold Storage | Archive of pre-compression log entries keyed by node/edge ID | Not a primary path; accessed only via get_node_log_archive tool |
+| Component               | Responsibility                                                                                                      | Boundary                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Mobile Client           | Voice capture, audio upload, question input, answer display                                                         | Sends audio/text to backend; receives structured answers                          |
+| Backend API             | HTTP entry points for record upload and query; orchestrates harness launch                                          | Does not contain agent logic; delegates to harness                                |
+| Agent Harness           | Runs the LLM tool-calling loop; owns termination detection; validates provenance on writes; mints sequential tokens | Single Python class or function; shared across all three agent modes              |
+| Ingestion Prompt Config | System prompt for ingestion mode; determines agent behavior during graph build                                      | Data, not code — swap prompt to change behavior                                   |
+| Query Prompt Config     | System prompt for query mode; instructs progressive retrieval and citation grounding                                | Data, not code                                                                    |
+| Theme Prompt Config     | System prompt for theme maintenance; operates on delta, not full graph                                              | Data, not code                                                                    |
+| Tool Layer              | Python functions registered as LLM tools; reads/writes to FalkorDB and transcript store                             | Each tool is independently testable; harness calls them by name                   |
+| Harness Core            | Loop execution: call LLM → execute tool → append result → loop; provenance guard on writes                          | Does not know semantics — only routes calls and enforces harness-level invariants |
+| Token Registry          | Global counter per entity type (node:N, edge:N, rec:N); mints next ID on create calls                               | Persisted in FalkorDB; never delegated to LLM                                     |
+| Background Job Queue    | Async queue for theme agent runs and log compression; serializes theme runs                                         | Prevents race conditions; user never waits on these                               |
+| FalkorDB                | Native graph storage: nodes, edges with logs, themes, token counters, bidirectional index                           | All graph state lives here; can be fully rebuilt from transcripts                 |
+| Transcript Store        | Canonical text records with sentence-level timestamps; append-only                                                  | Source of truth; never mutated after write                                        |
+| Cold Storage            | Archive of pre-compression log entries keyed by node/edge ID                                                        | Not a primary path; accessed only via get_node_log_archive tool                   |
 
 ---
 
@@ -109,7 +109,7 @@ This is approximately 30 lines of Python. No framework needed for this loop stru
 
 LangGraph imposes a graph-of-nodes execution model where each node is a processing step and edges are conditional transitions. It is designed for multi-agent orchestration, human-in-the-loop workflows, and complex branching state machines.
 
-Arachne's harness is a single-agent tool loop with two exit conditions: natural end_turn or explicit complete_ingestion(). There are no branches, no parallel agents, no human checkpoints, and no stateful graph nodes. LangGraph's abstractions add overhead and indirection without providing anything the architecture needs.
+Arakne's harness is a single-agent tool loop with two exit conditions: natural end_turn or explicit complete_ingestion(). There are no branches, no parallel agents, no human checkpoints, and no stateful graph nodes. LangGraph's abstractions add overhead and indirection without providing anything the architecture needs.
 
 Verdict: LangGraph is overkill. It solves a harder coordination problem than this system has.
 **Confidence: MEDIUM** (based on training knowledge of LangGraph's design; no live docs available to verify current API)
@@ -127,7 +127,7 @@ Verdict: LangChain adds friction to the invariants this harness must own. Not re
 
 The OpenAI chat completions API (or Anthropic equivalent) with tool definitions is exactly the right primitive. The loop is visible, the harness owns the dispatch, and there is nothing between the LLM response and the tool execution that the harness does not control.
 
-Arachne uses Python, so either `openai` SDK (if using OpenAI models) or `anthropic` SDK (if using Claude) provides the raw tool-calling interface. The harness loop is a Python `while True` with ~5 meaningful lines of logic.
+Arakne uses Python, so either `openai` SDK (if using OpenAI models) or `anthropic` SDK (if using Claude) provides the raw tool-calling interface. The harness loop is a Python `while True` with ~5 meaningful lines of logic.
 
 Verdict: Pure SDK tool-calling loop with thin harness wrapper is the correct architecture.
 **Confidence: HIGH** (directly follows from Memory-v5.md design, which explicitly calls for one harness across three modes)
@@ -135,6 +135,7 @@ Verdict: Pure SDK tool-calling loop with thin harness wrapper is the correct arc
 ### Framework Recommendation
 
 **Use pure Python with the LLM provider's SDK directly.** The harness is a thin loop that:
+
 1. Manages the message array (append assistant turns + tool results)
 2. Intercepts write tool calls to validate provenance before execution
 3. Intercepts create_node/create_edge to mint tokens before delegating
@@ -260,7 +261,7 @@ Post-ingestion background job
 ## Recommended Project Structure
 
 ```
-arachne/
+arakne/
 ├── src/
 │   ├── harness/
 │   │   ├── __init__.py
@@ -477,34 +478,34 @@ Phase 6 — API + Mobile Client (depends on Phase 5)
 
 ### External Services
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Whisper | Local inference via Python library (whisperx or faster-whisper) | Word-level timestamps required; sentence-boundary rendering in harness |
-| LLM Provider (OpenAI / Anthropic) | Direct SDK, not via framework | Swap by changing the client in harness/loop.py |
-| FalkorDB | Python driver (falkordb-py) | All queries in storage/graph.py; rest of system never writes Cypher |
+| Service                           | Integration Pattern           | Notes                                                                                                                                |
+| --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Whisper                           | Groq Whisper via `litellm`    | `whisper-large-v3-turbo` provides segment-level timestamps; the harness renders sentence-style markers from those segment boundaries |
+| LLM Provider (OpenAI / Anthropic) | Direct SDK, not via framework | Swap by changing the client in harness/loop.py                                                                                       |
+| FalkorDB                          | Python driver (falkordb-py)   | All queries in storage/graph.py; rest of system never writes Cypher                                                                  |
 
 ### Internal Boundaries
 
-| Boundary | Communication | Invariant |
-|----------|---------------|-----------|
-| Harness ↔ Tool Layer | Python function call via dispatch | Harness validates provenance and mints tokens before calling tools |
-| API ↔ Harness | Direct Python call (sync for query, async for ingestion launch) | API does not know about LLM or tools |
-| Ingestion ↔ Theme Job | Job queue message (transcript_id + complete_ingestion payload) | Never in-process; always async |
-| Storage ↔ Tools | FalkorDB driver calls inside storage module | Tools never call FalkorDB directly |
-| Theme Job ↔ Harness | Same harness, different system prompt | Theme job is a harness call, not a special code path |
+| Boundary               | Communication                                                   | Invariant                                                          |
+| ---------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Harness ↔ Tool Layer  | Python function call via dispatch                               | Harness validates provenance and mints tokens before calling tools |
+| API ↔ Harness         | Direct Python call (sync for query, async for ingestion launch) | API does not know about LLM or tools                               |
+| Ingestion ↔ Theme Job | Job queue message (transcript_id + complete_ingestion payload)  | Never in-process; always async                                     |
+| Storage ↔ Tools       | FalkorDB driver calls inside storage module                     | Tools never call FalkorDB directly                                 |
+| Theme Job ↔ Harness   | Same harness, different system prompt                           | Theme job is a harness call, not a special code path               |
 
 ---
 
 ## Scaling Considerations
 
-This is a single-user, privacy-first, local-data system in v1. Scaling targets are personal use throughput, not multi-tenant scale.
+This is a single-user, privacy-first, user-controlled system in v1. Scaling targets are personal use throughput, not multi-tenant scale.
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 1 user / personal | Monolith is correct. SQLite or file store viable for transcripts. FalkorDB local. |
-| 10-50 users (self-hosted) | Same monolith. Add per-user graph isolation (separate FalkorDB keyspaces or node labels). |
-| 100+ users (hosted) | Background job queue needs durability (Redis/ARQ or similar). Per-user FalkorDB instances or sharding. |
-| 1000+ users | LLM call cost is the constraint, not architecture. Prompt caching, batching, and model tier selection become the levers. |
+| Scale                     | Architecture Adjustments                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 user / personal         | Monolith is correct. SQLite or file store viable for transcripts and audio refs. FalkorDB can run alongside the app in user-controlled infrastructure. |
+| 10-50 users (self-hosted) | Same monolith. Add per-user graph isolation (separate FalkorDB keyspaces or node labels).                                                              |
+| 100+ users (hosted)       | Background job queue needs durability (Redis/ARQ or similar). Per-user FalkorDB instances or sharding.                                                 |
+| 1000+ users               | LLM call cost is the constraint, not architecture. Prompt caching, batching, and model tier selection become the levers.                               |
 
 ### Scaling Priorities
 
@@ -515,12 +516,8 @@ This is a single-user, privacy-first, local-data system in v1. Scaling targets a
 
 ## Sources
 
-- Memory-v5.md (primary source — project's own authoritative architecture spec): `/home/shivang/shivang/projs/arachne/markdowns/Memory-v5.md`
-- PROJECT.md (requirements and decisions): `/home/shivang/shivang/projs/arachne/.planning/PROJECT.md`
+- Memory-v5.md (primary source — project's own authoritative architecture spec): `/home/shivang/shivang/projs/arakne/markdowns/Memory-v5.md`
+- PROJECT.md (requirements and decisions): `/home/shivang/shivang/projs/arakne/.planning/PROJECT.md`
 - LangGraph framework analysis: training data (MEDIUM confidence — framework landscape stable as of Aug 2025 cutoff; verify against current docs before committing)
 - OpenAI Agents SDK / pure tool-calling pattern: training data (MEDIUM confidence — loop structure follows directly from OpenAI/Anthropic function calling APIs, which are stable)
 - FalkorDB Python driver: training data (MEDIUM confidence — verify driver name and current API in devenv.nix before implementation)
-
----
-*Architecture research for: Arachne — AI voice journaling with 3-layer memory backend*
-*Researched: 2026-04-01*

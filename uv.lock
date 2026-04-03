@@ -1175,7 +1175,7 @@ wheels = [
 ]
 
 [[package]]
-name = "arachne"
+name = "arakne"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

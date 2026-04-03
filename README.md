@@ -1,17 +1,17 @@
-# Arachne
+# Arakne
 
 > Build a garden for your life
 
-From carved stone and clay tablets to paper journals and digital notes, humans have always externalized memory and the way they capture life. **Arachne** is the next evolution: an AI-native digital garden that captures your thoughts.
+From carved stone and clay tablets to paper journals and digital notes, humans have always externalized memory and the way they capture life. **Arakne** is the next evolution: an AI-native digital garden that captures your thoughts.
 
 ## Contributing
 
-By submitting a pull request or other contribution to Arachne, you agree
+By submitting a pull request or other contribution to Arakne, you agree
 to the Harmony-based contributor agreement in [CLA](CLA). Under that
 agreement, contributions remain under the same project license used at
-the time of submission, which for Arachne is the GNU Affero General
+the time of submission, which for Arakne is the GNU Affero General
 Public License v3.0 (AGPLv3).
 
 ## License
 
-**Arachne is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](LICENSE).**
+**Arakne is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](LICENSE).**

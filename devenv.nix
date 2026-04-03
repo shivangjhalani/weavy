@@ -10,7 +10,7 @@
   dotenv.enable = true;
 
   # https://devenv.sh/basics/
-  env.GREET = "Arachne";
+  env.GREET = "Arakne";
 
   # https://devenv.sh/packages/
   packages = [

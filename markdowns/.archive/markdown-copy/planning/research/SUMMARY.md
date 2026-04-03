@@ -1,15 +1,15 @@
 # Project Research Summary
 
-**Project:** Arachne
+**Project:** Arakne
 **Domain:** AI-powered voice journaling with 3-layer semantic graph memory backend
 **Researched:** 2026-04-01
 **Confidence:** HIGH (stack and architecture fully validated against production-tested prior codebase in git history; features and pitfalls at MEDIUM from training data and architecture derivation)
 
 ## Executive Summary
 
-Arachne is an AI voice journaling app with a genuinely novel technical architecture: a 3-layer memory system where the canonical record (raw transcripts with sentence-level timestamps) feeds a derived semantic graph (FalkorDB nodes and edges) which in turn feeds a derived orientation map (themes). The defining design insight is that the graph and themes are caches — they can be fully rebuilt from transcripts — which means the system is both inspectable and recoverable. No competitor combines voice-first capture, automatic relationship inference, and cited answers grounded in the user's exact words. The gap in the market is real; the technical challenge is proportionally significant.
+Arakne is an AI voice journaling app with a genuinely novel technical architecture: a 3-layer memory system where the canonical record (raw transcripts with sentence-level timestamps) feeds a derived semantic graph (FalkorDB nodes and edges) which in turn feeds a derived orientation map (themes). Source audio is retained for playback and audit, but the transcript remains canonical. The defining design insight is that the graph and themes are caches — they can be fully rebuilt from transcripts — which means the system is both inspectable and recoverable. No competitor combines voice-first capture, automatic relationship inference, and cited answers grounded in the user's exact words. The gap in the market is real; the technical challenge is proportionally significant.
 
-The recommended approach is to build the backend pipeline in strict dependency order: storage schema and graph tooling first, then the shared agent harness, then each of the three agent modes (ingestion, theme, query) with their system prompts, then transcription, and finally the mobile client and API surface. The entire backend is Python with a custom tool-calling loop — no agent framework (LangGraph, LangChain) is needed or recommended. The stack is already decided and partially validated: FalkorDB 1.6.0 for the graph, litellm 1.82.4 as the unified LLM/embedding interface, Groq Whisper for transcription, Gemini embedding-001 for 3072-dimensional semantic embeddings, and React Native + Expo for the mobile client.
+The recommended approach is to build the backend pipeline in strict dependency order: storage schema and graph tooling first, then the shared agent harness, then each of the three agent modes (ingestion, theme, query) with their system prompts, then transcription, and finally the mobile client and API surface. The entire backend is Python with a custom tool-calling loop — no agent framework (LangGraph, LangChain) is needed or recommended. The stack is already decided and substantially validated: FalkorDB 1.6.0 for the graph, litellm 1.82.4 as the unified LLM/embedding interface, Groq Whisper for transcription, Gemini embedding-001 for 3072-dimensional semantic embeddings, and React Native + Expo for the mobile client.
 
 The most serious risks are not architectural but behavioral: the LLM-driven graph degrades if the ingestion agent creates duplicate nodes instead of merging (node proliferation), drifts node summaries toward blandness over time (summary drift), or writes provenance offsets that don't point to the text that justified the write (provenance gap). All three corrupt the "your own words" guarantee that is the product's core differentiator. These are prevented through harness-enforced invariants, disciplined prompt engineering, and post-ingestion health metrics — not through architectural changes. They must be addressed at ingestion phase, not retroactively.
 
@@ -24,6 +24,7 @@ The stack is largely settled by a prior working implementation (recoverable from
 One non-obvious FalkorDB quirk was production-validated: updating a vector property requires `REMOVE n.embedding` before `SET n.embedding = vecf32(...)` — direct overwrite silently leaves the old vector in the index. This is already in the prior codebase and must be carried forward.
 
 **Core technologies:**
+
 - `falkordb` 1.6.0: Graph DB with native vector index — eliminates dual-write synchronization problem of external vector DBs; `vecf32()` property type for embedding storage; REMOVE-before-SET required for vector updates
 - `litellm` 1.82.4: Unified LLM + embedding interface — single call across all providers; handles `task_type` for Gemini embedding distinction between RETRIEVAL_DOCUMENT and RETRIEVAL_QUERY
 - `gemini-embedding-001`: 3072-dimensional embeddings — matches the vector index already specified; requires `task_type` parameter; cannot swap providers without rebuilding the index
@@ -38,27 +39,30 @@ One non-obvious FalkorDB quirk was production-validated: updating a vector prope
 The feature landscape is unusually clear because no competitor covers the full combination: voice-first + auto semantic graph + cited answers. Each individual capability exists in isolation elsewhere (Rewind for passive capture, Reflect for backlink graphs, Mem for AI search) but nobody combines them.
 
 **Must have (table stakes):**
+
 - One-tap voice recording from mobile — primary capture surface; all downstream value is gated on this
 - Whisper transcription with sentence-level timestamps — canonical record; every downstream feature depends on it
 - Chronological entry list with transcript view — trust signal; users need to see recordings were captured
 - Hybrid keyword + semantic search — fallback navigation for users who can't form a natural language query
-- Privacy / local data control — prerequisite for user trust with intimate personal content
+- Privacy / user-controlled data handling — prerequisite for user trust with intimate personal content
 
 **Should have (competitive differentiators — all P1 for MVP):**
-- Ingestion agent that builds semantic graph from transcripts — the core intelligence; without this Arachne is just a voice memo app
+
+- Ingestion agent that builds semantic graph from transcripts — the core intelligence; without this Arakne is just a voice memo app
 - Theme agent (async, background) — orientation layer; query agent cold-starts blind without themes
 - Natural language query with cited answers (exact transcript spans) — the "aha" moment; validates the core value prop; no competitor does this with provenance to the second
 - Pattern surfacing across time — "you've returned to this 7 times since January" — emerges from sustained use; v1.x
 
 **Defer (v2+):**
+
 - Android support (iOS first for quality control)
 - Export to markdown / Obsidian
 - Multi-language transcription
-- Memo mode (observer agent)
 - Bi-temporal graph versioning (Graphiti arxiv 2501.13956)
 - Calendar integration / event logging (explicitly out of scope — inner life, not external events)
 
 **Explicit anti-features (never build):**
+
 - Streaks, gamification, guilt mechanics
 - Social / sharing features
 - Real-time streaming transcription (batch is sufficient)
@@ -70,6 +74,7 @@ The feature landscape is unusually clear because no competitor covers the full c
 The architecture is a layered monolith with strict component boundaries. The core is a single Python tool-calling loop (~30 lines) that serves three agent modes by swapping system prompts — not three separate runtimes. The loop is the entire differentiating logic: it manages the message array, intercepts write calls for provenance validation and token minting before storage is touched, and detects the `complete_ingestion()` termination signal that seeds background jobs. This loop is not a framework; LangGraph and LangChain both add abstraction that conflicts with the harness's need to own provenance validation and token minting at dispatch time.
 
 **Major components:**
+
 1. **Agent Harness** (`src/harness/`) — the shared tool-calling loop; owns provenance validation, sequential token minting, and termination detection; shared across ingestion, query, and theme modes via system prompt swap; ~80 lines total; most testable component in isolation
 2. **Tool Layer** (`src/tools/`) — pure Python functions over FalkorDB and transcript store; independently testable; harness never writes Cypher directly; tiered read tools (search → neighborhood → full node → archive) preserve context budget
 3. **Storage Layer** (`src/storage/`) — FalkorDB client and all Cypher queries isolated here; transcript store (append-only canonical text); cold storage for pre-compression log entry archives; nothing outside this module writes Cypher
@@ -78,6 +83,7 @@ The architecture is a layered monolith with strict component boundaries. The cor
 6. **Mobile Client** (separate Expo app) — voice recording with one-tap start; waveform feedback during recording; fire-and-forget feel after stop; entry list with first-sentence transcript previews
 
 **Key architectural patterns:**
+
 - Harness-owned invariants: provenance validation and token minting happen at dispatch, not in tool functions or LLM output
 - Termination via special tool call: `complete_ingestion()` is both audit log and background job trigger
 - Progressive disclosure: tiered read tools (Tier 1 hot themes → Tier 2 search → Tier 3 neighborhood → Tier 4 full node → Archive) preserve token budget for reasoning
@@ -87,11 +93,11 @@ The architecture is a layered monolith with strict component boundaries. The cor
 
 Ten pitfalls were identified; the following five are the most consequential and must be prevented before they occur — retroactive repair is expensive or impossible for all of them.
 
-1. **Node proliferation** — the graph accumulates semantic duplicates ("career anxiety", "work stress", "job pressure" as five separate nodes) because the ingestion agent creates rather than merges when search doesn't surface existing nodes. Prevention: enforce search-before-create discipline in the ingestion prompt; include current node count in context; build a create:update ratio health metric; ensure `search_graph` matches aliases and partial forms, not just embeddings.
+1. **Node proliferation** — the graph accumulates semantic duplicates ("career anxiety", "work stress", "job pressure" as five separate nodes) because the ingestion agent creates rather than merges when search doesn't surface existing nodes. Prevention: enforce search-before-create discipline in the ingestion prompt; include current node count in context; ensure `search_graph` matches aliases and close lexical variants, not just embeddings.
 
 2. **Provenance gap** — writes execute with fabricated or reused offsets that don't point to the text that justified the write, silently corrupting the citation chain. Prevention: harness must reject writes with null, out-of-bounds, or equal start/end offsets; additionally verify that `get_transcript_span(transcript_id, start, end)` returns non-empty text before accepting a write; enforce offset diversity (clustering on same offsets is a signal of fabrication).
 
-3. **Agentic loop runaway** — the ingestion agent enters an infinite disambiguation loop on ambiguous transcripts (same concept referred to by multiple surface forms), burns the token budget without calling `complete_ingestion`, and leaves the transcript partially ingested with the bidirectional index unpopulated. Prevention: hard tool call budget (e.g., 60 calls) and wall-clock timeout (2-3 minutes) in the harness from day one; explicit disambiguation decision rule in the prompt; idempotent write detection.
+3. **Agentic loop runaway** — the ingestion agent enters an infinite disambiguation loop on ambiguous transcripts (same concept referred to by multiple surface forms), burns the token budget without calling `complete_ingestion`, and can leave the transcript record and graph out of sync. Prevention: explicit disambiguation decision rule in the ingestion prompt.
 
 4. **FalkorDB array field serialization** — log entries stored as complex nested structures in array properties may round-trip incorrectly (double-serialized as JSON strings inside arrays), causing silent data corruption that's invisible until query time. Prevention: decide at schema design time whether log entries are JSON strings or separate nodes, document it, and validate round-trip serialization in the first integration test before any agent code is written.
 
@@ -133,13 +139,13 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 
 ### Phase 3: Agent Harness Core
 
-**Rationale:** The harness is the most architecturally critical component. It owns the invariants that prevent the most expensive failure modes. Provenance validation (Pitfall 3) and token minting must be harness-enforced, not LLM-trusted. The tool call budget that prevents loop runaway (Pitfall 4) is a harness concern. This component must be correct and tested in isolation before any agent mode is wired up.
+**Rationale:** The harness is the most architecturally critical component. It owns the invariants that prevent the most expensive failure modes. Provenance validation (Pitfall 3) and token minting must be harness-enforced, not LLM-trusted. This component must be correct and tested in isolation before any agent mode is wired up.
 
-**Delivers:** The shared tool-calling loop (~80 lines): message array management, tool dispatch, provenance guard (reject writes without valid transcript_id + non-null non-equal in-bounds offsets + non-empty span text), sequential token minting via token registry in FalkorDB, termination detection on `complete_ingestion()`, tool call budget enforcement (configurable N, defaults to 60), wall-clock timeout with graceful `partial=true` termination, idempotent call detection (same tool+args 3x → inject termination).
+**Delivers:** The shared tool-calling loop (~80 lines): message array management, tool dispatch, provenance guard (reject writes without valid transcript_id + non-null non-equal in-bounds offsets + non-empty span text), sequential token minting via token registry in FalkorDB, termination detection on `complete_ingestion()`.
 
 **Addresses:** INGEST-04 (provenance on every write), INGEST-06 (harness mints tokens), INGEST-07 (complete_ingestion as termination), WRITE-02 (provenance validation)
 
-**Avoids:** Provenance gap (Pitfall 3); agentic loop runaway (Pitfall 4)
+**Avoids:** Provenance gap (Pitfall 3)
 
 **Research flags:** Standard patterns. The loop structure is documented in ARCHITECTURE.md with concrete pseudocode from Memory-v5.md.
 
@@ -149,11 +155,11 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 
 **Rationale:** Ingestion is the write path — everything in the graph comes from here. The theme agent and query agent both depend on a correctly populated graph. This is also where node proliferation (Pitfall 1) and summary drift (Pitfall 2) are either prevented or not. The ingestion system prompt is as critical as the harness code.
 
-**Delivers:** Ingestion system prompt (search-before-create discipline, disambiguation decision rule, provenance-quoting-before-write instruction, summary-rewrite constraint), end-to-end test (real transcript → graph writes → `complete_ingestion` → bidirectional index populated), health metric: create:update ratio per session, background job queue trigger wired to ingestion completion.
+**Delivers:** Ingestion system prompt (search-before-create discipline, disambiguation decision rule, provenance-quoting-before-write instruction, summary-rewrite constraint), end-to-end test (real transcript → graph writes → `complete_ingestion` → bidirectional index populated), background job queue trigger wired to ingestion completion.
 
 **Addresses:** INGEST-01 through INGEST-08, GRAPH-02 (bidirectional index populated by complete_ingestion payload)
 
-**Avoids:** Node proliferation (Pitfall 1) through prompt design + search-before-create + health metric; summary drift (Pitfall 2) through prompt constraints on rewrite conditions
+**Avoids:** Node proliferation (Pitfall 1) through prompt design + search-before-create; summary drift (Pitfall 2) through prompt constraints on rewrite conditions
 
 **Research flags:** Needs prompt engineering iteration. The prompt is not a one-shot design — expect 3-5 rounds of refinement against real transcripts before proliferation and drift are under control. Plan iteration budget in this phase.
 
@@ -177,9 +183,9 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 
 **Rationale:** The transcription pipeline (Whisper via Groq) and API surface come last because they are the input to the backend, not the backend itself. Building API before the backend is correct is a common mistake. The mobile client is last because it is a thin client that calls the API.
 
-**Delivers:** Whisper integration with Groq (`groq/whisper-large-v3-turbo` via litellm), sentence-level timestamp rendering (segment `start`/`end` → `[MM:SS]` inline markers), confidence filtering (strip low-probability segments and meta-tokens like `[MUSIC]`), minimum duration gating (5 seconds non-silence), `rec:N` token minting on transcript write. FastAPI backend with `/record` (multipart audio upload → transcription → ingestion) and `/query` (text → query agent → cited answer) routes. React Native + Expo mobile app: one-tap record button, background audio permission, waveform feedback, fire-and-forget stop, processing indicator, chronological entry list with first-sentence transcript preview, query input with cited answer display.
+**Delivers:** Whisper integration with Groq (`groq/whisper-large-v3-turbo` via litellm), sentence-level timestamp rendering (segment `start`/`end` → `[MM:SS]` inline markers), confidence filtering (strip low-probability segments and meta-tokens like `[MUSIC]`), minimum duration gating (5 seconds non-silence), `rec:N` token minting on transcript write, and source-audio retention for playback. FastAPI backend with `/record` (multipart audio upload → transcription → ingestion) and `/query` (text → query agent → cited answer) routes. React Native + Expo mobile app: one-tap record button, background audio permission, waveform feedback, fire-and-forget stop, processing indicator, chronological entry list with first-sentence transcript preview, query input with cited answer display.
 
-**Addresses:** VOICE-01, VOICE-02; all API surface requirements; mobile UX patterns from FEATURES.md
+**Addresses:** VOICE-02, VOICE-03; all API surface requirements; mobile UX patterns from FEATURES.md
 
 **Avoids:** Whisper hallucination on silence (Pitfall 8) through confidence filtering and minimum duration gating; word-level timestamp dependency (silently null on `whisper-large-v3-turbo` — use segment boundaries only)
 
@@ -199,10 +205,12 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 ### Research Flags
 
 **Phases needing deeper research during planning:**
+
 - **Phase 4 (Ingestion Agent):** Prompt engineering for search-before-create discipline and disambiguation is not a solved problem. Plan 3-5 iteration rounds. The pre-reset codebase has examples to start from (recoverable from git history) but those prompts have not been validated against the v5 architecture's stricter provenance requirements.
 - **Phase 6 (Mobile):** Expo SDK 53 background audio recording on iOS — verify current `app.json` configuration for `UIBackgroundModes` and Expo's `Audio.setAudioModeAsync` API for background recording. The pattern is standard but SDK-version-specific.
 
 **Phases with standard patterns (skip research-phase):**
+
 - **Phase 1 (Storage):** FalkorDB schema and DAL patterns are fully documented in STACK.md from production-validated source code. No additional research needed.
 - **Phase 2 (Tool Layer):** Pure Python functions over FalkorDB. All Cypher syntax verified. Standard Python patterns.
 - **Phase 3 (Harness):** The loop structure is documented in ARCHITECTURE.md with concrete pseudocode. ~80 lines. No framework research needed.
@@ -212,18 +220,18 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | All core dependencies locked in `uv.lock`; falkordb 1.6.0, litellm 1.82.4, pydantic 2.12.5 verified against installed package metadata; key quirks (REMOVE-before-SET for vector, `words: null` on turbo model) empirically validated from pre-reset production code and real transcript outputs |
-| Features | MEDIUM | Competitor analysis from training data (cutoff Aug 2025); product decisions from authoritative project docs (Vision.md, PROJECT.md) which are HIGH confidence; feature priorities reflect project team's explicit design philosophy |
-| Architecture | HIGH | Primary source is Memory-v5.md, the project's own authoritative architecture spec; build order and component boundaries confirmed by prior working implementation; LangGraph/LangChain dismissal is MEDIUM (training data, not live docs) but the conclusion is robust |
-| Pitfalls | HIGH (architecture-derived) / MEDIUM (ecosystem) | Pitfalls 1-6 and 9-10 derived directly from Memory-v5.md ambiguities and known LLM behavior patterns — HIGH confidence. Pitfalls 7 (FalkorDB array serialization) and 8 (Whisper hallucination) are MEDIUM — based on Redis module behavior patterns and well-documented Whisper community reports |
+| Area         | Confidence                                       | Notes                                                                                                                                                                                                                                                                                              |
+| ------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack        | HIGH                                             | All core dependencies locked in `uv.lock`; falkordb 1.6.0, litellm 1.82.4, pydantic 2.12.5 verified against installed package metadata; key quirks (REMOVE-before-SET for vector, `words: null` on turbo model) empirically validated from pre-reset production code and real transcript outputs   |
+| Features     | MEDIUM                                           | Competitor analysis from training data (cutoff Aug 2025); product decisions from authoritative project docs (Vision.md, PROJECT.md) which are HIGH confidence; feature priorities reflect project team's explicit design philosophy                                                                |
+| Architecture | HIGH                                             | Primary source is Memory-v5.md, the project's own authoritative architecture spec; build order and component boundaries confirmed by prior working implementation; LangGraph/LangChain dismissal is MEDIUM (training data, not live docs) but the conclusion is robust                             |
+| Pitfalls     | HIGH (architecture-derived) / MEDIUM (ecosystem) | Pitfalls 1-6 and 9-10 derived directly from Memory-v5.md ambiguities and known LLM behavior patterns — HIGH confidence. Pitfalls 7 (FalkorDB array serialization) and 8 (Whisper hallucination) are MEDIUM — based on Redis module behavior patterns and well-documented Whisper community reports |
 
 **Overall confidence:** HIGH for backend architecture and stack; MEDIUM for feature prioritization and mobile implementation details.
 
 ### Gaps to Address
 
-- **Ingestion prompt quality:** The prior codebase has ingestion prompts in git history but they were not validated against the v5 architecture's provenance requirements. Start from those prompts but plan explicit iteration. The create:update ratio health metric is the empirical signal.
+- **Ingestion prompt quality:** The prior codebase has ingestion prompts in git history but they were not validated against the v5 architecture's provenance requirements. Start from those prompts but plan explicit iteration.
 - **Theme agent hot-set selection policy:** Memory-v5.md specifies the hot-set concept but the selection policy (what makes a theme hot) is editorial, not algorithmic. This requires a design decision before Phase 5 implementation. Suggested default: recency + depth score combination, with a freshness floor that forces re-evaluation of any theme not touched in 3+ sessions.
 - **Cold-start user experience:** A new user with 0 sessions gets a query agent with nothing to retrieve. The messaging for this state needs explicit design — either in the system prompt (query agent gracefully handles empty graph) or in the mobile UX (onboarding flow sets expectations). Not an architectural gap but a UX gap that could affect early-user retention.
 - **FalkorDB AOF persistence configuration:** The devenv.nix Docker image uses `appendonly yes` by default. Fast container kills can corrupt the AOF before rewrite completes. For personal data, evaluate `fsync=always` policy or volume mounting strategy during Phase 1.
@@ -234,15 +242,17 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 ## Sources
 
 ### Primary (HIGH confidence)
-- `/home/shivang/shivang/projs/arachne/pyproject.toml` and `uv.lock` — locked dependency versions
-- `/home/shivang/shivang/projs/arachne/markdowns/Memory-v5.md` — authoritative architecture spec (primary source for ARCHITECTURE.md and PITFALLS.md)
-- `/home/shivang/shivang/projs/arachne/.planning/PROJECT.md` — product requirements and constraints
+
+- `/home/shivang/shivang/projs/arakne/pyproject.toml` and `uv.lock` — locked dependency versions
+- `/home/shivang/shivang/projs/arakne/markdowns/Memory-v5.md` — authoritative architecture spec (primary source for ARCHITECTURE.md and PITFALLS.md)
+- `/home/shivang/shivang/projs/arakne/.planning/PROJECT.md` — product requirements and constraints
 - `git show 0883904:lifeos/memory/graph.py` — pre-reset FalkorDB production layer; validated REMOVE-before-SET quirk and `vecf32` usage
 - `git show 0883904:lifeos/core/embeddings.py` — validated litellm embedding calls with `task_type`
-- `/home/shivang/shivang/projs/arachne/private/transcripts/*.json` — real Groq Whisper output; confirmed `words: null` on turbo model
+- `/home/shivang/shivang/projs/arakne/private/transcripts/*.json` — real Groq Whisper output; confirmed `words: null` on turbo model
 - `falkordb-1.6.0.dist-info/METADATA` — installed package metadata; confirmed Python 3.10-3.14 support, MIT license, redis>=7.1 dep
 
 ### Secondary (MEDIUM confidence)
+
 - Training data on competitor products (Day One, Reflect, Mem, Rewind, Obsidian, Roam, Notion AI) through Aug 2025 cutoff — feature analysis
 - Training data on LangGraph and LangChain architecture — framework dismissal rationale
 - Training data on FalkorDB array property behavior — Pitfall 7 basis
@@ -250,9 +260,6 @@ Based on the architecture's hard dependency chain and the pitfall landscape, a 6
 - Graphiti (arxiv 2501.13956) — referenced in Memory-v5.md for bi-temporal versioning context
 
 ### Tertiary (LOW confidence — needs validation during implementation)
+
 - Expo SDK 53 background audio recording configuration on iOS — API may have changed; verify during Phase 6
 - FalkorDB server AOF `fsync` policy options — verify against current Docker image documentation before Phase 1 storage decisions
-
----
-*Research completed: 2026-04-01*
-*Ready for roadmap: yes*

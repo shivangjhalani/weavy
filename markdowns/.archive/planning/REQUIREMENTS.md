@@ -1,14 +1,14 @@
-# Requirements: Arachne
+# Requirements: Arakne
 
 **Defined:** 2026-04-01
 **Core Value:** When a user speaks, their words must be captured, understood, and made retrievable — so their thinking doesn't disappear.
 
-## v1 Requirements
+## Requirements
 
 ### Transcription Pipeline
 
-- [ ] **VOICE-02**: Whisper transcribes an audio file with sentence-level inline timestamps (`[MM:SS]` format, rendered from segment boundaries because `whisper-large-v3-turbo` does not return usable word-level timestamps)
-- [ ] **VOICE-03**: Transcription strips low-confidence segments and meta-tokens (`[MUSIC]`, `[APPLAUSE]`); audio under 5 seconds of non-silence is rejected
+- [ ] **VOICE-01**: Recording timestamp extracted from audio filename prefix (format: `YYYY-MM-DDTHH-MM-SS`, e.g. `2021-02-03T03-16-21`); stored as datetime on transcript record; surfaced to agent as human-readable relative time
+- [ ] **VOICE-02**: Whisper transcribes an audio file via LiteLLM with segment-level inline timestamps (`[MM:SS]` format, rendered from Groq segment boundaries); Groq currently returns word-level timestamps as well, but the system does not depend on them; all segments returned by Whisper are kept as-is
 
 ### Graph Storage
 
@@ -35,17 +35,14 @@
 - [ ] **HARN-01**: Shared tool-calling loop (~80 lines) operates across ingestion, query, and theme modes via system prompt swap — no separate runtimes
 - [ ] **HARN-02**: Harness mints sequential tokens at creation time; agent requests creation, harness assigns the next token
 - [ ] **HARN-03**: Harness rejects writes without valid provenance: `(transcript_id, start_offset, end_offset)` where offsets are in-bounds, non-equal, and `get_transcript_span` returns non-empty text
-- [ ] **HARN-04**: Hard tool call budget (default 60 calls) and wall-clock timeout (2-3 minutes); harness prevents runaway ingestion loops and fails the session if limits are exceeded before `complete_ingestion`
-- [ ] **HARN-05**: Idempotent call detection — same tool + args three times in succession → inject termination
+- [ ] **HARN-04**: All LLM calls, including Whisper transcription via Groq, route through LiteLLM
 
 ### Ingestion Agent
 
 - [ ] **INGEST-01**: Ingestion agent reads full transcript and builds/updates the semantic graph in one pass — no chunking
-- [ ] **INGEST-02**: Agent follows search-before-create discipline: searches for existing nodes before creating new ones; disambiguation decision rule in system prompt
-- [ ] **INGEST-03**: Every write carries provenance `(transcript_id, start_offset, end_offset)` — seconds into the recording
-- [ ] **INGEST-04**: Node log entries include `note` (natural language: what changed, emotional nuance, certainty); previous summary auto-archived into log before any rewrite
-- [ ] **INGEST-05**: `complete_ingestion()` is the termination signal; its payload simultaneously populates the bidirectional index
-- [ ] **INGEST-06**: Post-ingestion health metric: create:update ratio per session (tracks node proliferation drift)
+- [ ] **INGEST-02**: Every write carries provenance `(transcript_id, start_offset, end_offset)` — seconds into the recording
+- [ ] **INGEST-03**: Node log entries include `note` (natural language: what changed, emotional nuance, certainty); previous summary auto-archived into log before any rewrite
+- [ ] **INGEST-04**: `complete_ingestion()` is the termination signal; its payload simultaneously populates the bidirectional index
 
 ### Theme Agent
 
@@ -61,10 +58,6 @@
 - [ ] **QUERY-03**: All answers grounded in cited transcript spans — agent must call `get_transcript_span` and include exact quotes; if transcript evidence contradicts cached summaries, transcript wins
 - [ ] **QUERY-04**: Agent handles empty-graph cold start gracefully (0 sessions) with appropriate messaging
 
-### Memo Agent
-
-- [ ] **MEMO-01**: Memo mode runs the shared harness (HARN-01) with a different system prompt — the agent takes the voice of a thoughtful observer noticing patterns across sessions and writes memos unprompted; it is not a separate runtime
-
 ### Privacy & Data
 
 - [ ] **PRIV-01**: Journal data is stored in user-controlled first-party storage; model-provider traffic is limited to transcription and inference requests rather than third-party application storage
@@ -72,31 +65,10 @@
 
 ---
 
-## v2 Requirements
-
-### Pattern Surfacing
-
-- **PATT-01**: System proactively surfaces patterns: "you've returned to this topic 7 times since January"
-- **PATT-02**: Emotion shift detection across a topic over time
-
-### Extended Platform
-
-- **PLAT-01**: Android support (iOS first for v1)
-- **PLAT-02**: Export to Markdown / Obsidian format
-- **PLAT-03**: Multi-language transcription
-
-### Advanced Memory
-
-- **MEM-02**: Bi-temporal graph versioning — query "what was true as of date X" structurally (Graphiti arxiv 2501.13956)
-
----
-
 ## Out of Scope
 
 | Feature                                 | Reason                                                                                              |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Mobile app / frontend                   | Out of scope for this milestone — backend Python scripts only; designed to be callable as API later |
-| HTTP API (FastAPI, uvicorn)             | Not in this milestone — scripts are the interface; API layer added when frontend is ready           |
 | Streaks / gamification                  | Explicitly anti-vision — no guilt mechanics; this is the antithesis of the product                  |
 | Social / sharing features               | Private personal record only; multi-user violates the trust model                                   |
 | Real-time streaming transcription       | Batch processing is sufficient; adds complexity without value                                       |
@@ -106,7 +78,7 @@
 | Rigid note structure (folders, tags)    | Free-form; structure emerges from the graph, not user-imposed hierarchy                             |
 | LangGraph / LangChain                   | Over-engineers the harness; conflicts with harness-owned provenance validation and token minting    |
 | External vector DB (ChromaDB, Pinecone) | FalkorDB's native vector index eliminates dual-write sync hazard; already validated                 |
-| Word-level Whisper timestamps           | `whisper-large-v3-turbo` returns null for word timestamps — use segment boundaries only             |
+| Word-level timestamp dependence         | Groq currently returns word-level timestamps, but Arakne standardizes on segment boundaries anyway  |
 
 ---
 
@@ -114,8 +86,8 @@
 
 | Requirement | Phase   | Status  |
 | ----------- | ------- | ------- |
+| VOICE-01    | Phase 3 | Pending |
 | VOICE-02    | Phase 3 | Pending |
-| VOICE-03    | Phase 3 | Pending |
 | GRAPH-01    | Phase 1 | Pending |
 | GRAPH-02    | Phase 1 | Pending |
 | GRAPH-03    | Phase 1 | Pending |
@@ -134,13 +106,10 @@
 | HARN-02     | Phase 1 | Pending |
 | HARN-03     | Phase 1 | Pending |
 | HARN-04     | Phase 1 | Pending |
-| HARN-05     | Phase 1 | Pending |
 | INGEST-01   | Phase 2 | Pending |
 | INGEST-02   | Phase 2 | Pending |
 | INGEST-03   | Phase 2 | Pending |
 | INGEST-04   | Phase 2 | Pending |
-| INGEST-05   | Phase 2 | Pending |
-| INGEST-06   | Phase 2 | Pending |
 | THEME-01    | Phase 2 | Pending |
 | THEME-02    | Phase 2 | Pending |
 | THEME-03    | Phase 2 | Pending |
@@ -149,17 +118,13 @@
 | QUERY-02    | Phase 2 | Pending |
 | QUERY-03    | Phase 2 | Pending |
 | QUERY-04    | Phase 2 | Pending |
-| MEMO-01     | Phase 2 | Pending |
 | PRIV-01     | Phase 1 | Pending |
 | PRIV-02     | Phase 1 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 38 total
-- Mapped to phases: 38
+- requirements: 34 total
+- Mapped to phases: 34
 - Unmapped: 0 ✓
 
 ---
-
-_Requirements defined: 2026-04-01_
-_Last updated: 2026-04-01 after promoting MEMO-01 from v2 to v1_
