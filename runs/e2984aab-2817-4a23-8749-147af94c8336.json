@@ -1,0 +1,1079 @@
+{
+  "run_id": "e2984aab-2817-4a23-8749-147af94c8336",
+  "mode": "ingestion",
+  "started_at": "2026-04-03T20:51:16.699547Z",
+  "ended_at": "2026-04-03T20:52:14.250678Z",
+  "input_summary": "Ingesting rec:2",
+  "turns": [
+    {
+      "turn_number": 1,
+      "reasoning_content": "**Ingesting New Transcript Data into the Semantic Graph**\n\nOkay, so I'm processing this new transcript (rec:2) and getting a sense of where it fits within my understanding of Shania Belcher. Right now, I'm thinking about how to integrate this, given the context of her current life: she's moving, wrapping up her last undergrad class, graduation, all the excitement, but also the vulnerability that comes with it.\n\nI'm struck by her reflections on the reaction to that first podcast episode. She had to really push herself to be open about what happened with McGenji, and it seems like the experience has left her wary. It reminds me of the importance of protecting her feelings, while also trying to open herself up to others. She seems to be craving genuine connection and the feeling of being *seen*. It's interesting how a friend recently told her they sensed she was lonely, because she is a person that always has her heart on her sleeve (expressive), but this need isn't being met by those closest to her.\n\nThat word, \"strong,\" she mentioned it. It's a loaded term, isn't it? To her, it's not a compliment, but a dismissal. It's like people use it as an excuse to avoid offering support, which is the complete opposite of what she needs. I'm focusing on these emotional elements, it's critical to understand the nuance of her perspective.\n\nHer family dynamics are really central here. Being adopted within the family, growing up as an only child with older parents, and then the massive extended family... it sounds complex. The \"first bully\" experience, with insults disguised as jokes, the lack of open communication – it's all part of the emotional landscape. It explains her tendency to mask her true feelings.\n\nBut her father...he was clearly the anchor, her \"number one fan,\" her shoulder to lean on. Losing him to cancer at 15 is a defining event. He supported her through everything. The way she describes him, it's clear the impact he had on her life. It's almost like a turning point, meeting God after her father's death. I see how that pivotal moment shaped her.\n\nFriendships seem to be another area where she struggles. She has this tendency to overextend herself, get attached, and then have trouble communicating her needs until they become overwhelming. That need for \"undivided attention\" and \"quality time\" as a bare minimum really stood out. I recognize that craving for genuine connection, for someone to *truly* see her.\n\nThen there's the intergenerational disconnect. The frustration with authority and older people who don't listen, who dismiss her feelings as mere \"sensitivity.\" It's not about being sensitive, it's about being heard and understood.\n\nShe's been lonelier than ever recently. She's made some decisions she's not proud of, it seems. And she's turning to God for comfort. It's about letting go of what she can't control: family dynamics, the dismissive authoritative figures. She's actively trying to become the woman she wants to be, yet that deep longing for the validation her father and McGenji provided remains. She needs to move through that trauma.\n\nSo, I need to create or update nodes for: her Father, God, Family, Vulnerability, and Loneliness, establishing connections within the graph. I'll make sure to add details about her father, the \"glue\" of the family, that he was her \"number one fan\", and supported her in every way. The node for her father needs details about the 4-month battle with cancer and his sudden death when she was 15. The graduation and moving back to San Antonio details will also be added to a respective node.\n\nI'm going to start creating and updating those nodes. Let's see how this all fits together.\n\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "search_graph",
+          "args": {
+            "query": "Shania Belcher father family McGenji graduation"
+          },
+          "result": "{\"results\":[]}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:28.768091Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8791,
+        "completion_tokens": 1035,
+        "reasoning_tokens": 1010,
+        "total_tokens": 9826
+      },
+      "timestamp": "2026-04-03T20:51:16.706162Z"
+    },
+    {
+      "turn_number": 2,
+      "reasoning_content": "Okay, here's my interpretation of those thoughts, crafted with the mindset of an expert in the field:\n\n**Empty Results and Hot Themes – A Curious Conundrum**\n\nAlright, that's puzzling. The search results are coming back completely empty, which is highly unusual considering the \"Hot Themes\" are pointing directly at specific nodes (node:2, node:5, etc.). I'd expect some level of retrieval, even if it's not perfectly relevant, given the implied activity around those particular identifiers. Perhaps there's an indexing lag, or a permissions issue with the search itself?\n\nI need to investigate further. The logical first step is to focus directly on the \"Hot Themes\" themselves. I'll initiate separate searches, targeting *only* those specific node identifiers. This will help me isolate whether the problem is global or restricted to the broader search scope. It'll also reveal whether the system correctly interprets and handles queries directed at these specific elements. I need to see what I get when I target those directly, and go from there. This should help me better understand what the issue actually *is*.\n\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "get_node",
+          "args": {
+            "node_id": "node:2"
+          },
+          "result": "{\"node\":{\"id\":\"node:2\",\"aliases\":[\"McGenji Celestin\",\"McKinsey\",\"McAngie Celestine\",\"McKinsey Celestin\"],\"summary\":\"Shania's late partner and 'angel,' McGenji was a deeply influential figure who taught her about self-love, confidence, and living without regrets. He was a multi-talented individual who supported her ambitions and her family.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.674683Z\",\"start_offset\":284,\"end_offset\":1304,\"note\":\"McGenji (McKinsey) is the central figure of Shania's reflections. He was her partner for nearly two years. Shania describes him as a 'gentleman,' multi-talented (photography, music, cars), and a 'giver.' He passed away at some point, and Shania credits him with teaching her self-confidence and how to live without regrets. He also provided her with the equipment and encouragement to start her podcast.\"}]},\"edges\":[{\"id\":\"edge:11\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:1\",\"label\":\"taught lessons on confidence and self-love to\"},{\"id\":\"edge:7\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:5\",\"label\":\"encouraged and equipped Shania for\"},{\"id\":\"edge:9\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:6\",\"label\":\"helped out the household of\"},{\"id\":\"edge:13\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:9\",\"label\":\"helped around the house after the death of\"}],\"cold_hint\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:31.895583Z"
+        },
+        {
+          "tool_name": "get_node",
+          "args": {
+            "node_id": "node:5"
+          },
+          "result": "{\"node\":{\"id\":\"node:5\",\"aliases\":[\"Shania's Audio Diary\",\"the podcast\"],\"summary\":\"Shania's personal podcast journal, focused on young adulthood, relationships, and growth, which was encouraged and enabled by McGenji.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.678681Z\",\"start_offset\":2031,\"end_offset\":1251,\"note\":\"Started with equipment (microphone, mixer) bought by McGenji. Shania was initially scared to start it and talked herself out of it for a long time. It is dedicated to McGenji.\"}]},\"edges\":[{\"id\":\"edge:8\",\"from_node_id\":\"node:5\",\"to_node_id\":\"node:2\",\"label\":\"is dedicated to the memory of\"}],\"cold_hint\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:31.899291Z"
+        },
+        {
+          "tool_name": "get_node",
+          "args": {
+            "node_id": "node:8"
+          },
+          "result": "{\"node\":{\"id\":\"node:8\",\"aliases\":[\"Confidence and Self-Love\",\"self-confidence\"],\"summary\":\"The ongoing internal work Shania is doing to value her own opinion of herself over others' and to find happiness in who she is.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.683311Z\",\"start_offset\":919,\"end_offset\":989,\"note\":\"A recurring theme McKinsey pushed: 'What matters the most is how you feel about yourself.' Shania is working on this as a core part of her personal growth.\"}]},\"edges\":[],\"cold_hint\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:31.902457Z"
+        },
+        {
+          "tool_name": "get_node",
+          "args": {
+            "node_id": "node:3"
+          },
+          "result": "{\"node\":{\"id\":\"node:3\",\"aliases\":[\"Undergraduate Graduation\",\"college graduation\"],\"summary\":\"Shania's upcoming graduation from Texas State University in May 2026, a milestone that is currently a source of 'nerve-wracking' stress due to a lack of detailed future plans.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.676272Z\",\"start_offset\":40,\"end_offset\":119,\"note\":\"Shania is graduating in May 2026. The transition is causing her significant anxiety because she lacks a detailed post-graduation plan, which conflicts with her need for control.\"}]},\"edges\":[],\"cold_hint\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:31.905525Z"
+        },
+        {
+          "tool_name": "get_node",
+          "args": {
+            "node_id": "node:6"
+          },
+          "result": "{\"node\":{\"id\":\"node:6\",\"aliases\":[\"Shania's Mother\",\"my mom\",\"mom\"],\"summary\":\"Shania's mother, who was supported by McGenji after the death of Shania's father.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1,760:770\",\"timestamp\":\"2026-04-03T20:48:30.680033Z\",\"start_offset\":229,\"end_offset\":770,\"note\":\"McGenji helped Shania's mother with household tasks (like putting up curtains) after Shania's father passed away, which Shania deeply appreciated. Shania and her mother had a 'horrible fight' the night Shania reconnected with McGenji at a club.\"}]},\"edges\":[],\"cold_hint\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:31.908802Z"
+        },
+        {
+          "tool_name": "get_node",
+          "args": {
+            "node_id": "node:9"
+          },
+          "result": "{\"node\":{\"id\":\"node:9\",\"aliases\":[\"Shania's Dad\",\"my dad\",\"dad\"],\"summary\":\"Shania's late father, whose passing left a void in the household.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:43.361784Z\",\"start_offset\":760,\"end_offset\":764,\"note\":\"Shania mentions her dad passed away, and his absence was felt in the household until McKinsey stepped in to help with 'man around the house' tasks. This loss is a significant part of her family background.\"}]},\"edges\":[],\"cold_hint\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:31.911439Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 9837,
+        "completion_tokens": 160,
+        "reasoning_tokens": 40,
+        "total_tokens": 9997
+      },
+      "timestamp": "2026-04-03T20:51:28.773870Z"
+    },
+    {
+      "turn_number": 3,
+      "reasoning_content": "**Refining My Approach: A Deep Dive into the Narrative Structure**\n\nOkay, I've got a solid framework forming in my mind. Now it's time to translate that framework into a cohesive narrative structure. Here’s how I’m thinking about it:\n\nFirst, let's nail down the core beats. I'll need to update node 3 (Graduation) to capture the specifics of the move to San Antonio, finishing the final class, and the pre-graduation preparations like photos and family visits.\n\nThen, there's node 6 (Mother), where I'll be clear about the nuances of the relationship, acknowledging the differing perspectives while also emphasizing the shared experience of grief.\n\nNode 9 (Father) demands more significant detail: I need to highlight his role as the family's anchor, his sudden and tragic passing from cancer when I was just 15, and the impact he had, particularly how he was my biggest supporter. It was a pivotal moment.\n\nCrucially, I need to create a new node dedicated to \"Faith/Relationship with God,\" highlighting how I found solace and connection after my father's death. This is about leaning on God, particularly when I feel isolated.\n\n\"Family Dynamics\" needs a node to itself. I must capture the dynamics that shaped me, the \"first bully\" experience, the lack of open communication, and the intergenerational disconnect.\n\nSimilarly, \"Loneliness/Being Emotional\" deserves its own space. I’m thinking about the feeling of being unseen despite being expressive, and the internal tension caused by being called \"strong.\"\n\nAnother essential node will be \"Vulnerability,\" detailing the journey of trying to open up and the challenges that arise from having those feelings dismissed. It is about the struggle to trust after having my feelings dismissed.\n\nFinally, \"Bree,\" my cousin, will be a node. She is someone I can talk to.\n\nNow, let me zoom in on specific timestamps from the transcript to enrich my nodes.\n\n-   **\\[0:51-1:21]** This is all about the tangible realities of moving to San Antonio, finishing the last class, and setting up my new apartment.\n-   **\\[1:21-2:03]** Graduation photos and family visits are important. I must include the information about my siblings (brothers and sisters).\n-   **\\[2:40-3:30]** This segment about vulnerability on the podcast (Page One), protecting my feelings with McGenji, will be crucial for the node about \"Vulnerability.\"\n-   **\\[3:30-4:29]** This describes the history of having my feelings dismissed, the walls I've built, and the difficulty in accepting love. It will inform the \"Vulnerability\" and \"Loneliness\" nodes.\n-   **\\[4:46-5:33]** This details the loneliness, feeling transparent, wearing my heart on my sleeve, and being expressive.\n-   **\\[5:44-7:26]** The resentment of the \"strong\" label, and how it becomes an excuse for a lack of support, is important.\n-   **\\[8:01-9:03]** The information about being adopted, raised as an only child, having older parents, and a nocturnal father are key details in understanding the \"Family Dynamics\" node. The emotional attachments to friends are also noteworthy.\n-   **\\[9:16-10:55]** The early family dynamics where my family was my \"first bully\" will be expanded on, including how insults were masked as jokes, and being called \"crybaby\" or \"sensitive.\"\n-   **\\[11:11-12:04]** The practice of sweeping things under the rug and the lack of communication within the family are also pivotal.\n-   **\\[12:12-13:23]** My father's role as the \"glue,\" shoulder to cry on, and supporter will be detailed. The timeline of his death at 15 from cancer (4 months) and the subsequent finding of God are important for context.\n-   **\\[14:03-15:57]** My struggle to articulate my needs, overextending myself, and the eventual explosion will need attention. Asking for time and undivided attention will be important.\n-   **\\[17:34-19:54]** The intergenerational disconnect – older folks not listening, defensiveness when boundaries are crossed, and the need for young people to be respected – must be well-articulated.\n-   **\\[20:17-21:20]** The loneliest months, finding comfort in God, and letting go of what I can’t control is all vital\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "update_node",
+          "args": {
+            "provenance": {
+              "source_id": "rec:2",
+              "end_offset": 123,
+              "start_offset": 51
+            },
+            "node_id": "node:3",
+            "new_aliases": [
+              "Undergraduate Graduation",
+              "college graduation",
+              "the graduation celebration"
+            ],
+            "new_summary": "Shania's upcoming graduation from Texas State University in May 2026, which is a source of both logistical stress (moving to San Antonio, finishing her final class) and celebratory anticipation with her family and siblings.",
+            "note": "Shania is now in the final stretch, moving back to San Antonio and juggling her last undergrad class. Despite the 'nerve-wracking' lack of future plans noted previously, she is actively preparing for a celebratory weekend with family and siblings, though she's frustrated by the cost and restrictions of Airbnbs. It marks a significant transition period she is trying to navigate while 'keeping her sanity.'"
+          },
+          "result": "{\"ok\":true,\"id\":\"node:3\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.962921Z"
+        },
+        {
+          "tool_name": "update_node",
+          "args": {
+            "note": "Detailed as the central emotional pillar of Shania's childhood. He was the person she could talk to about anything—from bullies to her adoption. His nocturnal work schedule meant they were often in separate rooms, yet he remained her 'shoulder to cry on.' His sudden death at 15 was the catalyst for her spiritual journey and a major turning point in her life. Shania still misses the way he acknowledged her feelings, comparing his support to what she later found with McGenji.",
+            "new_aliases": [
+              "Shania's Dad",
+              "my dad",
+              "dad",
+              "daddy"
+            ],
+            "new_summary": "Shania's late father was her 'number one fan,' her 'glue,' and her primary emotional support system. He died suddenly from cancer within four months when Shania was 15, a loss that profoundly shaped her and led to her first connection with God.",
+            "node_id": "node:9",
+            "provenance": {
+              "end_offset": 803,
+              "source_id": "rec:2",
+              "start_offset": 732
+            }
+          },
+          "result": "{\"ok\":true,\"id\":\"node:9\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.965034Z"
+        },
+        {
+          "tool_name": "update_node",
+          "args": {
+            "new_summary": "Shania's mother, with whom she has a complex relationship often characterized by a lack of emotional alignment and 'not seeing eye to eye.' Following the death of Shania's father, they adjusted to life together, though Shania often felt her feelings were invalidated.",
+            "new_aliases": [
+              "Shania's MotherBase",
+              "my mom",
+              "momBase"
+            ],
+            "node_id": "node:6",
+            "provenance": {
+              "start_offset": 731,
+              "source_id": "rec:2,12:12-12:18;13:51-14:03",
+              "end_offset": 823
+            },
+            "note": "The relationship is marked by intergenerational friction and a history of Shania's feelings being invalidated (the 'you're a child, so you have no wants' principle). Shania notes that they didn't always see eye to eye, especially when Shania would overextend herself for friends against her mother's wishes. This node represents the primary 'home' dynamic that Shania is currently moving back into in San Antonio."
+          },
+          "result": "{\"ok\":true,\"id\":\"node:6\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.966364Z"
+        },
+        {
+          "tool_name": "create_node",
+          "args": {
+            "aliases": [
+              "Family Dynamics",
+              "my family",
+              "the family culture"
+            ],
+            "note": "Shania describes her family as her 'first bully,' where insults are masked as jokes and sensitivity is labeled as weakness. There is a systemic lack of effective communication, with issues being 'swept under the rug.' This environment has made Shania feel 'unseen' and 'unheard,' leading to her tendency to distance herself as a defense mechanism. She notes a significant intergenerational disconnect, feeling that older family members dismiss her perspective because of her age.",
+            "summary": "A large, multi-sided family structure (adopted and biological) characterized by a culture of masking insults as jokes and avoiding direct emotional communication.",
+            "provenance": {
+              "source_id": "rec:2",
+              "end_offset": 715,
+              "start_offset": 556
+            }
+          },
+          "result": "{\"ok\":true,\"id\":\"node:10\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.967886Z"
+        },
+        {
+          "tool_name": "create_node",
+          "args": {
+            "note": "Shania expresses deep resentment toward being labeled 'strong.' To her, it feels like a dismissal of her needs—a way for people to excuse themselves from offering help by assuming she can handle everything alone. It contributes to her feeling lonely even when surrounded by people.",
+            "aliases": [
+              "The Strong Label",
+              "being strong",
+              "strong girl"
+            ],
+            "provenance": {
+              "source_id": "rec:2",
+              "end_offset": 446,
+              "start_offset": 370
+            },
+            "summary": "A recurring label Shania receives that she perceives as a barrier to receiving genuine support and an excuse for others to be emotionally absent."
+          },
+          "result": "{\"ok\":true,\"id\":\"node:11\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.969722Z"
+        },
+        {
+          "tool_name": "create_node",
+          "args": {
+            "aliases": [
+              "Relationship with GodBase",
+              "GodBase",
+              "faithBase",
+              "HeBase"
+            ],
+            "note": "Shania 'met God' at 15 after her father's death. He has become her primary source of comfort during her loneliest times, especially when she feels she cannot trust people. She currently views her life as 'me and God against everybody else,' trusting that things are working together for her good even when she feels isolated.",
+            "summary": "A foundational spiritual connection that began following her father's death and serves as Shania's ultimate emotional refuge and source of comfort.",
+            "provenance": {
+              "end_offset": 1280,
+              "source_id": "rec:2,13:30-13:37;20:36-21:20",
+              "start_offset": 810
+            }
+          },
+          "result": "{\"ok\":true,\"id\":\"node:12\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.971385Z"
+        },
+        {
+          "tool_name": "create_node",
+          "args": {
+            "provenance": {
+              "source_id": "rec:2,4:46-5:33;8:01-8:12;20:17-20:36",
+              "end_offset": 481,
+              "start_offset": 286
+            },
+            "summary": "A core internal tension between Shania's outward expressiveness and her internal feeling of being emotionally isolated and misunderstood.",
+            "note": "Despite being 'buku stupid expressive' and wearing her heart on her sleeve, Shania often feels emotionally unseen by those closest to her. She links her loneliness to being raised as an only child by older parents and a lifelong struggle to have her feelings acknowledged. A friend's recent observation of her loneliness struck a chord because it's a truth she rarely has recognized by others.",
+            "aliases": [
+              "Loneliness and Being SeenBase",
+              "feeling unseenBase",
+              "emotional sensitivityBase"
+            ]
+          },
+          "result": "{\"ok\":true,\"id\":\"node:13\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.973219Z"
+        },
+        {
+          "tool_name": "create_node",
+          "args": {
+            "summary": "Shania's ongoing effort to dismantle emotional defenses built from past hurts, balanced against a fear of being taken advantage of or misunderstood.",
+            "provenance": {
+              "source_id": "rec:2",
+              "end_offset": 274,
+              "start_offset": 160
+            },
+            "aliases": [
+              "Vulnerability and TrustBase",
+              "opening upBaseBase",
+              "walls upBaseBase"
+            ],
+            "note": "Shania is struggling to be vulnerable again after past experiences of having her feelings 'stepped on' by important people. She recognizes that 'walls up' prevent her from loving wholeheartedly, but she fears that receiving love will 'cost me something' or isn't genuine. The podcast is an active attempt to practice this vulnerability."
+          },
+          "result": "{\"ok\":true,\"id\":\"node:14\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.974740Z"
+        },
+        {
+          "tool_name": "create_node",
+          "args": {
+            "summary": "Shania's cousin and a confidante for discussing family and societal frustrations.",
+            "provenance": {
+              "source_id": "rec:2",
+              "end_offset": 1086,
+              "start_offset": 1080
+            },
+            "aliases": [
+              "BreeBase",
+              "Cousin BreeBase"
+            ],
+            "note": "A cousin with whom Shania frequently discusses topics like intergenerational disconnect and family dynamics. Shania explicitly mentions loving her and sharing these perspectives."
+          },
+          "result": "{\"ok\":true,\"id\":\"node:15\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:51:51.976625Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 11523,
+        "completion_tokens": 2427,
+        "reasoning_tokens": 718,
+        "total_tokens": 13950
+      },
+      "timestamp": "2026-04-03T20:51:31.913699Z"
+    },
+    {
+      "turn_number": 4,
+      "reasoning_content": "**Connecting the Dots: A Network of Insights**\n\nOkay, I've got the new nodes in place – Family Dynamics, The Strong Label, Relationship with God, Loneliness and Being Seen, Vulnerability and Trust, and Bree. Now, it's time to build the connections, the edges that truly bring this network to life. I need to map the causal relationships and influences.\n\nFirst, I see how **Family Dynamics (10)** contributes to **Loneliness (13)**; her experiences there exacerbate the feeling. Similarly, those same dynamics **(10)** led to her building walls, which feeds into her level of **Vulnerability (14)**. It's a closed loop, almost.\n\nThen, that **\"Strong\" Label (11)** also exacerbates **Loneliness (13)** – a common pattern, unfortunately. The loss of her **Father (9)** led to meeting her faith, her **Relationship with God (12)**, which then provides comfort during periods of **Loneliness (13)**, a sort of coping mechanism. The sudden death of her **Father (9)** also left a deep void of **Loneliness (13)**, it is hard to overestimate how much the passing affected the child.\n\n**Bree (15)** offers a perspective, she can help with understanding of **Family Dynamics (10)**, allowing for new insights on the topic. **Vulnerability (14)**, which is always so central, is now being actively practiced through her **Podcast (5)**. Furthermore, **McGenji (2)** also shares qualities of acknowledging Shania's feelings. Lastly, **Loneliness (13)** is currently being confronted through her **Relationship with God (12)**, a common reaction to profound loss. And, of course, her **Mother (6)** is a primary figure in Shania's experience of **Family Dynamics (10)**.\n\nAlright, let's run this and see how it holds up.\n\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "contributes to Shania's feeling of being unseen in",
+            "to_node_id": "node:13",
+            "from_node_id": "node:10"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:14\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.186896Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "led to Shania developing defensive walls in",
+            "to_node_id": "node:14",
+            "from_node_id": "node:10"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:15\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.189349Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "from_node_id": "node:11",
+            "to_node_id": "node:13",
+            "label": "exacerbates Shania's sense of isolation in"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:16\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.190717Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "passing at age 15 was the catalyst for Shania's meeting with",
+            "to_node_id": "node:12",
+            "from_node_id": "node:9"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:17\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.191926Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "serves as the primary comfort during times of deep",
+            "from_node_id": "node:12",
+            "to_node_id": "node:13"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:18\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.192974Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "from_node_id": "node:15",
+            "to_node_id": "node:10",
+            "label": "shares frustrations about family culture and authoritative figures with"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:19\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.194156Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "is being actively practiced and reclaimed through Shania's work on",
+            "from_node_id": "node:14",
+            "to_node_id": "node:5"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:20\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.195320Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "provided emotional validation similar to what Shania received from her late",
+            "from_node_id": "node:2",
+            "to_node_id": "node:9"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:21\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.196498Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "is a central figure in Shania's navigating of complex",
+            "to_node_id": "node:10",
+            "from_node_id": "node:6"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:22\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.199907Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "label": "is currently being addressed through a closer connection to",
+            "to_node_id": "node:12",
+            "from_node_id": "node:13"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:23\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:00.200962Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 14156,
+        "completion_tokens": 955,
+        "reasoning_tokens": 438,
+        "total_tokens": 15111
+      },
+      "timestamp": "2026-04-03T20:51:51.978873Z"
+    },
+    {
+      "turn_number": 5,
+      "reasoning_content": "**Refining the Narrative Arc**\n\nOkay, so I've just updated the visual representation, essentially the \"graph\", to accurately reflect the core themes that emerged in rec:2. I've focused on the relocation to San Antonio, which is significant, and the deeper context surrounding her father's death and its impact on her faith. I've also integrated the specific nuances of her family dynamics, particularly the bullying/communication patterns, and her resistance to the \"strong\" label. And of course, the central tension of her loneliness, despite her outwardly expressive nature, is there.\n\nLet me just do a quick double-check to make sure I haven't missed any critical pieces. Ah, yes, she mentioned her siblings (brothers and a sister). I'll need to incorporate them, maybe as a minor addition to the family node, perhaps as aliases or minor details in node:10, since she's just expressing excitement about seeing them.\n\nThe friend who pointed out her loneliness—no name was given so no separate node for them. And I made sure to note the \"stupid choices\" she made during those times of loneliness directly within that node.\n\nOne final point to address: She's moving *back* to San Antonio. `node:3` (Graduation) mentions it, but I should see if there is a dedicated \"San Antonio\" or \"Home\" node. Gotta search for that... just want to make sure the information is optimally organized and easily retrievable.\n\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "search_graph",
+          "args": {
+            "query": "San Antonio home"
+          },
+          "result": "{\"results\":[]}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:04.843582Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 15343,
+        "completion_tokens": 243,
+        "reasoning_tokens": 225,
+        "total_tokens": 15586
+      },
+      "timestamp": "2026-04-03T20:52:00.202413Z"
+    },
+    {
+      "turn_number": 6,
+      "reasoning_content": "Here's my thought process, summarized as you requested:\n\n**Creating the Foundation: A Location Node**\n\nOkay, so I need to establish a solid grounding for this narrative. Since the move and family context are centered in San Antonio, I need to create a dedicated node for that location—San Antonio/Home. This will serve as the initial anchor, the backdrop against which everything else will play out. This is foundational to understanding the situation and provides an effective starting point. It allows me to build outwards from a defined geographic and contextual base.\n\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "create_node",
+          "args": {
+            "provenance": {
+              "source_id": "rec:2",
+              "end_offset": 123,
+              "start_offset": 51
+            },
+            "aliases": [
+              "San AntonioBase",
+              "homeBaseBase"
+            ],
+            "summary": "Shania's home city and the context for her current transition after college.",
+            "note": "Shania is currently moving back to San Antonio as she finishes her undergrad degree. It represents a return to her family environment and church responsibilities, bringing her into closer proximity with the complex family dynamics and the mother she occasionally clashes with. It's the site of her upcoming graduation celebrations."
+          },
+          "result": "{\"ok\":true,\"id\":\"node:16\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:08.886535Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "from_node_id": "node:16",
+            "label": "is the current destination for Shania's transition during her",
+            "to_node_id": "node:3"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:24\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:08.888230Z"
+        },
+        {
+          "tool_name": "create_edge",
+          "args": {
+            "to_node_id": "node:16",
+            "label": "lives in and is part of Shania's return to",
+            "from_node_id": "node:6"
+          },
+          "result": "{\"ok\":true,\"id\":\"edge:25\",\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:08.889665Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 15597,
+        "completion_tokens": 265,
+        "reasoning_tokens": 25,
+        "total_tokens": 15862
+      },
+      "timestamp": "2026-04-03T20:52:04.844700Z"
+    },
+    {
+      "turn_number": 7,
+      "reasoning_content": "**My Analysis of Shania's Narrative**\n\nOkay, so I've parsed this transcript, and I believe I've got a solid grasp on the core narrative and emotional trajectory. My understanding is that Shania is reflecting on a significant period of transition – the return to San Antonio and completing her degree, which I can connect to my own experiences. The real meat of this lies in her grappling with family history and the lasting impact of her upbringing.\n\nI see a clear contrast: her father, idealized as a source of unwavering support and emotional grounding – the \"glue,\" the \"number one fan\" – versus a broader family culture that, from her perspective, was dismissive and invalidating. The \"first bully\" label is particularly telling, highlighting how deeply ingrained this pattern of emotional invalidation was.\n\nThe resentment toward being labeled \"strong\" is also something I understand intuitively. I can see the frustration in having that perception used to justify emotional distance or an expectation of resilience without offering reciprocal support. It’s the classic ‘strong women don’t need support’ trope, and it's a burden. The loneliness she's experiencing, linked to her upbringing as an only child with older parents, feels connected, I'd say. And finally, her relationship with God as a source of comfort after the loss of her father at such a young age is also a critical piece of the puzzle. This narrative about the podcast as a direct attempt to re-engage with vulnerability following a lifetime of emotional setbacks is, to me, the key driver.\n\n\n",
+      "text_content": null,
+      "tool_calls": [
+        {
+          "tool_name": "complete_ingestion",
+          "args": {
+            "summary": "Shania is in the midst of moving back to San Antonio while finishing her final undergraduate class. She explores the core paradox of her life: being highly expressive ('buku stupid expressive') yet feeling emotionally 'unseen' by those closest to her. She details the profound impact of her father's sudden death from cancer when she was 15—her 'glue' and 'number one fan'—and how his loss led her to find comfort in God. She expresses significant frustration with her family's culture of invalidating her feelings and the 'strong' label, which she perceives as a dismissal of her needs. She is actively using the podcast to practice the vulnerability she previously felt forced to hide."
+          },
+          "result": "{\"ok\":true,\"id\":null,\"message\":null}",
+          "error": null,
+          "called_at": "2026-04-03T20:52:14.250281Z"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 15933,
+        "completion_tokens": 345,
+        "reasoning_tokens": 186,
+        "total_tokens": 16278
+      },
+      "timestamp": "2026-04-03T20:52:08.890822Z"
+    }
+  ],
+  "total_usage": {
+    "prompt_tokens": 91180,
+    "completion_tokens": 5430,
+    "reasoning_tokens": 2642,
+    "total_tokens": 96610
+  },
+  "tool_calls": [],
+  "llm_outputs": [],
+  "completion_payload": {
+    "summary": "Shania is in the midst of moving back to San Antonio while finishing her final undergraduate class. She explores the core paradox of her life: being highly expressive ('buku stupid expressive') yet feeling emotionally 'unseen' by those closest to her. She details the profound impact of her father's sudden death from cancer when she was 15—her 'glue' and 'number one fan'—and how his loss led her to find comfort in God. She expresses significant frustration with her family's culture of invalidating her feelings and the 'strong' label, which she perceives as a dismissal of her needs. She is actively using the podcast to practice the vulnerability she previously felt forced to hide."
+  },
+  "touched_nodes": [
+    {
+      "node_id": "node:3",
+      "action": "updated"
+    },
+    {
+      "node_id": "node:9",
+      "action": "updated"
+    },
+    {
+      "node_id": "node:6",
+      "action": "updated"
+    },
+    {
+      "node_id": "node:10",
+      "action": "created"
+    },
+    {
+      "node_id": "node:11",
+      "action": "created"
+    },
+    {
+      "node_id": "node:12",
+      "action": "created"
+    },
+    {
+      "node_id": "node:13",
+      "action": "created"
+    },
+    {
+      "node_id": "node:14",
+      "action": "created"
+    },
+    {
+      "node_id": "node:15",
+      "action": "created"
+    },
+    {
+      "node_id": "node:16",
+      "action": "created"
+    }
+  ],
+  "touched_edges": [
+    {
+      "edge_id": "edge:14",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:15",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:16",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:17",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:18",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:19",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:20",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:21",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:22",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:23",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:24",
+      "action": "created"
+    },
+    {
+      "edge_id": "edge:25",
+      "action": "created"
+    }
+  ],
+  "status": "completed",
+  "error": null,
+  "conversation": [
+    {
+      "role": "user",
+      "content": "Ingest this transcript.\n\nID: rec:2\nRecorded: 2026-04-03 20:51:05.627379+00:00\n\n[0:00] Hi everyone, welcome to Shania's Audio Diary, my very own personal journal that navigates through my young adulthood, discussing all things self-development, relationships, and new chapters, but we're doing it Shania style.\n[0:25] I'm your host for this podcast. My name is Shania Belcher. Let's get started.\n[0:36] Woo! Hi everyone. Welcome back to Shania's Audio Diary. Happy Wednesday. I almost said Tuesday, but it's hump day. Happy Wednesday. Not sure if you'll hear this on a Wednesday, but happy Wednesday nonetheless.\n[0:51] Nevertheless, I hope your day has been wonderful so far. I hope your week has been wonderful so far. I am in the process of moving out of my apartment back to San Antonio. I am also juggling my very last class for my undergrad degree. And I'm still juggling my normal week to week responsibilities at church and still trying to keep my sanity.\n[1:21] So, yeah, we're here. We are here, but it's okay. Everything is fine. I'm also preparing for my graduation coming up in a couple of weeks, so I have to take grad picks this weekend. I'm also getting my hair done, preparing for my family to come in the weekend of my graduation.\n[1:43] I'm also preparing for a weekend of fun-filled festivities for my friends and my beautiful siblings and I. I cannot wait to spend time with my brothers and my sister. And yeah, I have this whole, you know, graduation celebration thing in mind. It's just I have a few, I have a couple setbacks.\n[2:03] First of all, let me just say, Airbnbs are expensive, okay? And I understand that most of them don't want parties, don't want events, but it's like, what else are you expecting? Like, I should be able to have a get-together, because my friends aren't rowdy.\n[2:20] Okay, maybe of course, I mean, I guess if you're the homeowner, you wouldn't know that, but my friends aren't rowdy, okay?\n[2:29] Anyway, moving on. I'm preparing for a weekend, a celebratory weekend, so hopefully this all works out in my favor.\n[2:40] I do want to take the time to thank everyone who had such nice things to say about page one.\n[2:45] Thank you for letting me be vulnerable with you. I have had friends and family call me saying like,\n[2:54] I listen to your podcast, I listen to your podcast, and I like automatically cringed because prior to that episode, I was in a space where I did not want to be vulnerable or I was afraid to be vulnerable with people again.\n[3:10] I really don't share personal things like that, especially in a public setting. So I thank you for the kind words. And Mackenzie was so near and dear to my heart that I did feel the need to protect my feelings. And you guys said such kind words, and I really, really thank you for that.\n[3:30] You know, showing vulnerability has been a lot harder to do than usual these days because my feelings would constantly get stepped on by important people in my life in the past. And I am trying to get over not wanting to share that side of me and to start opening up again.\n[3:50] I used to encourage vulnerability, and I never understood why I'd have friends or family who chose not to be vulnerable. I get it now. I get it now. I definitely get it now. I don't think that's how it should be, though. Personally, I don't want to have my walls up. I don't feel like I can wholeheartedly love people that way. And at the core of who I am, I am a people person. I want to love people.\n[4:19] But it's also difficult to receive that love back from people because in my head it's just not genuine and it's going to cost me something.\n[4:29] But that's another podcast for another day.\n[4:34] Today I'm just going to express some feelings to you, some things I've been wrestling with for a while.\n[4:38] So I guess I will have to be vulnerable with you all again today and I hope that you will bear with me.\n[4:46] I was on the phone with a friend the other day, someone who I haven't known for very long, and they told me that they could sense that I was lonely.\n[4:55] First of all, let me just say that I find it very interesting that I have a few people in my life now who can read me like a book from cover to cover.\n[5:06] I have never had that before. Now, I am definitely the type of person who wears her heart on her sleeve.\n[5:14] I am stupid, stupid, buku stupid expressive. It's to the point where it's embarrassing. Like, I won't have to tell you that you just pissed me off because it's in my face. It's in my body language. Oh, and you're gonna feel me. And you'll know that I'm lying when I say I'm fine.\n[5:33] I had an ex that always said that he could tell when I was lying because he claims that it was in my face But I never saw it I never knew he was referring to Anyways I never really felt seen by people not emotionally Actually let me clarify that People closest to me And it made me super sensitive to things Not like crybaby sensitive but I do feel things very deeply\n[6:10] What bothered me about my friend's comment wasn't what he said, because he's right. I'm just not used to someone being able to point that out in me. You know, I've always been labeled as strong. Shania, you're so strong. You'll get through it. Shania, you're such a strong girl. Shania, keep your head up. You're strong.\n[6:30] And not that that's necessarily a bad thing to say, but for me, depending, particularly with the people who usually give me these comments, it translates from them as, I can't help you. You're just going to have to get through whatever you're going through by yourself, just like you've always have.\n[6:51] Especially because after that conversation, that typical conversation that usually happens when I go through something, they don't ask how I'm doing anymore after that. So it also makes me feel like, you just wanted to be nosy. You don't actually care.\n[7:08] And they think that you're okay and that you've moved on, at least in my world. And it never occurs to people that perhaps you don't want to have to be strong all the time. It's just, that's the only choice you've been given.\n[7:26] Due to recent events, especially within the past year, I felt like I was trying to get to a place to where I was untouchable emotionally. Not cold-hearted, just untouchable. Like no one could let me down if I don't let myself down. And I have God on my side and He's never let me down, so what do I need people for?\n[7:48] The conversation continued with my friend where they added that I'm not alone because I'm surrounded by people.\n[7:55] But what good is it to be surrounded by people who still make you feel alone?\n[8:01] And the frustrating part for me is I know exactly where my loneliness links to.\n[8:06] I was adopted at birth within my family, but I was raised as an only child at home.\n[8:12] My parents were in their 40s while I was growing up, so they had their fun already.\n[8:16] They traveled, they lived, and did things as they should. They were in a place in their lives where they were content with sitting at home and watching TV. But I liked to go out and do things. I wanted to go skating, bowling, to the movies, etc. Both of my parents worked. My dad was nocturnal. He worked during the night and mom usually worked during the day.\n[8:41] But for the most part, you know, when we were at home, we were all in our separate rooms. I'd usually spend a lot of time with whatever friends I had at the time. You know, the kids on the block, friends from school, friends from church as I got older, and them little friends I used to have, as my mom would like to call it. Yeah, I'm referring to boyfriends.\n[9:03] I'd get emotionally attached, way more attached than the other person. And if a friendship or relationship ended for whatever reason, my world would be crushed, even if I knew they weren't good for me.\n[9:16] Now, I have a huge family. Four sides, to be exact. There's my adopted mom and dad's sides, and then there's my biological mom and dad's sides. They're all different. They communicate different, receive and give love different, problem solve different, critically think different, and bond differently.\n[9:43] And in my family, I was always seen as the crybaby. I was too emotional, too sensitive. Couldn't really bond with anyone, maybe except for one cousin on my adopted dad's side and maybe my older sister, who was also known as my cousin at the time. Both were older than me and still saw me as a baby, still see me as a child to this day.\n[10:11] Unfortunately, I'd like to say that my family was my first bully. There are some people who will say ugly things to you, and they actually try to mask it by saying that they're joking, but they meant what they said.\n[10:26] Those things could point directly to your flaws or your insecurities, stuff you already think about yourself that you definitely don't need an amen on, and it can only be said by people who claim to know you well.\n[10:40] But in their own creative way. And if you express your hurt, you're being sensitive and you can't take a joke. Better yet, you're weak. And you need to toughen up and get thicker skin so you can continue to take jabs from them.\n[10:55] Then there are some people who I just couldn't relate to as family. There was no click. We had different interests. We already haven't spent a lot of time together growing up. We just so happened to be family.\n[11:11] Then it would baffle me because there is no effective communication. Everything is swept under the rug and never dealt with. Everything. Everyone just walks around holding on to past pain. For instance, I'd still hold on to what my mother said when she yelled at me months ago.\n[11:32] If you paid attention hard enough or if you were around long enough you could see it But nobody notices Nobody cares But honestly to a certain degree how could they That was probably the culture of their time That probably was what it was like for them growing up That the way it always been That all they know How could I expect them to know any different All you can do is what Pick your head up and move on\n[12:04] For me, I felt like my feelings were invalidated a lot, or it was the,\n[12:12] you're a child, so you have no wants principle. I wasn't close with much of my family, except for my\n[12:18] daddy. Majority of the family time I had growing up was when I would go to my great-grandmother's\n[12:25] house on my adopted dad's side and be around his side of the family for holidays. He was the glue\n[12:31] And he was also my shoulder to cry on and my number one fan. Between my parents and my family and family, I loved him.\n[13:01] Trying new sports, growing pains, bullies from school, mom and I not seeing eye to eye, me trying to figure out where I fit in in our world, making new friends at church, adjusting from private school to public school. Even when I found out I was adopted, daddy was always there.\n[13:23] My mom and I lost him suddenly to cancer when I was 15 years old in a time span of four months.\n[13:30] And that's pretty much where my journey first began. This is also when I met God for the first time.\n[13:37] As I got older and mom and I adjusted to life without my father, I grew even more attached to my friends.\n[13:47] I'd give them anything. I'd give them the clothes on my back if they needed it.\n[13:51] I'd go against my mom's wishes sometimes and still overextend myself for my friends, even if it bit me later. But friendships would still end or they'd grow apart.\n[14:03] I think the hardest part was communicating my needs to people because I didn't know how to, not in a healthy way, not without feeling like I wouldn't be heard.\n[14:14] I know what I used to do is put others' needs before mine, not communicate my needs at all. And if I was getting stepped on or taken advantage of, I wouldn't communicate how I felt until my feelings were hurt so bad that I would unload all the harbored feelings I had onto that person. And they probably had no idea I was feeling that way.\n[14:36] And I have to be honest, I still struggle with this. When someone would hurt my feelings and I wouldn't communicate that to them, it wasn't because I want you to read my mind. It's just in my head, I wouldn't think to do you that way. So I can't believe that you would want to do me in that way.\n[14:54] And then at that point, what's the point of explaining myself? That, and I felt like, what I asked of folks should be bare minimum things for someone you claim to love and care for. And me, all I ever ask for from people is their time.\n[15:13] If you would just take the time to show me that I have your undivided attention or spend quality time with me and make it a point, let me know, hey, you're valuable to me.\n[15:28] I want to make it a point to spend time with you. That's where I feel the most loved.\n[15:33] I've always just felt like that is bare minimum. But for some people, it's a lot. It'd be too much.\n[15:43] By the time I actually would be open with someone about how I felt my feelings didn't matter, theirs mattered more. Or I had no reason to feel the way that I felt because it would be ridiculous to them. And I was too much for people.\n[15:57] College life was probably the first time that I actually looked at myself and noticed my part in my heartbreaks. You know, lack of communication on my end, the overextending myself, the people I chose to keep around me, my attachment issues, etc. I changed my circle of friends, maybe a couple of times. I started loving others from a distance and stopped overextending myself. And it was a step.\n[16:23] Honestly, a bigger step than I would like to give myself credit for.\n[16:29] My family was still a mystery, but for the first time in a long time, life was peaceful.\n[16:34] It was also very joyous when I started dating Mackenzie, as I'm sure you all know by now.\n[16:41] But there was a lot of frustration and anger back home, and I consider my church as a part of that home as well.\n[16:47] You see, I have some authoritative figures in my life or older people in my life who I felt like wouldn't listen to me. They would not hear me.\n[17:01] Because communicating that your feelings are hurt, or let's say they cross the boundary, even if you tell them something they don't want to hear, that would translate to them as, I'm attacking your character.\n[17:16] And of course, in result, they become defensive.\n[17:21] Oh, that's not my problem. That's your problem.\n[17:24] Or it's something along the lines of, well, this is just who I am.\n[17:29] Then it just repeats back to, you're just being sensitive.\n[17:34] You know I learned something about myself It a total defense mechanism for me to distance myself from someone Because when I do I don feel like I can trust you with me Would you actually listen to me if I did tell you how I feel Do you respect me enough to listen Or am I still a child to you that has no wants\n[18:00] My cousin Bree and I have this conversation about this topic quite often. I love you, Bree.\n[18:06] I was born in 98. I am a late 90s baby, so I still made the cut. Argue with your mama.\n[18:15] Some older folks don't feel like they have to listen to a thing a young person says because they're older or because they don't want to be wrong.\n[18:25] Some older folks will start to hear only what they want to hear when a young person speaks, because what could a young person possibly know more than me? I'm older, right? Especially in today's world.\n[18:40] Some folks believe that because they lived life longer, they know better than you, even if their story isn't yours, and they can't relate to your situation.\n[18:52] They can say anything they want to you too because they're older. And some folks just like giving advice to you that you didn't ask for, that may not even be good for you, just so they can feel good about themselves and impose their input onto you anyway.\n[19:10] We can continue to blame social media, like usual, because they didn't grow up with it like us kids are growing up now, right? Hell, I mean, I was still playing outside in the street until the light came on when I was growing up. Not to mention, older people are on social media way more than us young people. But my point is, there's still a huge disconnect because no one is listening.\n[19:36] I'm not saying older folks don't deserve respect because I am very mannerable. I always have been and I always will be. I'm not going to have my daddy come whoop me when I get to heaven because y'all try to make me get out of my character. But I do think that young people deserve their respect too.\n[19:54] One of the best things you can do for someone, especially if you're an older person, is to make them feel heard. Make them feel safe. Like they matter. Not that your way is the only way. Because when you love and care for someone, you consider them too. And their feelings.\n[20:17] You know, these past few months were the loneliest I've ever felt. It led me to make some stupid choices. I hated going through the motions of going through things by myself, questioning everybody's motives with me, isolating myself, feeling like I couldn't trust anybody.\n[20:36] And maybe this will sound cliche, but I had to let God comfort me. I had to let him be there for me. Because he saw me when others don't.\n[20:54] Sometimes I still feel like it's me and God against everybody else, even though it's not like that.\n[21:03] Other times I feel like I'll have the answer to all my questions later in life because the Bible says it's all working together for my good.\n[21:13] And I still believe that it is, but I'm learning to let go of things that I can't control.\n[21:20] That includes family members, authoritative figures, friends, people who don't want to meet me halfway, who don't want to consider me and my feelings, who want to make me feel less than who I am for whatever reason.\n[21:41] Because what I can control is myself and what I respond to, how I respond to it. And I can still strive to be that woman that I'm striving to be.\n[21:56] I realized that I used to seek validation from folks I looked up to all the time. I wanted them to understand me. I wanted to be guided. I wanted to know that I was on the right path and I'm making the right choices for me.\n[22:19] Sometimes, I just wanted a hug. Other times, I just wanted them to hear me.\n[22:28] Most of all, I wanted my feelings acknowledged. Just like my daddy and Mackenzie used to do.\n[22:40] Perhaps I was just looking in the wrong places.\n[22:44] Anyway, I'm going to go ahead and end things here. So thank you for listening and enjoy the rest of your day. Bye.\n[23:02] Alright guys, that's all we have for today. But thank you so much for listening to Shania's Audio Diary.\n[23:08] If you've enjoyed this episode, don't forget to subscribe and you can leave your review of the podcast on Spotify, Apple Podcasts, Anchor, and more. More details on Shania's Audio Diary can be found on Instagram at Shania's Audio Diary. Enjoy the rest of your day and I'll see you guys next week. Bye!"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_6daca6f387b64edf80493191b483__thought__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",
+          "type": "function",
+          "function": {
+            "name": "search_graph",
+            "arguments": "{\"query\": \"Shania Belcher father family McGenji graduation\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_6daca6f387b64edf80493191b483__thought__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",
+      "content": "{\"results\":[]}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_043829c0ba5d40c8b3771022bbd9__thought__EuEBCt4BAb4+9vupZ6+HhAUhgnnV8GgfPecl4LJokZ27zqtHTqBrcs71Bo5Nwru+VaV75ljADIgg8vsSOz4yu8kjzlaG6w9B4aGjZ0HGJD1uOF1rTC7ytTvgH6e4OB3Vvr13Tl4kNiNGIDZklxYjZEufysqNiypbWQa397e637O9r8cpWA1kGrVEG34nCg/P4+rzrpQn6GHoYnNF3GX6STnCRI1FcEGSdN+o+h9+KgR+2l1Yzt8jJXrPFVaiJz91PTietO8xcuw3WYXmy4f03tzTzhLPehn5wINv3q2UKprdfLzh",
+          "type": "function",
+          "function": {
+            "name": "get_node",
+            "arguments": "{\"node_id\": \"node:2\"}"
+          }
+        },
+        {
+          "id": "call_f76090e94a4b40d19fade651d591",
+          "type": "function",
+          "function": {
+            "name": "get_node",
+            "arguments": "{\"node_id\": \"node:5\"}"
+          }
+        },
+        {
+          "id": "call_8b00a20448fc49c698bee0a78aaa",
+          "type": "function",
+          "function": {
+            "name": "get_node",
+            "arguments": "{\"node_id\": \"node:8\"}"
+          }
+        },
+        {
+          "id": "call_d6d0a68e96fb4c048b4248b8c8d0",
+          "type": "function",
+          "function": {
+            "name": "get_node",
+            "arguments": "{\"node_id\": \"node:3\"}"
+          }
+        },
+        {
+          "id": "call_c548b078d9da46e593eed0585be2",
+          "type": "function",
+          "function": {
+            "name": "get_node",
+            "arguments": "{\"node_id\": \"node:6\"}"
+          }
+        },
+        {
+          "id": "call_576d85095753416bb408831fd10e",
+          "type": "function",
+          "function": {
+            "name": "get_node",
+            "arguments": "{\"node_id\": \"node:9\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_043829c0ba5d40c8b3771022bbd9__thought__EuEBCt4BAb4+9vupZ6+HhAUhgnnV8GgfPecl4LJokZ27zqtHTqBrcs71Bo5Nwru+VaV75ljADIgg8vsSOz4yu8kjzlaG6w9B4aGjZ0HGJD1uOF1rTC7ytTvgH6e4OB3Vvr13Tl4kNiNGIDZklxYjZEufysqNiypbWQa397e637O9r8cpWA1kGrVEG34nCg/P4+rzrpQn6GHoYnNF3GX6STnCRI1FcEGSdN+o+h9+KgR+2l1Yzt8jJXrPFVaiJz91PTietO8xcuw3WYXmy4f03tzTzhLPehn5wINv3q2UKprdfLzh",
+      "content": "{\"node\":{\"id\":\"node:2\",\"aliases\":[\"McGenji Celestin\",\"McKinsey\",\"McAngie Celestine\",\"McKinsey Celestin\"],\"summary\":\"Shania's late partner and 'angel,' McGenji was a deeply influential figure who taught her about self-love, confidence, and living without regrets. He was a multi-talented individual who supported her ambitions and her family.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.674683Z\",\"start_offset\":284,\"end_offset\":1304,\"note\":\"McGenji (McKinsey) is the central figure of Shania's reflections. He was her partner for nearly two years. Shania describes him as a 'gentleman,' multi-talented (photography, music, cars), and a 'giver.' He passed away at some point, and Shania credits him with teaching her self-confidence and how to live without regrets. He also provided her with the equipment and encouragement to start her podcast.\"}]},\"edges\":[{\"id\":\"edge:11\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:1\",\"label\":\"taught lessons on confidence and self-love to\"},{\"id\":\"edge:7\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:5\",\"label\":\"encouraged and equipped Shania for\"},{\"id\":\"edge:9\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:6\",\"label\":\"helped out the household of\"},{\"id\":\"edge:13\",\"from_node_id\":\"node:2\",\"to_node_id\":\"node:9\",\"label\":\"helped around the house after the death of\"}],\"cold_hint\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_f76090e94a4b40d19fade651d591",
+      "content": "{\"node\":{\"id\":\"node:5\",\"aliases\":[\"Shania's Audio Diary\",\"the podcast\"],\"summary\":\"Shania's personal podcast journal, focused on young adulthood, relationships, and growth, which was encouraged and enabled by McGenji.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.678681Z\",\"start_offset\":2031,\"end_offset\":1251,\"note\":\"Started with equipment (microphone, mixer) bought by McGenji. Shania was initially scared to start it and talked herself out of it for a long time. It is dedicated to McGenji.\"}]},\"edges\":[{\"id\":\"edge:8\",\"from_node_id\":\"node:5\",\"to_node_id\":\"node:2\",\"label\":\"is dedicated to the memory of\"}],\"cold_hint\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_8b00a20448fc49c698bee0a78aaa",
+      "content": "{\"node\":{\"id\":\"node:8\",\"aliases\":[\"Confidence and Self-Love\",\"self-confidence\"],\"summary\":\"The ongoing internal work Shania is doing to value her own opinion of herself over others' and to find happiness in who she is.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.683311Z\",\"start_offset\":919,\"end_offset\":989,\"note\":\"A recurring theme McKinsey pushed: 'What matters the most is how you feel about yourself.' Shania is working on this as a core part of her personal growth.\"}]},\"edges\":[],\"cold_hint\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_d6d0a68e96fb4c048b4248b8c8d0",
+      "content": "{\"node\":{\"id\":\"node:3\",\"aliases\":[\"Undergraduate Graduation\",\"college graduation\"],\"summary\":\"Shania's upcoming graduation from Texas State University in May 2026, a milestone that is currently a source of 'nerve-wracking' stress due to a lack of detailed future plans.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:30.676272Z\",\"start_offset\":40,\"end_offset\":119,\"note\":\"Shania is graduating in May 2026. The transition is causing her significant anxiety because she lacks a detailed post-graduation plan, which conflicts with her need for control.\"}]},\"edges\":[],\"cold_hint\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_c548b078d9da46e593eed0585be2",
+      "content": "{\"node\":{\"id\":\"node:6\",\"aliases\":[\"Shania's Mother\",\"my mom\",\"mom\"],\"summary\":\"Shania's mother, who was supported by McGenji after the death of Shania's father.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1,760:770\",\"timestamp\":\"2026-04-03T20:48:30.680033Z\",\"start_offset\":229,\"end_offset\":770,\"note\":\"McGenji helped Shania's mother with household tasks (like putting up curtains) after Shania's father passed away, which Shania deeply appreciated. Shania and her mother had a 'horrible fight' the night Shania reconnected with McGenji at a club.\"}]},\"edges\":[],\"cold_hint\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_576d85095753416bb408831fd10e",
+      "content": "{\"node\":{\"id\":\"node:9\",\"aliases\":[\"Shania's Dad\",\"my dad\",\"dad\"],\"summary\":\"Shania's late father, whose passing left a void in the household.\",\"embedding\":null,\"total_log_count\":1,\"log\":[{\"is_fence\":false,\"source_id\":\"rec:1\",\"timestamp\":\"2026-04-03T20:48:43.361784Z\",\"start_offset\":760,\"end_offset\":764,\"note\":\"Shania mentions her dad passed away, and his absence was felt in the household until McKinsey stepped in to help with 'man around the house' tasks. This loss is a significant part of her family background.\"}]},\"edges\":[],\"cold_hint\":null}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_9fa2405b4f174bfc8bb4518f7ca6__thought__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",
+          "type": "function",
+          "function": {
+            "name": "update_node",
+            "arguments": "{\"provenance\": {\"source_id\": \"rec:2\", \"end_offset\": 123, \"start_offset\": 51}, \"node_id\": \"node:3\", \"new_aliases\": [\"Undergraduate Graduation\", \"college graduation\", \"the graduation celebration\"], \"new_summary\": \"Shania's upcoming graduation from Texas State University in May 2026, which is a source of both logistical stress (moving to San Antonio, finishing her final class) and celebratory anticipation with her family and siblings.\", \"note\": \"Shania is now in the final stretch, moving back to San Antonio and juggling her last undergrad class. Despite the 'nerve-wracking' lack of future plans noted previously, she is actively preparing for a celebratory weekend with family and siblings, though she's frustrated by the cost and restrictions of Airbnbs. It marks a significant transition period she is trying to navigate while 'keeping her sanity.'\"}"
+          }
+        },
+        {
+          "id": "call_acdbd90cb583428bbdf2fe2c9630",
+          "type": "function",
+          "function": {
+            "name": "update_node",
+            "arguments": "{\"note\": \"Detailed as the central emotional pillar of Shania's childhood. He was the person she could talk to about anything—from bullies to her adoption. His nocturnal work schedule meant they were often in separate rooms, yet he remained her 'shoulder to cry on.' His sudden death at 15 was the catalyst for her spiritual journey and a major turning point in her life. Shania still misses the way he acknowledged her feelings, comparing his support to what she later found with McGenji.\", \"new_aliases\": [\"Shania's Dad\", \"my dad\", \"dad\", \"daddy\"], \"new_summary\": \"Shania's late father was her 'number one fan,' her 'glue,' and her primary emotional support system. He died suddenly from cancer within four months when Shania was 15, a loss that profoundly shaped her and led to her first connection with God.\", \"node_id\": \"node:9\", \"provenance\": {\"end_offset\": 803, \"source_id\": \"rec:2\", \"start_offset\": 732}}"
+          }
+        },
+        {
+          "id": "call_bb8bc02c41b84ef6b2c402609357",
+          "type": "function",
+          "function": {
+            "name": "update_node",
+            "arguments": "{\"new_summary\": \"Shania's mother, with whom she has a complex relationship often characterized by a lack of emotional alignment and 'not seeing eye to eye.' Following the death of Shania's father, they adjusted to life together, though Shania often felt her feelings were invalidated.\", \"new_aliases\": [\"Shania's MotherBase\", \"my mom\", \"momBase\"], \"node_id\": \"node:6\", \"provenance\": {\"start_offset\": 731, \"source_id\": \"rec:2,12:12-12:18;13:51-14:03\", \"end_offset\": 823}, \"note\": \"The relationship is marked by intergenerational friction and a history of Shania's feelings being invalidated (the 'you're a child, so you have no wants' principle). Shania notes that they didn't always see eye to eye, especially when Shania would overextend herself for friends against her mother's wishes. This node represents the primary 'home' dynamic that Shania is currently moving back into in San Antonio.\"}"
+          }
+        },
+        {
+          "id": "call_82724882398440bd80f16cac2d19",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"aliases\": [\"Family Dynamics\", \"my family\", \"the family culture\"], \"note\": \"Shania describes her family as her 'first bully,' where insults are masked as jokes and sensitivity is labeled as weakness. There is a systemic lack of effective communication, with issues being 'swept under the rug.' This environment has made Shania feel 'unseen' and 'unheard,' leading to her tendency to distance herself as a defense mechanism. She notes a significant intergenerational disconnect, feeling that older family members dismiss her perspective because of her age.\", \"summary\": \"A large, multi-sided family structure (adopted and biological) characterized by a culture of masking insults as jokes and avoiding direct emotional communication.\", \"provenance\": {\"source_id\": \"rec:2\", \"end_offset\": 715, \"start_offset\": 556}}"
+          }
+        },
+        {
+          "id": "call_86ef7ede39d54f4485c8a7221574",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"note\": \"Shania expresses deep resentment toward being labeled 'strong.' To her, it feels like a dismissal of her needs—a way for people to excuse themselves from offering help by assuming she can handle everything alone. It contributes to her feeling lonely even when surrounded by people.\", \"aliases\": [\"The Strong Label\", \"being strong\", \"strong girl\"], \"provenance\": {\"source_id\": \"rec:2\", \"end_offset\": 446, \"start_offset\": 370}, \"summary\": \"A recurring label Shania receives that she perceives as a barrier to receiving genuine support and an excuse for others to be emotionally absent.\"}"
+          }
+        },
+        {
+          "id": "call_eb3da349e9b34981a3aaca23d540",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"aliases\": [\"Relationship with GodBase\", \"GodBase\", \"faithBase\", \"HeBase\"], \"note\": \"Shania 'met God' at 15 after her father's death. He has become her primary source of comfort during her loneliest times, especially when she feels she cannot trust people. She currently views her life as 'me and God against everybody else,' trusting that things are working together for her good even when she feels isolated.\", \"summary\": \"A foundational spiritual connection that began following her father's death and serves as Shania's ultimate emotional refuge and source of comfort.\", \"provenance\": {\"end_offset\": 1280, \"source_id\": \"rec:2,13:30-13:37;20:36-21:20\", \"start_offset\": 810}}"
+          }
+        },
+        {
+          "id": "call_771fbeb6fe7244469c96953d51da",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"provenance\": {\"source_id\": \"rec:2,4:46-5:33;8:01-8:12;20:17-20:36\", \"end_offset\": 481, \"start_offset\": 286}, \"summary\": \"A core internal tension between Shania's outward expressiveness and her internal feeling of being emotionally isolated and misunderstood.\", \"note\": \"Despite being 'buku stupid expressive' and wearing her heart on her sleeve, Shania often feels emotionally unseen by those closest to her. She links her loneliness to being raised as an only child by older parents and a lifelong struggle to have her feelings acknowledged. A friend's recent observation of her loneliness struck a chord because it's a truth she rarely has recognized by others.\", \"aliases\": [\"Loneliness and Being SeenBase\", \"feeling unseenBase\", \"emotional sensitivityBase\"]}"
+          }
+        },
+        {
+          "id": "call_8d4a445e5f1a460aa6333eff3c33",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"summary\": \"Shania's ongoing effort to dismantle emotional defenses built from past hurts, balanced against a fear of being taken advantage of or misunderstood.\", \"provenance\": {\"source_id\": \"rec:2\", \"end_offset\": 274, \"start_offset\": 160}, \"aliases\": [\"Vulnerability and TrustBase\", \"opening upBaseBase\", \"walls upBaseBase\"], \"note\": \"Shania is struggling to be vulnerable again after past experiences of having her feelings 'stepped on' by important people. She recognizes that 'walls up' prevent her from loving wholeheartedly, but she fears that receiving love will 'cost me something' or isn't genuine. The podcast is an active attempt to practice this vulnerability.\"}"
+          }
+        },
+        {
+          "id": "call_b5e254f84b4a440d949aa72f2b0e",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"summary\": \"Shania's cousin and a confidante for discussing family and societal frustrations.\", \"provenance\": {\"source_id\": \"rec:2\", \"end_offset\": 1086, \"start_offset\": 1080}, \"aliases\": [\"BreeBase\", \"Cousin BreeBase\"], \"note\": \"A cousin with whom Shania frequently discusses topics like intergenerational disconnect and family dynamics. Shania explicitly mentions loving her and sharing these perspectives.\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_9fa2405b4f174bfc8bb4518f7ca6__thought__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",
+      "content": "{\"ok\":true,\"id\":\"node:3\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_acdbd90cb583428bbdf2fe2c9630",
+      "content": "{\"ok\":true,\"id\":\"node:9\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_bb8bc02c41b84ef6b2c402609357",
+      "content": "{\"ok\":true,\"id\":\"node:6\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_82724882398440bd80f16cac2d19",
+      "content": "{\"ok\":true,\"id\":\"node:10\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_86ef7ede39d54f4485c8a7221574",
+      "content": "{\"ok\":true,\"id\":\"node:11\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_eb3da349e9b34981a3aaca23d540",
+      "content": "{\"ok\":true,\"id\":\"node:12\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_771fbeb6fe7244469c96953d51da",
+      "content": "{\"ok\":true,\"id\":\"node:13\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_8d4a445e5f1a460aa6333eff3c33",
+      "content": "{\"ok\":true,\"id\":\"node:14\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_b5e254f84b4a440d949aa72f2b0e",
+      "content": "{\"ok\":true,\"id\":\"node:15\",\"message\":null}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_0a5fbf43abd143e6a0203d4457de__thought__EuQKCuEKAb4+9vt43+ofGJ4x+rXvcWMI5qSuQ2qbToMxBpcXgfr44CLyUGvkZzpiqAqZpZO6a8IIr9vkXgiARaT9CLM/G+dGcuOPgjswCKA78RzA4af2xsmXQ3R7AgNVivvcoomawlRVUcUOU6HZImAOxtrUuEu/RmiSXizNjc6yHz7ag8A8+96sISZ+RSNIN5R/cLpb//5yeTiM/UoB3+3lFxSnkouMUBmXSpxeEUETXXclXaW7A5L55Qw1eZNAkc5s8c89BtW6PIXxYHMYl2B4ZrWAomucSJhtPYiNiTikYpBtj2orn+sMClwyRPO7ZXWDGAqxmQWeLovH5r+DKVRBlaZfqWr2pEK3Hsl6zOGgns6Klr1fDPPk0eiVcO2pzYmPuo1xTFpg4ZnLVqRv9B7OvLA0W2abeZyFusOXC7IJqD7F9wEA+zIWlBViU3QBZcwunJMHguWavjNRZ2IAqmViE1FBQUjbgTDffgSGVX46HftureOzP1L5giFehXB1lielsWlJ4/wgZdL4H5VVfArwV9mNX1yV+rZOU57/YDCOwgXAyiS3Dt7ugjwLgapEIPdu+LhPHdCNp53XVAdu5u5O0gZH0MFnUMYo2c4xAQ+82A1OJoeBoo22nWJ3dhAvzQpIyRnvVB8SjvQlgh2p/c+DPRv04DTwmwMNFLb51NhPxOI+vbG31KUabj1prpUmxImlp/UTYfzaXQcF+xiqDZnWbCHCjKF3w1N7I03cNqSlbrmcSvBD8FWVf+0NsbZoypfEM8jniUsvM89s0dgPjodHgCRX/09cJFTj8azf/ZIBkUufnPSmo9iS0JeeMMqABTib/W0tjHHdid+U2FolNVEzDbsfiYAZRNBfsR8kodtpgIarvz4mE2N+RqkxU3kq5XUAhemn+ZsDGr1I9FwtvSAIAfDtGqQLu5VPdDY7fCr0U7GntI/KMSZ/L1RMLN9APXaz6ZB6fPCgmJ4fcZUM1hmQFTcSSbFfn7WTRQP+wlYCPhjsZiebunDKQLoDoq+WTuyvOP/uyZKZr2K+ZqUO1yUeNJWL8mvuZ5Ygr+dG3/Bj9BLzs0LGG3GXBwkS+Ys/BeSTz719AaqEsQia25PkKjduf5AjAVslGx/8mUsHxE56Yz0ixlHhwREF8QHpXhg9WK+HBQuDZJHRd34xrgILGIRq79hst6dtTKk1l3vvNP/8DSK+5Ba1b34eJOXwaGZf6L7ij8BhcCVThxzZ0RGZ0I7cNVe4HBLjJ7FHx+bFh9Lev325gtNPksPmwG8Ni/Y2dHS844ZQOxVPU/1kPbgNV19vVIlkX3HHRuGHYM7MRo8oQy/npCS6t6kN8NCjd/QZMqjMLaLGmHq43103ztvRgwQ8L0yPrAdDCI7zb+qGu2VbSEe+wPp2RbHn6ay/Y+k/QhHDkbzYeVqpMQ9lRAyrMPsMxv8Nw+qVOySONiLcClqIYSpQSn5Cm79Ox1kFRWtWDI92xfb//53wgYMX50w4hgUGmBOU7hIRLEbkxco77qExloCaEWSCUmAwGCjHmKwj1FFQlQLCR8ecjZ6U2/m3VqOrR1u4eh+ha3Kz9lFgppisbEfn88c5p5femBcl+VWqgOVVapNho6c66ewis0JgdSrt7ThivVxAx+guH0wLx3U1K7ii41WlN62ch2ba3ATXDLoDix6cb5ihq5Mp/pNUARpsl4Gw3x0byWerL10A/gpDro8dwgSXxJPDnFzhQS5j15g61Gcthc2aqPnfGXdOgwX2iuwSgx/PlETiUHG7piOXxqKk+GcoIXf+S8QWtS35OxcQIrChP5HrMxvLzg7Eomk8HCZDEiEvnfrSIXcKCSauOF+qaXOn",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"contributes to Shania's feeling of being unseen in\", \"to_node_id\": \"node:13\", \"from_node_id\": \"node:10\"}"
+          }
+        },
+        {
+          "id": "call_ab38c68dd2b54e699e4559dda4c3",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"led to Shania developing defensive walls in\", \"to_node_id\": \"node:14\", \"from_node_id\": \"node:10\"}"
+          }
+        },
+        {
+          "id": "call_72f636eaff604f918bb9d0a5e0b8",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"from_node_id\": \"node:11\", \"to_node_id\": \"node:13\", \"label\": \"exacerbates Shania's sense of isolation in\"}"
+          }
+        },
+        {
+          "id": "call_09be0611e984449c8ce9facdb9a7",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"passing at age 15 was the catalyst for Shania's meeting with\", \"to_node_id\": \"node:12\", \"from_node_id\": \"node:9\"}"
+          }
+        },
+        {
+          "id": "call_94c8da7e044d4d7da409479e0a5f",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"serves as the primary comfort during times of deep\", \"from_node_id\": \"node:12\", \"to_node_id\": \"node:13\"}"
+          }
+        },
+        {
+          "id": "call_f76ac1fdc8b448ebae92223cdc9c",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"from_node_id\": \"node:15\", \"to_node_id\": \"node:10\", \"label\": \"shares frustrations about family culture and authoritative figures with\"}"
+          }
+        },
+        {
+          "id": "call_6ac36c0367f049d7bc949660a101",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"is being actively practiced and reclaimed through Shania's work on\", \"from_node_id\": \"node:14\", \"to_node_id\": \"node:5\"}"
+          }
+        },
+        {
+          "id": "call_15999c7c154a4353a38ab5a7d795",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"provided emotional validation similar to what Shania received from her late\", \"from_node_id\": \"node:2\", \"to_node_id\": \"node:9\"}"
+          }
+        },
+        {
+          "id": "call_8c98249ba8fe40d1b1a3c5058827",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"is a central figure in Shania's navigating of complex\", \"to_node_id\": \"node:10\", \"from_node_id\": \"node:6\"}"
+          }
+        },
+        {
+          "id": "call_499af239f42a4e9a94cce7d2066f",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"label\": \"is currently being addressed through a closer connection to\", \"to_node_id\": \"node:12\", \"from_node_id\": \"node:13\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_0a5fbf43abd143e6a0203d4457de__thought__EuQKCuEKAb4+9vt43+ofGJ4x+rXvcWMI5qSuQ2qbToMxBpcXgfr44CLyUGvkZzpiqAqZpZO6a8IIr9vkXgiARaT9CLM/G+dGcuOPgjswCKA78RzA4af2xsmXQ3R7AgNVivvcoomawlRVUcUOU6HZImAOxtrUuEu/RmiSXizNjc6yHz7ag8A8+96sISZ+RSNIN5R/cLpb//5yeTiM/UoB3+3lFxSnkouMUBmXSpxeEUETXXclXaW7A5L55Qw1eZNAkc5s8c89BtW6PIXxYHMYl2B4ZrWAomucSJhtPYiNiTikYpBtj2orn+sMClwyRPO7ZXWDGAqxmQWeLovH5r+DKVRBlaZfqWr2pEK3Hsl6zOGgns6Klr1fDPPk0eiVcO2pzYmPuo1xTFpg4ZnLVqRv9B7OvLA0W2abeZyFusOXC7IJqD7F9wEA+zIWlBViU3QBZcwunJMHguWavjNRZ2IAqmViE1FBQUjbgTDffgSGVX46HftureOzP1L5giFehXB1lielsWlJ4/wgZdL4H5VVfArwV9mNX1yV+rZOU57/YDCOwgXAyiS3Dt7ugjwLgapEIPdu+LhPHdCNp53XVAdu5u5O0gZH0MFnUMYo2c4xAQ+82A1OJoeBoo22nWJ3dhAvzQpIyRnvVB8SjvQlgh2p/c+DPRv04DTwmwMNFLb51NhPxOI+vbG31KUabj1prpUmxImlp/UTYfzaXQcF+xiqDZnWbCHCjKF3w1N7I03cNqSlbrmcSvBD8FWVf+0NsbZoypfEM8jniUsvM89s0dgPjodHgCRX/09cJFTj8azf/ZIBkUufnPSmo9iS0JeeMMqABTib/W0tjHHdid+U2FolNVEzDbsfiYAZRNBfsR8kodtpgIarvz4mE2N+RqkxU3kq5XUAhemn+ZsDGr1I9FwtvSAIAfDtGqQLu5VPdDY7fCr0U7GntI/KMSZ/L1RMLN9APXaz6ZB6fPCgmJ4fcZUM1hmQFTcSSbFfn7WTRQP+wlYCPhjsZiebunDKQLoDoq+WTuyvOP/uyZKZr2K+ZqUO1yUeNJWL8mvuZ5Ygr+dG3/Bj9BLzs0LGG3GXBwkS+Ys/BeSTz719AaqEsQia25PkKjduf5AjAVslGx/8mUsHxE56Yz0ixlHhwREF8QHpXhg9WK+HBQuDZJHRd34xrgILGIRq79hst6dtTKk1l3vvNP/8DSK+5Ba1b34eJOXwaGZf6L7ij8BhcCVThxzZ0RGZ0I7cNVe4HBLjJ7FHx+bFh9Lev325gtNPksPmwG8Ni/Y2dHS844ZQOxVPU/1kPbgNV19vVIlkX3HHRuGHYM7MRo8oQy/npCS6t6kN8NCjd/QZMqjMLaLGmHq43103ztvRgwQ8L0yPrAdDCI7zb+qGu2VbSEe+wPp2RbHn6ay/Y+k/QhHDkbzYeVqpMQ9lRAyrMPsMxv8Nw+qVOySONiLcClqIYSpQSn5Cm79Ox1kFRWtWDI92xfb//53wgYMX50w4hgUGmBOU7hIRLEbkxco77qExloCaEWSCUmAwGCjHmKwj1FFQlQLCR8ecjZ6U2/m3VqOrR1u4eh+ha3Kz9lFgppisbEfn88c5p5femBcl+VWqgOVVapNho6c66ewis0JgdSrt7ThivVxAx+guH0wLx3U1K7ii41WlN62ch2ba3ATXDLoDix6cb5ihq5Mp/pNUARpsl4Gw3x0byWerL10A/gpDro8dwgSXxJPDnFzhQS5j15g61Gcthc2aqPnfGXdOgwX2iuwSgx/PlETiUHG7piOXxqKk+GcoIXf+S8QWtS35OxcQIrChP5HrMxvLzg7Eomk8HCZDEiEvnfrSIXcKCSauOF+qaXOn",
+      "content": "{\"ok\":true,\"id\":\"edge:14\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_ab38c68dd2b54e699e4559dda4c3",
+      "content": "{\"ok\":true,\"id\":\"edge:15\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_72f636eaff604f918bb9d0a5e0b8",
+      "content": "{\"ok\":true,\"id\":\"edge:16\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_09be0611e984449c8ce9facdb9a7",
+      "content": "{\"ok\":true,\"id\":\"edge:17\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_94c8da7e044d4d7da409479e0a5f",
+      "content": "{\"ok\":true,\"id\":\"edge:18\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_f76ac1fdc8b448ebae92223cdc9c",
+      "content": "{\"ok\":true,\"id\":\"edge:19\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_6ac36c0367f049d7bc949660a101",
+      "content": "{\"ok\":true,\"id\":\"edge:20\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_15999c7c154a4353a38ab5a7d795",
+      "content": "{\"ok\":true,\"id\":\"edge:21\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_8c98249ba8fe40d1b1a3c5058827",
+      "content": "{\"ok\":true,\"id\":\"edge:22\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_499af239f42a4e9a94cce7d2066f",
+      "content": "{\"ok\":true,\"id\":\"edge:23\",\"message\":null}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2ca2a736439e4e9c9c5b22e11b4b__thought__EssHCsgHAb4+9vu1kANUO/HlmM4X0n4gEqrUSvUMu9WR8RVmedWdcbNUQmiJKxIGhkLfjF180xI9I5FXqBtIfsGZPs+XaZLz/M+AmsxtV1CD7eqtnmflV9ZEBAGPHq8g0CsEjEooK9XY35RdiiDXf93S4pPuC/ejonNXLtgWlVfzWmh5Npcvgs1ArR5SqCmzm7hjlyLusUhzRWl7eEayOCkOORu0Kvxzm2d1rdjTSC3pu6cl4KVfAfjSNd++RUR9RQbAdE+Q72XC75mK+XdpS5YHBpt3mRxd8Dl4PamgaTZBOyHHQljc+jn8M7eJtzXxV9rhEqo2HPdLlAZx66DWx1B41v05K8kk75BmL7pLDt1FOKbO1xmpE5XToDgaiNXc78i3Jnr4u8gd9KnaT+DT0JAeUouL/67+PZLZUz/9KrmMWc/VEMZDpCMdyBbHjwOmFuJIkXKfn9YceY+r1ofkaNm9ENjPaNPb3g4Rzb7EV8NZ5rx1wYPmfK7+CJAlPibFF9MKQq9qePKiEYd0o/D7JnDhXujIT84LojxHjfr5xhHPnD3xfTv3kSVm/3ybsijTEdTdSiieJHyIE7A/363EsH2+7K62Gi9meH9zmPfNYbUU/zOYqHzdL4HSkHu5w7fHg3wI8gjqdTgeCFWg4aBnFKHT8NkD4dd3ast/DC+Jxvf3/djEbD9iL5icfp572FmTy4zxTSf/IHyaDTBzbVEvCQLaPSHEXhgi+oZ/tc13vDhFDh6ypLDP/91bbevbS52oF7qUVWVIoBJjGllfIMT7ZAtp3C6NL1CFgYzVLcHYqv9EPYnVLo7lPDRztRtgzNUguvBJHPhvmpe/bHn1UGiIWWOzfMnA9ZhKs1HAkg3JYZs7W6Jbg7zqzRPCx1P2FuLCREsXZ3jstpHSMEsYTET2I4hYo+VGMraYBMmGtLwpEuHEI7N/0Kb1u4npd/0bhUAmZIPd8c8NcMqrLFEbzCQgY/3gKR7jwLybyKKVMHXT/YaNzn+aTfPvZMfr9Vq4JRvHOQSyVwszt2yWXe5fR+7Qh9luicDiCnQ/e9wCeHz/7+tMfWfp/Ekq9OeGOHEamMj7AcyQwAoAUy1xX7Mnd3lxRE4s1dSTubCDS3u0tErVgsvYMAys2Yw0rms58WwCjMRWQux0MDk8UWBlTqfXCWYBoGxN+qQLviNEUCH5ISk2UXJmR5WOK7ujn+hhqr28KfD30oLLop4vsvnSgvfjoiEikG7+T4znmnjUXtf5VJrBOSmwNw1OLJKTY8kU2LNXczOxAUHEHr4TFzjPHLS83hg=",
+          "type": "function",
+          "function": {
+            "name": "search_graph",
+            "arguments": "{\"query\": \"San Antonio home\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2ca2a736439e4e9c9c5b22e11b4b__thought__EssHCsgHAb4+9vu1kANUO/HlmM4X0n4gEqrUSvUMu9WR8RVmedWdcbNUQmiJKxIGhkLfjF180xI9I5FXqBtIfsGZPs+XaZLz/M+AmsxtV1CD7eqtnmflV9ZEBAGPHq8g0CsEjEooK9XY35RdiiDXf93S4pPuC/ejonNXLtgWlVfzWmh5Npcvgs1ArR5SqCmzm7hjlyLusUhzRWl7eEayOCkOORu0Kvxzm2d1rdjTSC3pu6cl4KVfAfjSNd++RUR9RQbAdE+Q72XC75mK+XdpS5YHBpt3mRxd8Dl4PamgaTZBOyHHQljc+jn8M7eJtzXxV9rhEqo2HPdLlAZx66DWx1B41v05K8kk75BmL7pLDt1FOKbO1xmpE5XToDgaiNXc78i3Jnr4u8gd9KnaT+DT0JAeUouL/67+PZLZUz/9KrmMWc/VEMZDpCMdyBbHjwOmFuJIkXKfn9YceY+r1ofkaNm9ENjPaNPb3g4Rzb7EV8NZ5rx1wYPmfK7+CJAlPibFF9MKQq9qePKiEYd0o/D7JnDhXujIT84LojxHjfr5xhHPnD3xfTv3kSVm/3ybsijTEdTdSiieJHyIE7A/363EsH2+7K62Gi9meH9zmPfNYbUU/zOYqHzdL4HSkHu5w7fHg3wI8gjqdTgeCFWg4aBnFKHT8NkD4dd3ast/DC+Jxvf3/djEbD9iL5icfp572FmTy4zxTSf/IHyaDTBzbVEvCQLaPSHEXhgi+oZ/tc13vDhFDh6ypLDP/91bbevbS52oF7qUVWVIoBJjGllfIMT7ZAtp3C6NL1CFgYzVLcHYqv9EPYnVLo7lPDRztRtgzNUguvBJHPhvmpe/bHn1UGiIWWOzfMnA9ZhKs1HAkg3JYZs7W6Jbg7zqzRPCx1P2FuLCREsXZ3jstpHSMEsYTET2I4hYo+VGMraYBMmGtLwpEuHEI7N/0Kb1u4npd/0bhUAmZIPd8c8NcMqrLFEbzCQgY/3gKR7jwLybyKKVMHXT/YaNzn+aTfPvZMfr9Vq4JRvHOQSyVwszt2yWXe5fR+7Qh9luicDiCnQ/e9wCeHz/7+tMfWfp/Ekq9OeGOHEamMj7AcyQwAoAUy1xX7Mnd3lxRE4s1dSTubCDS3u0tErVgsvYMAys2Yw0rms58WwCjMRWQux0MDk8UWBlTqfXCWYBoGxN+qQLviNEUCH5ISk2UXJmR5WOK7ujn+hhqr28KfD30oLLop4vsvnSgvfjoiEikG7+T4znmnjUXtf5VJrBOSmwNw1OLJKTY8kU2LNXczOxAUHEHr4TFzjPHLS83hg=",
+      "content": "{\"results\":[]}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_6adf685694ad476888f70d350f49__thought__EpkBCpYBAb4+9vuvfR8MJ8+mnoh+GD3Vv+G29puWnNIDJb15aKgWRISY6lCdMnD1Wv9qFOFWVyeDui3qMkEnpxSp0Ycv+z4vQ035M/n/87rf/i8umCtX3a8zZLKU0E60IYmFmFcEPni+n45YU+eZhXibzn47HmVPORMQ9wRkvKtgZadGBdOeQDY/ogonOLvAOqCvKjysuNJCiS50",
+          "type": "function",
+          "function": {
+            "name": "create_node",
+            "arguments": "{\"provenance\": {\"source_id\": \"rec:2\", \"end_offset\": 123, \"start_offset\": 51}, \"aliases\": [\"San AntonioBase\", \"homeBaseBase\"], \"summary\": \"Shania's home city and the context for her current transition after college.\", \"note\": \"Shania is currently moving back to San Antonio as she finishes her undergrad degree. It represents a return to her family environment and church responsibilities, bringing her into closer proximity with the complex family dynamics and the mother she occasionally clashes with. It's the site of her upcoming graduation celebrations.\"}"
+          }
+        },
+        {
+          "id": "call_36b99bd95f484ea89bf97bf4fb83",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"from_node_id\": \"node:16\", \"label\": \"is the current destination for Shania's transition during her\", \"to_node_id\": \"node:3\"}"
+          }
+        },
+        {
+          "id": "call_c895b50613814592a28e5f619386",
+          "type": "function",
+          "function": {
+            "name": "create_edge",
+            "arguments": "{\"to_node_id\": \"node:16\", \"label\": \"lives in and is part of Shania's return to\", \"from_node_id\": \"node:6\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_6adf685694ad476888f70d350f49__thought__EpkBCpYBAb4+9vuvfR8MJ8+mnoh+GD3Vv+G29puWnNIDJb15aKgWRISY6lCdMnD1Wv9qFOFWVyeDui3qMkEnpxSp0Ycv+z4vQ035M/n/87rf/i8umCtX3a8zZLKU0E60IYmFmFcEPni+n45YU+eZhXibzn47HmVPORMQ9wRkvKtgZadGBdOeQDY/ogonOLvAOqCvKjysuNJCiS50",
+      "content": "{\"ok\":true,\"id\":\"node:16\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_36b99bd95f484ea89bf97bf4fb83",
+      "content": "{\"ok\":true,\"id\":\"edge:24\",\"message\":null}"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_c895b50613814592a28e5f619386",
+      "content": "{\"ok\":true,\"id\":\"edge:25\",\"message\":null}"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_dc4fe9d704cc41d1bea2fbc73907__thought__Es8HCswHAb4+9vs1wc2aYVPDFKIBrbKR6OnG0J6v4JQHLesKNsn8BT67Bevd7aaCB+tRU8hPtxskpARnHvgEBa8qQ6Dgm7BS2dy1GQlBByUMmvHdZdmnpLbDw+Ct4MUgMjBExipu9IIQGCPAly7goxL0EBZaK470BBX40gb07K7FO+p3GmbaokTWmoxyaGBaYz1X8bx1UCd5UcksSEg4l6tDZFwKN9ewOhXUmOU5BSjGKhBVAILMm2f1zyzY0ySIJ2worL9N0pdy8byI9yIGxGqUTWbU9LFYiLD57iYh243l9DfwB23ia/GWyYGIy+BHG43SXjnFDVI/rWl2SsHFQhYGrhpT+aPARdjrJJOHbSmghXaKtkdyzt/mx4xYMMvcN8SNbOsvDmOTiw1fSETtxHwTTZQC8UcOT1JBQN5P18NGtQuXMAskYTvP+cyWtSaAn+13cScPx1znIzekXr2R8YkLmcxfLVIyMzRycfFaXGX4YxEKYbMx/mFQ2j1/gIqao02yoWtD14SKw4Ms6G985EplZ2E+2S4J0NbBsMVCVG81wTvrddzin5TJIJBinetE6RkXDuoINLJS/5H6s1TEZWYF3tMqZ79grgSwlD1WN9aPNTAItkpQ0Lriw+ZmQz4wBgt8NEr+YUJ9gRs4f44ZD7A3cGRF1HoXIfnaaZ6ASNld4eMRxb4LjTDqh9Qo9AODq9AgDdHFhnpYwJkExbF/Xe0D1L4boGltkOseGBHpHOT/6K7jsbOeygGhXrkWPFlyxY48rLWKcb0lhkUh/Lh/Y/Bu2Menve5pgfbDww4cnkI+BlwrCM0dsEmn9f23GB0WUGUiBSPPaZaBeGC3F3LEVnUAubRCTMiP7JetTFCtegmoZ+utWaixfYJA2zJMTS54fHCMsXOKtd65ufbDAtz6Lz62txzBCiZ0QYUGV3MG7btgm/9A+ePofuC5zswvxoSyQf1hLJs4Go/1susOj9uYf2cGjv3eAF6/y0ryt7CJJK6vfsqsw7NJBCYKy4p6TIqkFzbaMTr+hBdYmZjLLjt9Ubt6wUUpLZlL2T3AbrXnQgRjS+E+nfcZXGJMjUMMN49NYU/FNcDd8AQcUSrm+MZeE2hFMs3seMnEFYLetzTByJI1QCYTWRm4MTnkFgKFqUlAvNu/hS/4jIVoVFmtaAgqBIBNZeDxQSKGwusj3T2lU73euClnXCsgzCXjY8Z1JxRD4jlNuPtRn95lGH6TEAGpSl+IslAgxjJGzukR3t+c55EKeTZn0gjPncRkCuCAiSGmZpay9GjJ4vGiLNEfcsPFStOY",
+          "type": "function",
+          "function": {
+            "name": "complete_ingestion",
+            "arguments": "{\"summary\": \"Shania is in the midst of moving back to San Antonio while finishing her final undergraduate class. She explores the core paradox of her life: being highly expressive ('buku stupid expressive') yet feeling emotionally 'unseen' by those closest to her. She details the profound impact of her father's sudden death from cancer when she was 15—her 'glue' and 'number one fan'—and how his loss led her to find comfort in God. She expresses significant frustration with her family's culture of invalidating her feelings and the 'strong' label, which she perceives as a dismissal of her needs. She is actively using the podcast to practice the vulnerability she previously felt forced to hide.\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_dc4fe9d704cc41d1bea2fbc73907__thought__Es8HCswHAb4+9vs1wc2aYVPDFKIBrbKR6OnG0J6v4JQHLesKNsn8BT67Bevd7aaCB+tRU8hPtxskpARnHvgEBa8qQ6Dgm7BS2dy1GQlBByUMmvHdZdmnpLbDw+Ct4MUgMjBExipu9IIQGCPAly7goxL0EBZaK470BBX40gb07K7FO+p3GmbaokTWmoxyaGBaYz1X8bx1UCd5UcksSEg4l6tDZFwKN9ewOhXUmOU5BSjGKhBVAILMm2f1zyzY0ySIJ2worL9N0pdy8byI9yIGxGqUTWbU9LFYiLD57iYh243l9DfwB23ia/GWyYGIy+BHG43SXjnFDVI/rWl2SsHFQhYGrhpT+aPARdjrJJOHbSmghXaKtkdyzt/mx4xYMMvcN8SNbOsvDmOTiw1fSETtxHwTTZQC8UcOT1JBQN5P18NGtQuXMAskYTvP+cyWtSaAn+13cScPx1znIzekXr2R8YkLmcxfLVIyMzRycfFaXGX4YxEKYbMx/mFQ2j1/gIqao02yoWtD14SKw4Ms6G985EplZ2E+2S4J0NbBsMVCVG81wTvrddzin5TJIJBinetE6RkXDuoINLJS/5H6s1TEZWYF3tMqZ79grgSwlD1WN9aPNTAItkpQ0Lriw+ZmQz4wBgt8NEr+YUJ9gRs4f44ZD7A3cGRF1HoXIfnaaZ6ASNld4eMRxb4LjTDqh9Qo9AODq9AgDdHFhnpYwJkExbF/Xe0D1L4boGltkOseGBHpHOT/6K7jsbOeygGhXrkWPFlyxY48rLWKcb0lhkUh/Lh/Y/Bu2Menve5pgfbDww4cnkI+BlwrCM0dsEmn9f23GB0WUGUiBSPPaZaBeGC3F3LEVnUAubRCTMiP7JetTFCtegmoZ+utWaixfYJA2zJMTS54fHCMsXOKtd65ufbDAtz6Lz62txzBCiZ0QYUGV3MG7btgm/9A+ePofuC5zswvxoSyQf1hLJs4Go/1susOj9uYf2cGjv3eAF6/y0ryt7CJJK6vfsqsw7NJBCYKy4p6TIqkFzbaMTr+hBdYmZjLLjt9Ubt6wUUpLZlL2T3AbrXnQgRjS+E+nfcZXGJMjUMMN49NYU/FNcDd8AQcUSrm+MZeE2hFMs3seMnEFYLetzTByJI1QCYTWRm4MTnkFgKFqUlAvNu/hS/4jIVoVFmtaAgqBIBNZeDxQSKGwusj3T2lU73euClnXCsgzCXjY8Z1JxRD4jlNuPtRn95lGH6TEAGpSl+IslAgxjJGzukR3t+c55EKeTZn0gjPncRkCuCAiSGmZpay9GjJ4vGiLNEfcsPFStOY",
+      "content": "{\"ok\":true,\"id\":null,\"message\":null}"
+    }
+  ]
+}
