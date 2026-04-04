@@ -4,23 +4,19 @@ Mocks litellm.completion to avoid real LLM calls.
 Uses the "arakne_test" graph to avoid touching the main graph.
 """
 
-import json
-from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from falkordb import Graph
 
 from arakne.config import settings
-from arakne.models.canonical import Transcript
 from arakne.models.graph import FenceEntry, ProvenanceInput
 from arakne.models.traces import TouchedNode
-from arakne.store import canonical as store_canonical
 from arakne.store import graph as store_graph
 from arakne.store import themes as store_themes
 from arakne.store.client import get_graph
 from arakne.store.system import get_system, increment_counter, init_system
+from tests.conftest import mock_tool_response, store_test_transcript
 
 TEST_GRAPH = "arakne_test"
 
@@ -40,48 +36,6 @@ def graph() -> Graph:
     g.query("MATCH (t:Transcript) DELETE t")
     init_system(g)
     return g
-
-
-def _store_transcript(graph: Graph, text: str = SAMPLE_TRANSCRIPT) -> str:
-    rec_id = increment_counter(graph, "rec")
-    store_canonical.create_transcript(
-        graph,
-        Transcript(
-            id=rec_id,
-            audio_path="/dev/null",
-            timestamp=datetime.now(tz=timezone.utc),
-            text=text,
-        ),
-    )
-    return rec_id
-
-
-def _mock_response(tool_name: str, args: dict[str, Any], call_id: str = "tc-1") -> MagicMock:
-    tc = MagicMock()
-    tc.id = call_id
-    tc.function.name = tool_name
-    tc.function.arguments = json.dumps(args)
-
-    msg = MagicMock()
-    msg.tool_calls = [tc]
-    msg.content = None
-    msg.reasoning_content = None
-
-    choice = MagicMock()
-    choice.message = msg
-
-    usage = MagicMock()
-    usage.prompt_tokens = 100
-    usage.completion_tokens = 50
-    usage.total_tokens = 150
-    usage.completion_tokens_details = None
-
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage = usage
-    return resp
-
-
 # ---------------------------------------------------------------------------
 # run_ingestion
 # ---------------------------------------------------------------------------
@@ -89,7 +43,7 @@ def _mock_response(tool_name: str, args: dict[str, Any], call_id: str = "tc-1") 
 
 def test_ingest_into_empty_graph(graph: Graph) -> None:
     """Agent creates a node then calls complete_ingestion; node appears in graph."""
-    rec_id = _store_transcript(graph)
+    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
 
     prov = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=14)
     create_args = {
@@ -100,14 +54,14 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
     }
     completion_args = {"summary": "Ingested a transcript about career anxiety."}
 
-    create_resp = _mock_response("create_node", create_args, "tc-1")
-    done_resp = _mock_response("complete_ingestion", completion_args, "tc-2")
+    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    create_resp = mock_tool_response("create_node", create_args, "tc-1", usage=usage)
+    done_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage)
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
         patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
-        patch("arakne.modes.ingestion.save_trace"),
     ):
         from arakne.modes.ingestion import run_ingestion
 
@@ -129,7 +83,7 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
 
 def test_ingest_updates_existing_node(graph: Graph) -> None:
     """Agent calls update_node; log count increments."""
-    rec_id = _store_transcript(graph)
+    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
 
     node_id = increment_counter(graph, "node")
     prov = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=10)
@@ -144,14 +98,14 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
     }
     completion_args = {"summary": "Updated career anxiety node."}
 
-    update_resp = _mock_response("update_node", update_args, "tc-1")
-    done_resp = _mock_response("complete_ingestion", completion_args, "tc-2")
+    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    update_resp = mock_tool_response("update_node", update_args, "tc-1", usage=usage)
+    done_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage)
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
         patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[update_resp, done_resp]),
-        patch("arakne.modes.ingestion.save_trace"),
     ):
         from arakne.modes.ingestion import run_ingestion
 
@@ -168,7 +122,7 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
 
 def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
     """Agent calls create_node without provenance; runner captures tool error and fails."""
-    rec_id = _store_transcript(graph)
+    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
 
     bad_args = {
         "aliases": ["concept"],
@@ -176,13 +130,16 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
         "note": "No provenance.",
         # provenance omitted — will fail validation
     }
-    bad_resp = _mock_response("create_node", bad_args)
+    bad_resp = mock_tool_response(
+        "create_node",
+        bad_args,
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+    )
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
         patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
-        patch("arakne.modes.ingestion.save_trace"),
     ):
         from arakne.modes.ingestion import run_ingestion
 
@@ -194,15 +151,18 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
 
 def test_ingest_no_writes_skips_theme(graph: Graph) -> None:
     """Agent calls complete_ingestion without any writes; theme mode is not triggered."""
-    rec_id = _store_transcript(graph)
+    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
 
-    done_resp = _mock_response("complete_ingestion", {"summary": "Nothing to change."})
+    done_resp = mock_tool_response(
+        "complete_ingestion",
+        {"summary": "Nothing to change."},
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+    )
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
         patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
-        patch("arakne.modes.ingestion.save_trace"),
     ):
         from arakne.modes.ingestion import run_ingestion
 
@@ -215,10 +175,7 @@ def test_ingest_no_writes_skips_theme(graph: Graph) -> None:
 
 def test_ingest_missing_transcript_raises(graph: Graph) -> None:
     """run_ingestion raises ValueError for a non-existent transcript id."""
-    with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.ingestion.save_trace"),
-    ):
+    with patch("arakne.modes.ingestion.get_graph", return_value=graph):
         from arakne.modes.ingestion import run_ingestion
 
         with pytest.raises(ValueError, match="not found"):
@@ -226,14 +183,17 @@ def test_ingest_missing_transcript_raises(graph: Graph) -> None:
 
 
 def test_ingest_prompt_humanizes_recorded_timestamp(graph: Graph) -> None:
-    rec_id = _store_transcript(graph)
-    done_resp = _mock_response("complete_ingestion", {"summary": "Nothing to change."})
+    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
+    done_resp = mock_tool_response(
+        "complete_ingestion",
+        {"summary": "Nothing to change."},
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+    )
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
         patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp) as mock_completion,
-        patch("arakne.modes.ingestion.save_trace"),
     ):
         from arakne.modes.ingestion import run_ingestion
 
@@ -252,7 +212,7 @@ def test_ingest_prompt_humanizes_recorded_timestamp(graph: Graph) -> None:
 
 def test_theme_update_creates_theme(graph: Graph) -> None:
     """Theme agent calls create_theme then complete_theme_update; Theme node and priority_order persist."""
-    rec_id = _store_transcript(graph)
+    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
     node_id = increment_counter(graph, "node")
     prov = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=10)
     store_graph.create_node(graph, ["job change"], "Career decision node.", "init", prov, node_id)
@@ -268,13 +228,13 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
         "priority_order": ["career-direction"],
     }
 
-    create_resp = _mock_response("create_theme", create_theme_args, "tc-1")
-    done_resp = _mock_response("complete_theme_update", completion_args, "tc-2")
+    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    create_resp = mock_tool_response("create_theme", create_theme_args, "tc-1", usage=usage)
+    done_resp = mock_tool_response("complete_theme_update", completion_args, "tc-2", usage=usage)
 
     with (
         patch("arakne.modes.theme.get_graph", return_value=graph),
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
-        patch("arakne.modes.theme.save_trace"),
     ):
         from arakne.modes.theme import run_theme_update
 
@@ -294,12 +254,15 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
 def test_theme_update_empty_map_runs(graph: Graph) -> None:
     """Theme agent can run with no existing themes."""
     completion_args = {"updated_themes": [], "priority_order": []}
-    done_resp = _mock_response("complete_theme_update", completion_args)
+    done_resp = mock_tool_response(
+        "complete_theme_update",
+        completion_args,
+        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+    )
 
     with (
         patch("arakne.modes.theme.get_graph", return_value=graph),
         patch("litellm.completion", return_value=done_resp),
-        patch("arakne.modes.theme.save_trace"),
     ):
         from arakne.modes.theme import run_theme_update
 

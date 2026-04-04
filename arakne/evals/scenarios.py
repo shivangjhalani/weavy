@@ -1,30 +1,44 @@
 """
-Eval scenario format — typed scenario definitions for harness eval runs.
-Implemented in Phase 9.
+Eval scenarios — thin wrappers around Langfuse dataset items.
+
+Datasets live in Langfuse. Use the Langfuse UI or API to create datasets and
+add test items. This module provides helpers to fetch and run them.
 """
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-class DeterministicAssertion(BaseModel):
-    check: str
-    expected: Any
+class EvalItem(BaseModel):
+    """A single eval test case, loaded from a Langfuse dataset item."""
+
+    item_id: str
+    dataset_name: str
+    mode: Literal["ingestion", "query", "theme"]
+    input: dict[str, Any]
+    expected_output: dict[str, Any] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    dataset_item: Any | None = Field(default=None, exclude=True, repr=False)
 
 
-class JudgeRubric(BaseModel):
-    dimension: str
-    description: str
+def load_dataset(dataset_name: str) -> list[EvalItem]:
+    """Fetch all items from a Langfuse dataset and return as EvalItem list."""
+    from arakne.langfuse_client import get_langfuse
 
-
-class Scenario(BaseModel):
-    id: str
-    mode: Literal["ingestion", "query", "theme", "chat"]
-    description: str
-    canonical_fixtures: list[str]  # transcript/chat ids or file paths
-    initial_graph_state: dict[str, Any] | None = None
-    user_question: str | None = None
-    expected_behaviors: list[str] = []
-    deterministic_assertions: list[DeterministicAssertion] = []
-    judge_rubrics: list[JudgeRubric] = []
+    dataset = get_langfuse().get_dataset(dataset_name)
+    items: list[EvalItem] = []
+    for item in dataset.items:
+        input_payload = item.input or {}
+        items.append(
+            EvalItem(
+                item_id=item.id,
+                dataset_name=dataset_name,
+                mode=input_payload.get("mode", "query"),
+                input=input_payload,
+                expected_output=item.expected_output,
+                metadata=item.metadata or {},
+                dataset_item=item,
+            )
+        )
+    return items

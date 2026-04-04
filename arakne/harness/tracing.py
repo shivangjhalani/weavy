@@ -1,174 +1,240 @@
 """
-Run trace helpers — create, update, and persist RunTrace objects.
-Also provides EventTracer: a JSONL event stream written live during a run.
+Run trace helpers — Langfuse v4-backed tracer and in-memory RunTrace state management.
+
+RunTracer: wraps Langfuse observations for a single agent run. Creates a root span
+with nested turn spans and generation/tool child observations.
+
+Hierarchy:
+    root-span (ingestion-run / query-run / theme-run)
+    └── turn-1 span
+        ├── llm generation  (created BEFORE litellm call for accurate timing)
+        ├── tool:search_graph span
+        └── tool:create_node span
+    └── turn-2 span
+        ├── llm generation
+        └── tool:complete_ingestion span
+
+The in-memory RunTrace (new_trace / record_turn / finalize_trace) remains the
+authoritative in-process state container for touched_nodes, completion_payload,
+status, and turn records. It is NOT persisted to disk — Langfuse is the store.
 """
 
-import json
-import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from arakne.models.traces import RunTrace, TouchedEdge, TouchedNode, Turn
+from arakne.config import settings
+from arakne.models.traces import RunTrace, TouchedEdge, TouchedNode, TurnUsage
 
 
 def _truncate(s: str, n: int = 120) -> str:
     return s if len(s) <= n else s[:n] + "…"
 
 
-def _summarize_messages(messages: list[dict[str, Any]]) -> dict[str, Any]:
-    roles = [str(m.get("role", "unknown")) for m in messages]
-    total_chars = sum(len(str(m.get("content") or "")) for m in messages)
-
-    recent_messages: list[dict[str, str]] = []
-    for msg in messages[-3:]:
-        recent_messages.append({
-            "role": str(msg.get("role", "unknown")),
-            "content_preview": _truncate(str(msg.get("content") or ""), 160),
-        })
-
-    return {
-        "message_count": len(messages),
-        "roles": roles,
-        "content_chars": total_chars,
-        "recent_messages": recent_messages,
-    }
+# ---------------------------------------------------------------------------
+# Langfuse v4-backed RunTracer
+# ---------------------------------------------------------------------------
 
 
-class EventTracer:
-    """Live JSONL event tracer + console printer.
+class RunTracer:
+    """One Langfuse trace per agent run.
 
-    Writes pretty-printed JSON blocks to runs/<run_id>.jsonl (one blank-line-separated
-    block per event, flushed immediately — readable with `tail -f`).
-    Also prints a compact human-readable line to stdout for each event.
-
-    Event sequence:
-        run_start    — fired once before the loop (mode, input_summary, prompt metadata)
-        llm_turn     — model responded (compact input summary, reasoning, text, usage)
-        tool_call    — tool about to execute (turn, tool_call_id, name, args)
-        tool_result  — tool returned (turn, tool_call_id, name, result, duration_ms)
-        tool_error   — tool failed (turn, tool_call_id, name, error)
-        run_end      — final event (status, total_usage, completion payload, touched entities)
+    Lifecycle (called from runner.py):
+        tracer = RunTracer(run_id, mode, input_summary)
+        tracer.start_turn(n, message_count)
+        tracer.prepare_llm_call()         # before litellm.completion()
+        # ... call litellm.completion() ...
+        tracer.record_llm_response(...)   # after litellm.completion()
+        tracer.record_tool_call(...)      # per tool
+        tracer.end_turn(text_content)
+        # ... repeat for each turn ...
+        tracer.finalize(status, ...)
     """
 
-    def __init__(self, run_id: str, runs_dir: str = "runs") -> None:
-        os.makedirs(runs_dir, exist_ok=True)
-        self.path = os.path.join(runs_dir, f"{run_id}.jsonl")
-
-    def _emit(self, event: str, payload: dict[str, Any]) -> None:
-        record = {
-            "event": event,
-            "ts": datetime.now(tz=timezone.utc).isoformat(),
-            **payload,
-        }
-        with open(self.path, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, default=str, indent=2) + "\n\n")
-            fh.flush()
-
-    def on_run_start(
+    def __init__(
         self,
+        run_id: str,
         mode: str,
         input_summary: str,
-        prompt_metadata: dict[str, Any],
+        session_id: str | None = None,
     ) -> None:
-        self._emit("run_start", {
-            "mode": mode,
-            "input_summary": input_summary,
-            "prompt_metadata": prompt_metadata,
-        })
+        from arakne.langfuse_client import get_langfuse
+
+        self._lf = get_langfuse()
+        self._root = self._lf.start_observation(
+            trace_context={"trace_id": run_id},
+            name=f"{mode}-run",
+            as_type="span",
+            input=input_summary,
+            metadata={"mode": mode, "session_id": session_id},
+        )
+        self._trace_id = run_id
+        self._current_turn_span: Any = None
+        self._current_generation: Any = None
         print(f"[run_start] mode={mode} | {input_summary}")
 
-    def on_llm_turn(
+    def get_trace_id(self) -> str:
+        return self._trace_id
+
+    # ---- Turn lifecycle ----
+
+    def start_turn(self, turn_number: int, message_count: int) -> None:
+        self._current_turn_span = self._root.start_observation(
+            name=f"turn-{turn_number}",
+            as_type="span",
+            input={"message_count": message_count},
+        )
+
+    def end_turn(self, text_content: str | None) -> None:
+        if self._current_generation is not None:
+            self._current_generation.end()
+            self._current_generation = None
+        if self._current_turn_span is not None:
+            self._current_turn_span.update(output=text_content)
+            self._current_turn_span.end()
+            self._current_turn_span = None
+
+    # ---- LLM call (created before the call for accurate timing) ----
+
+    def prepare_llm_call(self) -> None:
+        """Open a generation span immediately before litellm.completion()."""
+        if self._current_turn_span is None:
+            return
+        self._current_generation = self._current_turn_span.start_observation(
+            name="llm",
+            as_type="generation",
+            model=settings.GEMINI_MODEL,
+            model_parameters={"reasoning_effort": settings.REASONING_EFFORT},
+        )
+
+    def record_llm_response(
         self,
-        turn: int,
+        turn_number: int,
         input_messages: list[dict[str, Any]],
-        reasoning: str | None,
-        text: str | None,
-        tool_call_count: int,
-        usage: dict[str, int],
+        text_content: str | None,
+        reasoning_content: str | None,
+        tool_calls: list[dict[str, Any]],
+        usage: TurnUsage,
     ) -> None:
-        self._emit("llm_turn", {
-            "turn": turn,
-            "input_summary": _summarize_messages(input_messages),
-            "reasoning": reasoning,
-            "text": text,
-            "tool_call_count": tool_call_count,
-            "usage": usage,
-        })
-        u = usage
-        token_info = f"prompt={u['prompt_tokens']} completion={u['completion_tokens']} reasoning={u['reasoning_tokens']} total={u['total_tokens']}"
-        if reasoning:
-            print(f"\n[T{turn}] 💭 {_truncate(reasoning)}")
-        elif text:
-            print(f"\n[T{turn}] 💬 {_truncate(text)}")
+        """Update the open generation span with response data and end it."""
+        if self._current_generation is None:
+            return
+
+        output: dict[str, Any] = {}
+        if text_content:
+            output["content"] = text_content
+        if reasoning_content:
+            output["reasoning"] = reasoning_content
+        if tool_calls:
+            output["tool_calls"] = tool_calls
+
+        self._current_generation.update(
+            input=input_messages,
+            output=output,
+            usage_details={
+                "input": usage.prompt_tokens,
+                "output": usage.completion_tokens,
+                "total": usage.total_tokens,
+            },
+            metadata={"reasoning_tokens": usage.reasoning_tokens},
+        )
+        self._current_generation.end()
+        self._current_generation = None
+
+        # Console output
+        token_info = (
+            f"prompt={usage.prompt_tokens} completion={usage.completion_tokens}"
+            f" reasoning={usage.reasoning_tokens} total={usage.total_tokens}"
+        )
+        if reasoning_content:
+            print(f"\n[T{turn_number}] 💭 {_truncate(reasoning_content)}")
+        elif text_content:
+            print(f"\n[T{turn_number}] 💬 {_truncate(text_content)}")
         else:
-            print(f"\n[T{turn}] ▶ (no text, {tool_call_count} tool call(s))")
+            print(f"\n[T{turn_number}] ▶ ({len(tool_calls)} tool call(s))")
         print(f"       tokens: {token_info}")
 
-    def on_tool_call(
-        self, turn: int, tool_call_id: str, name: str, args: dict[str, Any]
-    ) -> None:
-        self._emit("tool_call", {
-            "turn": turn,
-            "tool_call_id": tool_call_id,
-            "tool": name,
-            "args": args,
-        })
-        args_short = _truncate(json.dumps(args, separators=(",", ":")))
-        print(f"[T{turn}] → {name}#{tool_call_id}({args_short})")
+    # ---- Tool calls ----
 
-    def on_tool_result(
+    def record_tool_call(
         self,
-        turn: int,
+        turn_number: int,
         tool_call_id: str,
         name: str,
+        args: dict[str, Any],
         result: str,
         duration_ms: float,
     ) -> None:
-        self._emit("tool_result", {
-            "turn": turn,
-            "tool_call_id": tool_call_id,
-            "tool": name,
-            "result": result,
-            "duration_ms": round(duration_ms, 1),
-        })
-        print(f"[T{turn}] ← {name}#{tool_call_id} ({duration_ms:.0f}ms): {_truncate(result, 80)}")
+        if self._current_turn_span is None:
+            return
+        span = self._current_turn_span.start_observation(
+            name=f"tool:{name}",
+            as_type="tool",
+            input=args,
+            metadata={"tool_call_id": tool_call_id, "duration_ms": round(duration_ms, 1)},
+        )
+        span.update(output=result)
+        span.end()
+        print(f"[T{turn_number}] ← {name}#{tool_call_id} ({duration_ms:.0f}ms): {_truncate(result, 80)}")
 
-    def on_tool_error(
-        self, turn: int, tool_call_id: str | None, name: str, error: str
+    def record_tool_error(
+        self,
+        turn_number: int,
+        tool_call_id: str | None,
+        name: str,
+        args: dict[str, Any],
+        error: str,
     ) -> None:
-        self._emit("tool_error", {
-            "turn": turn,
-            "tool_call_id": tool_call_id,
-            "tool": name,
-            "error": error,
-        })
+        if self._current_turn_span is None:
+            return
+        span = self._current_turn_span.start_observation(
+            name=f"tool:{name}",
+            as_type="tool",
+            input=args,
+            level="ERROR",
+            status_message=error,
+            metadata={"tool_call_id": tool_call_id},
+        )
+        span.end()
         suffix = f"#{tool_call_id}" if tool_call_id else ""
-        print(f"[T{turn}] ✗ {name}{suffix}: {error}")
+        print(f"[T{turn_number}] ✗ {name}{suffix}: {error}")
 
-    def on_run_end(
+    # ---- Run completion ----
+
+    def finalize(
         self,
         status: str,
         total_turns: int,
-        total_usage: dict[str, int],
+        total_usage: TurnUsage,
+        completion_payload: dict[str, Any] | None,
+        touched_nodes: list[TouchedNode],
+        touched_edges: list[TouchedEdge],
         error: str | None = None,
         context_limit: int | None = None,
-        completion_payload: dict[str, Any] | None = None,
-        touched_nodes: list[TouchedNode] | None = None,
-        touched_edges: list[TouchedEdge] | None = None,
     ) -> None:
-        self._emit("run_end", {
-            "status": status,
-            "total_turns": total_turns,
-            "total_usage": total_usage,
-            "context_limit": context_limit,
-            "completion_payload": completion_payload,
-            "touched_nodes": [node.model_dump() for node in (touched_nodes or [])],
-            "touched_edges": [edge.model_dump() for edge in (touched_edges or [])],
-            "error": error,
-        })
-        u = total_usage
+        # Ensure any open spans are closed
+        if self._current_generation is not None:
+            self._current_generation.end()
+            self._current_generation = None
+        if self._current_turn_span is not None:
+            self._current_turn_span.end()
+            self._current_turn_span = None
+
+        self._root.set_trace_io(output=completion_payload)
+        self._root.update(
+            metadata={
+                "status": status,
+                "total_turns": total_turns,
+                "touched_nodes": len(touched_nodes),
+                "touched_edges": len(touched_edges),
+                "error": error,
+            },
+        )
+        self._root.end()
+        self._lf.flush()
+
+        # Console summary
         status_icon = "✓" if status == "completed" else "✗"
-        prompt = u["prompt_tokens"]
+        prompt = total_usage.prompt_tokens
         if context_limit:
             pct = prompt / context_limit * 100
             ctx_str = f"{prompt:,} / {context_limit:,} ({pct:.1f}%)"
@@ -176,11 +242,16 @@ class EventTracer:
             ctx_str = f"{prompt:,}"
         print(
             f"\n[{status_icon}] {status} | {total_turns} turn(s)"
-            f"\n    context: {ctx_str} | output: {u['completion_tokens']:,}"
-            f" | reasoning: {u['reasoning_tokens']:,}"
+            f"\n    context: {ctx_str} | output: {total_usage.completion_tokens:,}"
+            f" | reasoning: {total_usage.reasoning_tokens:,}"
         )
         if error:
             print(f"    error: {error}")
+
+
+# ---------------------------------------------------------------------------
+# In-memory RunTrace helpers (state container — not persisted)
+# ---------------------------------------------------------------------------
 
 
 def new_trace(
@@ -195,7 +266,7 @@ def new_trace(
     )
 
 
-def record_turn(trace: RunTrace, turn: Turn) -> None:
+def record_turn(trace: RunTrace, turn: Any) -> None:
     trace.turns.append(turn)
     trace.total_usage.prompt_tokens += turn.usage.prompt_tokens
     trace.total_usage.completion_tokens += turn.usage.completion_tokens
@@ -216,12 +287,3 @@ def finalize_trace(
     if error is not None:
         trace.error = error
     return trace
-
-
-def save_trace(trace: RunTrace, run_dir: str) -> str:
-    """Persist trace as JSON to run_dir. Returns file path."""
-    os.makedirs(run_dir, exist_ok=True)
-    path = os.path.join(run_dir, f"{trace.run_id}.json")
-    with open(path, "w") as f:
-        f.write(trace.model_dump_json(indent=2))
-    return path

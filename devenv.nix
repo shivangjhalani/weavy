@@ -48,6 +48,18 @@
           --appendonly yes
       '';
     };
+
+    langfuse = {
+      exec = ''
+        cleanup() {
+          docker compose -f "${config.devenv.root}/docker-compose.langfuse.yml" -p langfuse-dev down
+        }
+        trap cleanup EXIT INT TERM
+
+        docker compose -f "${config.devenv.root}/docker-compose.langfuse.yml" -p langfuse-dev down 2>/dev/null || true
+        docker compose -f "${config.devenv.root}/docker-compose.langfuse.yml" -p langfuse-dev up --pull always
+      '';
+    };
   };
 
   enterShell = ''

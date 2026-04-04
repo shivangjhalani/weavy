@@ -1,10 +1,10 @@
 """
 Agent harness runner — one loop engine shared by ingestion, query, and theme modes.
-Implemented in Phase 4.
 """
 
 import json
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Literal
 
 import litellm
@@ -12,36 +12,62 @@ from falkordb import Graph
 
 from arakne.config import settings
 from arakne.harness import registry as reg
-from arakne.harness.tracing import EventTracer, finalize_trace, new_trace, record_turn
+from arakne.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
 from arakne.models.traces import RunTrace, ToolCall, Turn, TurnUsage
 
 _MAX_COMPLETION_NUDGES = 1
 
 
-def _usage_dict(trace: RunTrace) -> dict[str, int]:
-    u = trace.total_usage
-    return {
-        "prompt_tokens": u.prompt_tokens,
-        "completion_tokens": u.completion_tokens,
-        "reasoning_tokens": u.reasoning_tokens,
-        "total_tokens": u.total_tokens,
-    }
+@lru_cache(maxsize=None)
+def _get_context_limit(model: str) -> int | None:
+    try:
+        info = litellm.get_model_info(model)
+    except Exception:
+        return None
+    return info.get("max_input_tokens") or None
 
 
-def _build_prompt_metadata(
-    system_prompt: str,
-    initial_messages: list[dict[str, Any]],
-    allowed_tools: list[str],
-) -> dict[str, Any]:
-    return {
-        "model": settings.GEMINI_MODEL,
-        "reasoning_effort": settings.REASONING_EFFORT,
-        "allowed_tools": allowed_tools,
-        "system_prompt_chars": len(system_prompt),
-        "initial_message_count": len(initial_messages),
-        "initial_roles": [str(m.get("role", "unknown")) for m in initial_messages],
-        "initial_content_chars": sum(len(str(m.get("content") or "")) for m in initial_messages),
-    }
+def _finalize_failed_run(
+    trace: RunTrace,
+    tracer: RunTracer,
+    turn_number: int,
+    error: str,
+    context_limit: int | None,
+    turn: Turn | None = None,
+) -> RunTrace:
+    if turn is not None:
+        record_turn(trace, turn)
+    tracer.end_turn(None)
+    finalize_trace(trace, "failed", error=error)
+    tracer.finalize(
+        "failed",
+        turn_number,
+        trace.total_usage,
+        None,
+        trace.touched_nodes,
+        trace.touched_edges,
+        error=error,
+        context_limit=context_limit,
+    )
+    return trace
+
+
+def _append_tool_call_error(
+    turn: Turn,
+    tool_name: str,
+    args: dict[str, Any],
+    error: str,
+    called_at: datetime,
+) -> None:
+    turn.tool_calls.append(
+        ToolCall(
+            tool_name=tool_name,
+            args=args,
+            result=None,
+            error=error,
+            called_at=called_at,
+        )
+    )
 
 
 def run(
@@ -51,6 +77,7 @@ def run(
     allowed_tools: list[str],
     run_context: dict[str, Any],
     graph: Graph,
+    session_id: str | None = None,
 ) -> RunTrace:
     """
     Execute an agentic loop until the mode's completion tool is called.
@@ -58,6 +85,7 @@ def run(
     """
     input_summary = run_context.get("input_summary", "")
     trace = new_trace(mode, input_summary)
+    tracer = RunTracer(trace.run_id, mode, input_summary, session_id=session_id)
     ctx = reg.ToolContext(graph=graph, trace=trace)
 
     messages: list[dict[str, Any]] = [
@@ -67,28 +95,18 @@ def run(
     tool_definitions = reg.get_tool_definitions(allowed_tools)
     turn_number = 0
     completion_nudges = 0
-    tracer = EventTracer(trace.run_id)
-    tracer.on_run_start(
-        mode,
-        input_summary,
-        _build_prompt_metadata(system_prompt, initial_messages, allowed_tools),
-    )
 
-    context_limit: int | None = None
-    try:
-        info = litellm.get_model_info(settings.GEMINI_MODEL)
-        context_limit = info.get("max_input_tokens") or None
-    except Exception:
-        pass
+    context_limit = _get_context_limit(settings.GEMINI_MODEL)
 
     while True:
         turn_number += 1
         turn_ts = datetime.now(tz=timezone.utc)
-        # Snapshot the full message list that is about to be sent to the model.
-        # This is the complete conversation context at this point in the loop.
         input_messages_snapshot = [dict(m) for m in messages]
 
+        tracer.start_turn(turn_number, len(messages))
+
         # --- Call model ---
+        tracer.prepare_llm_call()
         try:
             response = litellm.completion(
                 model=settings.GEMINI_MODEL,
@@ -99,37 +117,40 @@ def run(
             )
         except Exception as e:
             err = f"Model call failed: {e}"
-            tracer.on_run_end(
-                "failed",
-                turn_number,
-                _usage_dict(trace),
-                error=err,
-                context_limit=context_limit,
-                completion_payload=trace.completion_payload,
-                touched_nodes=trace.touched_nodes,
-                touched_edges=trace.touched_edges,
+            return _finalize_failed_run(
+                trace, tracer, turn_number, err, context_limit
             )
-            finalize_trace(trace, "failed", error=err)
-            return trace
-
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None) or []
 
-        # --- Build turn usage from response ---
-        usage = getattr(response, "usage", None)
+        # --- Build turn usage ---
+        usage_raw = getattr(response, "usage", None)
         turn_usage = TurnUsage()
-        if usage:
-            turn_usage.prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            turn_usage.completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-            turn_usage.total_tokens = getattr(usage, "total_tokens", 0) or 0
-            details = getattr(usage, "completion_tokens_details", None)
+        if usage_raw:
+            turn_usage.prompt_tokens = getattr(usage_raw, "prompt_tokens", 0) or 0
+            turn_usage.completion_tokens = getattr(usage_raw, "completion_tokens", 0) or 0
+            turn_usage.total_tokens = getattr(usage_raw, "total_tokens", 0) or 0
+            details = getattr(usage_raw, "completion_tokens_details", None)
             if details and isinstance(details, dict):
                 turn_usage.reasoning_tokens = details.get("reasoning_tokens", 0) or 0
             elif details:
                 turn_usage.reasoning_tokens = getattr(details, "reasoning_tokens", 0) or 0
 
-        # --- Start building this turn ---
         reasoning = getattr(message, "reasoning_content", None)
+        serialized_tool_calls = [
+            {"id": tc.id, "name": tc.function.name, "args": tc.function.arguments}
+            for tc in tool_calls
+        ]
+
+        tracer.record_llm_response(
+            turn_number=turn_number,
+            input_messages=input_messages_snapshot,
+            text_content=message.content,
+            reasoning_content=reasoning,
+            tool_calls=serialized_tool_calls,
+            usage=turn_usage,
+        )
+
         turn = Turn(
             turn_number=turn_number,
             input_messages=input_messages_snapshot,
@@ -139,26 +160,11 @@ def run(
             timestamp=turn_ts,
         )
 
-        tracer.on_llm_turn(
-            turn=turn_number,
-            input_messages=input_messages_snapshot,
-            reasoning=reasoning,
-            text=message.content,
-            tool_call_count=len(tool_calls),
-            usage={
-                "prompt_tokens": turn_usage.prompt_tokens,
-                "completion_tokens": turn_usage.completion_tokens,
-                "reasoning_tokens": turn_usage.reasoning_tokens,
-                "total_tokens": turn_usage.total_tokens,
-            },
-        )
-
         if not tool_calls:
             record_turn(trace, turn)
-            # If the model produced text without calling a completion tool,
-            # nudge it once to use the proper termination signal.
             if message.content and completion_nudges < _MAX_COMPLETION_NUDGES:
                 completion_nudges += 1
+                tracer.end_turn(message.content)
                 messages.append({"role": "assistant", "content": message.content})
                 messages.append({
                     "role": "user",
@@ -171,25 +177,11 @@ def run(
                 continue
 
             err = "Model stopped without calling a completion tool."
-            tracer.on_run_end(
-                status="failed",
-                total_turns=turn_number,
-                total_usage={
-                    "prompt_tokens": trace.total_usage.prompt_tokens + turn_usage.prompt_tokens,
-                    "completion_tokens": trace.total_usage.completion_tokens + turn_usage.completion_tokens,
-                    "reasoning_tokens": trace.total_usage.reasoning_tokens + turn_usage.reasoning_tokens,
-                    "total_tokens": trace.total_usage.total_tokens + turn_usage.total_tokens,
-                },
-                error=err,
-                context_limit=context_limit,
-                completion_payload=trace.completion_payload,
-                touched_nodes=trace.touched_nodes,
-                touched_edges=trace.touched_edges,
+            return _finalize_failed_run(
+                trace, tracer, turn_number, err, context_limit
             )
-            finalize_trace(trace, "failed", error=err)
-            return trace
 
-        # Append assistant message (with tool_calls) to conversation history
+        # Append assistant message with tool_calls to conversation history
         messages.append(
             {
                 "role": "assistant",
@@ -218,24 +210,11 @@ def run(
             entry = reg.REGISTRY.get(tool_name)
             if entry is None:
                 err = f"Unknown tool '{tool_name}'."
-                tracer.on_tool_error(turn_number, tool_call_id, tool_name, err)
-                tc_record = ToolCall(
-                    tool_name=tool_name, args={}, result=None, error=err, called_at=called_at
+                tracer.record_tool_error(turn_number, tool_call_id, tool_name, {}, err)
+                _append_tool_call_error(turn, tool_name, {}, err, called_at)
+                return _finalize_failed_run(
+                    trace, tracer, turn_number, err, context_limit, turn=turn
                 )
-                turn.tool_calls.append(tc_record)
-                record_turn(trace, turn)
-                tracer.on_run_end(
-                    "failed",
-                    turn_number,
-                    _usage_dict(trace),
-                    error=err,
-                    context_limit=context_limit,
-                    completion_payload=trace.completion_payload,
-                    touched_nodes=trace.touched_nodes,
-                    touched_edges=trace.touched_edges,
-                )
-                finalize_trace(trace, "failed", error=err)
-                return trace
 
             # Parse args
             args_dict: dict[str, Any] = {}
@@ -244,70 +223,35 @@ def run(
                 params = entry.input_model(**args_dict)
             except Exception as e:
                 err = f"Invalid arguments for '{tool_name}': {e}"
-                tracer.on_tool_error(turn_number, tool_call_id, tool_name, err)
-                tc_record = ToolCall(
-                    tool_name=tool_name,
-                    args=args_dict,
-                    result=None,
-                    error=err,
-                    called_at=called_at,
+                tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
+                _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
+                return _finalize_failed_run(
+                    trace, tracer, turn_number, err, context_limit, turn=turn
                 )
-                turn.tool_calls.append(tc_record)
-                record_turn(trace, turn)
-                tracer.on_run_end(
-                    "failed",
-                    turn_number,
-                    _usage_dict(trace),
-                    error=err,
-                    context_limit=context_limit,
-                    completion_payload=trace.completion_payload,
-                    touched_nodes=trace.touched_nodes,
-                    touched_edges=trace.touched_edges,
-                )
-                finalize_trace(trace, "failed", error=err)
-                return trace
 
             # Execute tool
-            tracer.on_tool_call(turn_number, tool_call_id, tool_name, args_dict)
             t0 = datetime.now(tz=timezone.utc).timestamp()
             try:
                 result = entry.fn(params, ctx)
             except Exception as e:
                 err = f"Tool '{tool_name}' raised: {e}"
                 duration_ms = (datetime.now(tz=timezone.utc).timestamp() - t0) * 1000
-                tracer.on_tool_error(turn_number, tool_call_id, tool_name, err)
-                tc_record = ToolCall(
-                    tool_name=tool_name,
-                    args=args_dict,
-                    result=None,
-                    error=err,
-                    called_at=called_at,
+                tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
+                _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
+                return _finalize_failed_run(
+                    trace, tracer, turn_number, err, context_limit, turn=turn
                 )
-                turn.tool_calls.append(tc_record)
-                record_turn(trace, turn)
-                tracer.on_run_end(
-                    "failed",
-                    turn_number,
-                    _usage_dict(trace),
-                    error=err,
-                    context_limit=context_limit,
-                    completion_payload=trace.completion_payload,
-                    touched_nodes=trace.touched_nodes,
-                    touched_edges=trace.touched_edges,
-                )
-                finalize_trace(trace, "failed", error=err)
-                return trace
 
             duration_ms = (datetime.now(tz=timezone.utc).timestamp() - t0) * 1000
-
-            # Serialize result for conversation history
             result_str = (
                 result.model_dump_json()
                 if hasattr(result, "model_dump_json")
                 else json.dumps(result)
             )
 
-            tracer.on_tool_result(turn_number, tool_call_id, tool_name, result_str, duration_ms)
+            tracer.record_tool_call(
+                turn_number, tool_call_id, tool_name, args_dict, result_str, duration_ms
+            )
             messages.append(
                 {"role": "tool", "tool_call_id": tool_call_id, "content": result_str}
             )
@@ -324,16 +268,14 @@ def run(
                 record_turn(trace, turn)
                 trace.conversation = [m for m in messages if m["role"] != "system"]
                 finalize_trace(trace, "completed")
-                tracer.on_run_end(
-                    "completed",
-                    turn_number,
-                    _usage_dict(trace),
+                tracer.end_turn(message.content)
+                tracer.finalize(
+                    "completed", turn_number, trace.total_usage,
+                    trace.completion_payload, trace.touched_nodes, trace.touched_edges,
                     context_limit=context_limit,
-                    completion_payload=trace.completion_payload,
-                    touched_nodes=trace.touched_nodes,
-                    touched_edges=trace.touched_edges,
                 )
                 return trace
 
-        # Turn complete (no completion tool yet) — record and loop
+        # Turn complete — record and loop
+        tracer.end_turn(message.content)
         record_turn(trace, turn)

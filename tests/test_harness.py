@@ -4,39 +4,37 @@ Runner tests mock litellm.completion to avoid real LLM calls.
 Integration tests that touch FalkorDB use the "arakne_test" graph.
 """
 
-import json
-import os
-import tempfile
 from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from falkordb import Graph
 
 from arakne.harness import registry as reg
-from arakne.harness.registry import ToolContext, get_tool_definitions
+from arakne.harness import runner as harness_runner
+from arakne.harness.registry import get_tool_definitions
 from arakne.harness.runner import run
 from arakne.harness.tracing import (
+    RunTracer,
     finalize_trace,
     new_trace,
     record_turn,
-    save_trace,
 )
+from arakne.modes._common import run_post_trace_hooks
 from arakne.models.tools import (
     CompleteIngestionInput,
     CompleteThemeUpdateInput,
-    CreateNodeInput,
     DeliverResponseInput,
 )
 from arakne.models.traces import RunTrace, ToolCall, TouchedEdge, TouchedNode, Turn, TurnUsage
 from arakne.store.client import get_graph
-from arakne.store.system import init_system
+from arakne.store.system import SystemState, init_system
 from arakne.tools.completion_tools import (
     complete_ingestion,
     complete_theme_update,
     deliver_response,
 )
+from tests.conftest import mock_tool_response
 
 TEST_GRAPH = "arakne_test"
 
@@ -60,7 +58,7 @@ def graph() -> Graph:
 
 
 # ---------------------------------------------------------------------------
-# tracing.py
+# tracing.py — in-memory RunTrace helpers
 # ---------------------------------------------------------------------------
 
 
@@ -92,6 +90,37 @@ def test_finalize_trace_failed() -> None:
     assert trace.status == "failed"
     assert trace.ended_at is not None
     assert trace.error == "something went wrong"
+
+
+def test_run_post_trace_hooks_deduplicates_live_nodes() -> None:
+    trace = _running_trace("query")
+    trace.status = "completed"
+    trace.touched_nodes = [
+        TouchedNode(node_id="node:1", action="updated"),
+        TouchedNode(node_id="node:1", action="updated"),
+        TouchedNode(node_id="node:2", action="deleted"),
+        TouchedNode(node_id="node:3", action="created"),
+    ]
+    trace.completion_payload = {"answer": "done"}
+    system_state = SystemState(
+        next_node_id=1,
+        next_edge_id=1,
+        next_rec_id=1,
+        next_chat_id=1,
+        theme_priority_order=[],
+        log_token_budget=200,
+        hot_theme_token_budget=100,
+    )
+
+    with (
+        patch("arakne.modes._common.store_graph.run_fence_checks") as mock_fence_checks,
+        patch("arakne.modes.theme.run_theme_update") as mock_theme_update,
+    ):
+        run_post_trace_hooks(trace, MagicMock(), system_state, "done")
+
+    mock_fence_checks.assert_called_once()
+    assert mock_fence_checks.call_args.args[1] == ["node:1", "node:3"]
+    mock_theme_update.assert_called_once_with("done", trace.touched_nodes, trace.touched_edges)
 
 
 def test_record_turn() -> None:
@@ -131,26 +160,105 @@ def test_touched_edge_tracking() -> None:
     assert trace.touched_edges[0].action == "deleted"
 
 
-def test_save_trace() -> None:
-    trace = _running_trace()
-    finalize_trace(trace, "completed")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = save_trace(trace, tmpdir)
-        assert os.path.exists(path)
-        assert path.endswith(f"{trace.run_id}.json")
-        with open(path) as f:
-            data = json.load(f)
-        assert data["run_id"] == trace.run_id
-        assert data["status"] == "completed"
+# ---------------------------------------------------------------------------
+# tracing.py — RunTracer (mocked Langfuse)
+# ---------------------------------------------------------------------------
 
 
-def test_save_trace_creates_directory() -> None:
-    trace = _running_trace()
-    finalize_trace(trace, "completed")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        nested = os.path.join(tmpdir, "a", "b", "c")
-        path = save_trace(trace, nested)
-        assert os.path.exists(path)
+def _make_tracer(mode: str = "ingestion") -> tuple[RunTracer, MagicMock]:
+    """Create a RunTracer with a mocked Langfuse client. Returns (tracer, mock_langfuse)."""
+    mock_lf = MagicMock()
+    mock_root = MagicMock()
+    mock_lf.start_observation.return_value = mock_root
+
+    with patch("arakne.langfuse_client.langfuse", mock_lf):
+        tracer = RunTracer("test-run-id", mode, "test input")
+
+    tracer._lf = mock_lf
+    tracer._root = mock_root
+    return tracer, mock_lf
+
+
+def test_run_tracer_creates_langfuse_trace() -> None:
+    mock_lf = MagicMock()
+    mock_root = MagicMock()
+    mock_lf.start_observation.return_value = mock_root
+
+    with patch("arakne.langfuse_client.langfuse", mock_lf):
+        tracer = RunTracer("run-123", "ingestion", "Ingesting rec:1", session_id="rec:1")
+
+    mock_lf.start_observation.assert_called_once()
+    call_kwargs = mock_lf.start_observation.call_args[1]
+    assert call_kwargs["trace_context"] == {"trace_id": "run-123"}
+    assert call_kwargs["name"] == "ingestion-run"
+    assert call_kwargs["input"] == "Ingesting rec:1"
+    assert tracer.get_trace_id() == "run-123"
+
+
+def test_run_tracer_start_and_end_turn() -> None:
+    tracer, _ = _make_tracer()
+    mock_turn_span = MagicMock()
+    tracer._root.start_observation.return_value = mock_turn_span
+
+    tracer.start_turn(1, 5)
+    assert tracer._current_turn_span is mock_turn_span
+    call_kwargs = tracer._root.start_observation.call_args[1]
+    assert call_kwargs["name"] == "turn-1"
+    assert call_kwargs["input"] == {"message_count": 5}
+
+    tracer.end_turn("some text")
+    mock_turn_span.update.assert_called_with(output="some text")
+    mock_turn_span.end.assert_called_once()
+    assert tracer._current_turn_span is None
+
+
+def test_run_tracer_record_tool_call() -> None:
+    tracer, _ = _make_tracer()
+    mock_turn_span = MagicMock()
+    mock_tool_span = MagicMock()
+    tracer._root.start_observation.return_value = mock_turn_span
+    mock_turn_span.start_observation.return_value = mock_tool_span
+
+    tracer.start_turn(1, 3)
+    tracer.record_tool_call(1, "tc-1", "search_graph", {"query": "career"}, '{"results":[]}', 42.0)
+
+    mock_turn_span.start_observation.assert_called_once()
+    call_kwargs = mock_turn_span.start_observation.call_args[1]
+    assert call_kwargs["name"] == "tool:search_graph"
+    assert call_kwargs["input"] == {"query": "career"}
+    assert call_kwargs["as_type"] == "tool"
+    mock_tool_span.update.assert_called_once_with(output='{"results":[]}')
+    mock_tool_span.end.assert_called_once()
+
+
+def test_run_tracer_record_tool_error() -> None:
+    tracer, _ = _make_tracer()
+    mock_turn_span = MagicMock()
+    mock_tool_span = MagicMock()
+    tracer._root.start_observation.return_value = mock_turn_span
+    mock_turn_span.start_observation.return_value = mock_tool_span
+
+    tracer.start_turn(1, 2)
+    tracer.record_tool_error(1, "tc-1", "create_node", {}, "Invalid provenance")
+
+    call_kwargs = mock_turn_span.start_observation.call_args[1]
+    assert call_kwargs["level"] == "ERROR"
+    assert call_kwargs["status_message"] == "Invalid provenance"
+    mock_tool_span.end.assert_called_once()
+
+
+def test_run_tracer_finalize_flushes() -> None:
+    tracer, mock_lf = _make_tracer()
+    usage = TurnUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
+    tracer.finalize("completed", 2, usage, {"summary": "done"}, [], [])
+
+    tracer._root.set_trace_io.assert_called_once_with(output={"summary": "done"})
+    tracer._root.update.assert_called_once()
+    update_kwargs = tracer._root.update.call_args[1]
+    assert update_kwargs["metadata"]["status"] == "completed"
+    tracer._root.end.assert_called_once()
+    mock_lf.flush.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -237,31 +345,8 @@ def test_write_entries_marked_as_mutation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# runner.py helpers
+# runner.py — unit tests (no FalkorDB)
 # ---------------------------------------------------------------------------
-
-
-def _mock_response(tool_name: str, args: dict[str, Any], call_id: str = "tc-1") -> MagicMock:
-    """Build a mock litellm.completion response for a single tool call."""
-    tc = MagicMock()
-    tc.id = call_id
-    tc.function.name = tool_name
-    tc.function.arguments = json.dumps(args)
-
-    msg = MagicMock()
-    msg.tool_calls = [tc]
-    msg.content = None
-    msg.reasoning_content = None
-
-    choice = MagicMock()
-    choice.message = msg
-
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage = None
-    return resp
-
-
 def _mock_no_tool_response() -> MagicMock:
     """Build a mock response where the model returns text without a tool call."""
     msg = MagicMock()
@@ -278,13 +363,18 @@ def _mock_no_tool_response() -> MagicMock:
     return resp
 
 
-# ---------------------------------------------------------------------------
-# runner.py — unit tests (no FalkorDB)
-# ---------------------------------------------------------------------------
+def _mock_run_tracer() -> MagicMock:
+    """Mock RunTracer to avoid real Langfuse calls in runner unit tests."""
+    mock = MagicMock(spec=RunTracer)
+    mock.get_trace_id.return_value = "mock-trace-id"
+    return mock
 
 
 def test_run_fails_without_tool_call() -> None:
-    with patch("litellm.completion", return_value=_mock_no_tool_response()):
+    with (
+        patch("litellm.completion", return_value=_mock_no_tool_response()),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
         trace = run(
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
@@ -298,8 +388,11 @@ def test_run_fails_without_tool_call() -> None:
 
 
 def test_run_fails_on_unknown_tool() -> None:
-    resp = _mock_response("nonexistent_tool", {})
-    with patch("litellm.completion", return_value=resp):
+    resp = mock_tool_response("nonexistent_tool", {})
+    with (
+        patch("litellm.completion", return_value=resp),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
         trace = run(
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
@@ -314,9 +407,11 @@ def test_run_fails_on_unknown_tool() -> None:
 
 
 def test_run_fails_on_bad_args() -> None:
-    # search_graph requires a "query" field — pass garbage
-    resp = _mock_response("search_graph", {"bad_field": 999})
-    with patch("litellm.completion", return_value=resp):
+    resp = mock_tool_response("search_graph", {"bad_field": 999})
+    with (
+        patch("litellm.completion", return_value=resp),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
         trace = run(
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
@@ -330,18 +425,16 @@ def test_run_fails_on_bad_args() -> None:
 
 
 def test_run_records_tool_calls() -> None:
-    search_resp = _mock_response("search_graph", {"query": "career", "limit": 5}, "tc-1")
-    completion_resp = _mock_response(
-        "complete_ingestion", {"summary": "done"}, "tc-2"
-    )
+    search_resp = mock_tool_response("search_graph", {"query": "career", "limit": 5}, "tc-1")
+    completion_resp = mock_tool_response("complete_ingestion", {"summary": "done"}, "tc-2")
 
-    # search_graph needs a real-ish graph mock — return a SearchGraphOutput-compatible object
     search_output = MagicMock()
     search_output.model_dump_json.return_value = '{"results":[]}'
 
     with (
         patch("litellm.completion", side_effect=[search_resp, completion_resp]),
         patch("arakne.tools.read_tools.search_graph", return_value=search_output),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
@@ -359,8 +452,11 @@ def test_run_records_tool_calls() -> None:
 
 
 def test_run_completes_on_completion_tool() -> None:
-    resp = _mock_response("complete_ingestion", {"summary": "all done"})
-    with patch("litellm.completion", return_value=resp):
+    resp = mock_tool_response("complete_ingestion", {"summary": "all done"})
+    with (
+        patch("litellm.completion", return_value=resp),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
         trace = run(
             mode="ingestion",
             system_prompt="system",
@@ -375,7 +471,10 @@ def test_run_completes_on_completion_tool() -> None:
 
 
 def test_run_fails_on_model_exception() -> None:
-    with patch("litellm.completion", side_effect=RuntimeError("network error")):
+    with (
+        patch("litellm.completion", side_effect=RuntimeError("network error")),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
         trace = run(
             mode="query",
             system_prompt="system",
@@ -386,6 +485,30 @@ def test_run_fails_on_model_exception() -> None:
         )
     assert trace.status == "failed"
     assert "network error" in (trace.error or "")
+
+
+def test_run_caches_context_limit_lookup() -> None:
+    harness_runner._get_context_limit.cache_clear()
+    resp = mock_tool_response("complete_ingestion", {"summary": "all done"})
+
+    with (
+        patch("litellm.get_model_info", return_value={"max_input_tokens": 123}) as mock_info,
+        patch("litellm.completion", return_value=resp),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
+        for _ in range(2):
+            trace = run(
+                mode="ingestion",
+                system_prompt="system",
+                initial_messages=[],
+                allowed_tools=reg.INGESTION_TOOLS,
+                run_context={"input_summary": "test"},
+                graph=MagicMock(),
+            )
+            assert trace.status == "completed"
+
+    assert mock_info.call_count == 1
+    harness_runner._get_context_limit.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -406,10 +529,13 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     }
     completion_args = {"summary": "done"}
 
-    create_resp = _mock_response("create_node", create_args, "tc-1")
-    completion_resp = _mock_response("complete_ingestion", completion_args, "tc-2")
+    create_resp = mock_tool_response("create_node", create_args, "tc-1")
+    completion_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2")
 
-    with patch("litellm.completion", side_effect=[create_resp, completion_resp]):
+    with (
+        patch("litellm.completion", side_effect=[create_resp, completion_resp]),
+        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
         trace = run(
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
