@@ -20,9 +20,7 @@ from arakne.harness.runner import run
 from arakne.harness.tracing import (
     finalize_trace,
     new_trace,
-    record_tool_call,
-    record_touched_edge,
-    record_touched_node,
+    record_turn,
     save_trace,
 )
 from arakne.models.tools import (
@@ -31,7 +29,7 @@ from arakne.models.tools import (
     CreateNodeInput,
     DeliverResponseInput,
 )
-from arakne.models.traces import RunTrace, ToolCall
+from arakne.models.traces import RunTrace, ToolCall, TouchedEdge, TouchedNode, Turn, TurnUsage
 from arakne.store.client import get_graph
 from arakne.store.system import init_system
 from arakne.tools.completion_tools import (
@@ -73,7 +71,7 @@ def test_new_trace() -> None:
     assert trace.status == "running"
     assert trace.started_at is not None
     assert trace.ended_at is None
-    assert trace.tool_calls == []
+    assert trace.turns == []
     assert trace.touched_nodes == []
     assert trace.touched_edges == []
 
@@ -96,7 +94,7 @@ def test_finalize_trace_failed() -> None:
     assert trace.error == "something went wrong"
 
 
-def test_record_tool_call() -> None:
+def test_record_turn() -> None:
     trace = _running_trace()
     call = ToolCall(
         tool_name="search_graph",
@@ -104,22 +102,30 @@ def test_record_tool_call() -> None:
         result='{"results": []}',
         called_at=datetime.now(tz=timezone.utc),
     )
-    record_tool_call(trace, call)
-    assert len(trace.tool_calls) == 1
-    assert trace.tool_calls[0].tool_name == "search_graph"
+    turn = Turn(
+        turn_number=1,
+        tool_calls=[call],
+        usage=TurnUsage(prompt_tokens=100, completion_tokens=50, reasoning_tokens=10, total_tokens=160),
+        timestamp=datetime.now(tz=timezone.utc),
+    )
+    record_turn(trace, turn)
+    assert len(trace.turns) == 1
+    assert trace.turns[0].tool_calls[0].tool_name == "search_graph"
+    assert trace.total_usage.prompt_tokens == 100
+    assert trace.total_usage.total_tokens == 160
 
 
-def test_record_touched_node() -> None:
+def test_touched_node_tracking() -> None:
     trace = _running_trace()
-    record_touched_node(trace, "node:1", "created")
+    trace.touched_nodes.append(TouchedNode(node_id="node:1", action="created"))
     assert len(trace.touched_nodes) == 1
     assert trace.touched_nodes[0].node_id == "node:1"
     assert trace.touched_nodes[0].action == "created"
 
 
-def test_record_touched_edge() -> None:
+def test_touched_edge_tracking() -> None:
     trace = _running_trace()
-    record_touched_edge(trace, "edge:1", "deleted")
+    trace.touched_edges.append(TouchedEdge(edge_id="edge:1", action="deleted"))
     assert len(trace.touched_edges) == 1
     assert trace.touched_edges[0].edge_id == "edge:1"
     assert trace.touched_edges[0].action == "deleted"
@@ -245,12 +251,14 @@ def _mock_response(tool_name: str, args: dict[str, Any], call_id: str = "tc-1") 
     msg = MagicMock()
     msg.tool_calls = [tc]
     msg.content = None
+    msg.reasoning_content = None
 
     choice = MagicMock()
     choice.message = msg
 
     resp = MagicMock()
     resp.choices = [choice]
+    resp.usage = None
     return resp
 
 
@@ -259,12 +267,14 @@ def _mock_no_tool_response() -> MagicMock:
     msg = MagicMock()
     msg.tool_calls = None
     msg.content = "I think the answer is..."
+    msg.reasoning_content = None
 
     choice = MagicMock()
     choice.message = msg
 
     resp = MagicMock()
     resp.choices = [choice]
+    resp.usage = None
     return resp
 
 
@@ -280,12 +290,11 @@ def test_run_fails_without_tool_call() -> None:
             system_prompt="You are an ingestion agent.",
             initial_messages=[{"role": "user", "content": "ingest rec:1"}],
             allowed_tools=reg.INGESTION_TOOLS,
-            completion_tool="complete_ingestion",
             run_context={"input_summary": "rec:1"},
             graph=MagicMock(),
         )
     assert trace.status == "failed"
-    assert "completion tool" in (trace.error or "")
+    assert "Model stopped without calling a completion tool." in (trace.error or "")
 
 
 def test_run_fails_on_unknown_tool() -> None:
@@ -296,13 +305,12 @@ def test_run_fails_on_unknown_tool() -> None:
             system_prompt="You are an ingestion agent.",
             initial_messages=[],
             allowed_tools=reg.INGESTION_TOOLS,
-            completion_tool="complete_ingestion",
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
     assert trace.status == "failed"
     assert "Unknown tool" in (trace.error or "")
-    assert trace.tool_calls[0].error is not None
+    assert trace.turns[0].tool_calls[0].error is not None
 
 
 def test_run_fails_on_bad_args() -> None:
@@ -314,12 +322,11 @@ def test_run_fails_on_bad_args() -> None:
             system_prompt="You are an ingestion agent.",
             initial_messages=[],
             allowed_tools=reg.INGESTION_TOOLS,
-            completion_tool="complete_ingestion",
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
     assert trace.status == "failed"
-    assert "Invalid arguments" in (trace.error or "")
+    assert "Invalid arguments for 'search_graph'" in (trace.error or "")
 
 
 def test_run_records_tool_calls() -> None:
@@ -341,15 +348,14 @@ def test_run_records_tool_calls() -> None:
             system_prompt="You are an ingestion agent.",
             initial_messages=[],
             allowed_tools=reg.INGESTION_TOOLS,
-            completion_tool="complete_ingestion",
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
 
     assert trace.status == "completed"
-    assert len(trace.tool_calls) == 2
-    assert trace.tool_calls[0].tool_name == "search_graph"
-    assert trace.tool_calls[1].tool_name == "complete_ingestion"
+    assert len(trace.turns) == 2
+    assert trace.turns[0].tool_calls[0].tool_name == "search_graph"
+    assert trace.turns[1].tool_calls[0].tool_name == "complete_ingestion"
 
 
 def test_run_completes_on_completion_tool() -> None:
@@ -360,7 +366,6 @@ def test_run_completes_on_completion_tool() -> None:
             system_prompt="system",
             initial_messages=[],
             allowed_tools=reg.INGESTION_TOOLS,
-            completion_tool="complete_ingestion",
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -376,7 +381,6 @@ def test_run_fails_on_model_exception() -> None:
             system_prompt="system",
             initial_messages=[],
             allowed_tools=reg.QUERY_TOOLS,
-            completion_tool="deliver_response",
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -411,7 +415,6 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
             system_prompt="You are an ingestion agent.",
             initial_messages=[{"role": "user", "content": "ingest"}],
             allowed_tools=reg.INGESTION_TOOLS,
-            completion_tool="complete_ingestion",
             run_context={"input_summary": "rec:1"},
             graph=graph,
         )

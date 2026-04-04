@@ -1,5 +1,5 @@
 """
-Completion tools — termination signals for each agent mode. Implemented in Phase 4.
+Completion tools — termination signals for each agent mode.
 """
 
 from arakne.models.tools import (

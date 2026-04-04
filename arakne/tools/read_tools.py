@@ -1,6 +1,5 @@
 """
-Read tools — graph and source retrieval. Implemented in Phase 3 (graph) and Phase 2 (sources).
-All functions are importable and fully typed; bodies raise NotImplementedError until implemented.
+Read tools — graph and source retrieval.
 """
 
 from falkordb import Graph
@@ -18,6 +17,7 @@ from arakne.models.tools import (
     GetThemeOutput,
     GetTranscriptSpanInput,
     GetTranscriptSpanOutput,
+    GetTranscriptSpanResult,
     ListChatsInput,
     ListChatsOutput,
     ListTranscriptsInput,
@@ -37,11 +37,18 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
 def get_node_neighborhood(
     graph: Graph, params: GetNodeNeighborhoodInput
 ) -> GetNodeNeighborhoodOutput:
-    return store_graph.get_node_neighborhood(graph, params.node_id, params.depth)
+    return store_graph.get_node_neighborhood(graph, params.node_id)
 
 
 def get_node(graph: Graph, params: GetNodeInput) -> GetNodeOutput:
-    return store_graph.get_node(graph, params.node_id)
+    results = []
+    not_found: list[str] = []
+    for nid in params.node_ids:
+        try:
+            results.append(store_graph.get_node(graph, nid))
+        except ValueError:
+            not_found.append(nid)
+    return GetNodeOutput(results=results, not_found=not_found)
 
 
 def get_cold_logs(graph: Graph, params: GetColdLogsInput) -> GetColdLogsOutput:
@@ -55,9 +62,11 @@ def list_transcripts(graph: Graph, params: ListTranscriptsInput) -> ListTranscri
 def get_transcript_span(
     graph: Graph, params: GetTranscriptSpanInput
 ) -> GetTranscriptSpanOutput:
-    return store_canonical.get_transcript_span(
-        graph, params.transcript_id, params.start_offset, params.end_offset
-    )
+    results: list[GetTranscriptSpanResult] = [
+        store_canonical.get_transcript_span(graph, s.transcript_id, s.start_offset, s.end_offset)
+        for s in params.spans
+    ]
+    return GetTranscriptSpanOutput(results=results)
 
 
 def list_chats(graph: Graph, params: ListChatsInput) -> ListChatsOutput:

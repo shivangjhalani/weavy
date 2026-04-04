@@ -58,7 +58,7 @@ def test_create_theme_no_anchors(graph: Graph) -> None:
 
 
 def test_create_theme_invalid_anchor(graph: Graph) -> None:
-    with pytest.raises(ValueError, match="not found as a SemanticNode"):
+    with pytest.raises(ValueError, match="not found as SemanticNode"):
         store_themes.create_theme(graph, "bad-theme", "state", ["node:999"], ["active"])
 
 
@@ -103,7 +103,7 @@ def test_update_theme_status(graph: Graph) -> None:
 
 def test_update_theme_invalid_anchor(graph: Graph) -> None:
     store_themes.create_theme(graph, "reading", "Reading widely.", [], ["active"])
-    with pytest.raises(ValueError, match="not found as a SemanticNode"):
+    with pytest.raises(ValueError, match="not found as SemanticNode"):
         store_themes.update_theme(graph, "reading", new_state=None, new_anchors=["node:999"], new_status=None)
 
 

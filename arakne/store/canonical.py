@@ -1,6 +1,5 @@
 """
 Canonical source persistence — Transcript and ChatSession CRUD in FalkorDB.
-Implemented in Phase 2.
 """
 
 import json
@@ -13,7 +12,7 @@ from arakne.models.canonical import ChatMessage, ChatSession, Transcript
 from arakne.models.tools import (
     ChatSummary,
     GetChatOutput,
-    GetTranscriptSpanOutput,
+    GetTranscriptSpanResult,
     ListChatsInput,
     ListChatsOutput,
     ListTranscriptsInput,
@@ -123,10 +122,10 @@ def list_transcripts(graph: Graph, params: ListTranscriptsInput) -> ListTranscri
 
 def get_transcript_span(
     graph: Graph, transcript_id: str, start_offset: int, end_offset: int
-) -> GetTranscriptSpanOutput:
+) -> GetTranscriptSpanResult:
     transcript = get_transcript(graph, transcript_id)
     text = _extract_span(transcript.text, start_offset, end_offset)
-    return GetTranscriptSpanOutput(transcript_id=transcript_id, text=text)
+    return GetTranscriptSpanResult(transcript_id=transcript_id, text=text)
 
 
 # ---------------------------------------------------------------------------

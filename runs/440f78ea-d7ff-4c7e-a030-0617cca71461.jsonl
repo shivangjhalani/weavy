@@ -1,0 +1,101 @@
+{
+  "event": "run_start",
+  "ts": "2026-04-04T09:37:40.158712+00:00",
+  "mode": "ingestion",
+  "input_summary": "test",
+  "prompt_metadata": {
+    "model": "gemini/gemini-3-flash-preview",
+    "reasoning_effort": "medium",
+    "allowed_tools": [
+      "search_graph",
+      "get_node",
+      "get_node_neighborhood",
+      "get_cold_logs",
+      "list_transcripts",
+      "get_transcript_span",
+      "list_chats",
+      "get_chat",
+      "create_node",
+      "update_node",
+      "delete_node",
+      "create_edge",
+      "update_edge",
+      "delete_edge",
+      "complete_ingestion"
+    ],
+    "system_prompt_chars": 6,
+    "initial_message_count": 0,
+    "initial_roles": [],
+    "initial_content_chars": 0
+  }
+}
+
+{
+  "event": "llm_turn",
+  "ts": "2026-04-04T09:37:40.158866+00:00",
+  "turn": 1,
+  "input_summary": {
+    "message_count": 1,
+    "roles": [
+      "system"
+    ],
+    "content_chars": 6,
+    "recent_messages": [
+      {
+        "role": "system",
+        "content_preview": "system"
+      }
+    ]
+  },
+  "reasoning": null,
+  "text": null,
+  "tool_call_count": 1,
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "reasoning_tokens": 0,
+    "total_tokens": 0
+  }
+}
+
+{
+  "event": "tool_call",
+  "ts": "2026-04-04T09:37:40.158943+00:00",
+  "turn": 1,
+  "tool_call_id": "tc-1",
+  "tool": "complete_ingestion",
+  "args": {
+    "summary": "all done"
+  }
+}
+
+{
+  "event": "tool_result",
+  "ts": "2026-04-04T09:37:40.159004+00:00",
+  "turn": 1,
+  "tool_call_id": "tc-1",
+  "tool": "complete_ingestion",
+  "result": "{\"ok\":true,\"id\":null,\"message\":null}",
+  "duration_ms": 0.0
+}
+
+{
+  "event": "run_end",
+  "ts": "2026-04-04T09:37:40.159045+00:00",
+  "status": "completed",
+  "total_turns": 1,
+  "total_usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "reasoning_tokens": 0,
+    "total_tokens": 0
+  },
+  "context_limit": 1048576,
+  "completion_payload": {
+    "summary": "all done"
+  },
+  "touched_nodes": [],
+  "touched_edges": [],
+  "error": null
+}
+

@@ -5,11 +5,12 @@ and returns one *Output model. Pydantic validates both boundaries.
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 from arakne.models.canonical import ChatSession, Transcript
 from arakne.models.graph import AnyLogEntry, ProvenanceInput, SemanticEdge, SemanticNode
 from arakne.models.themes import Theme, ThemeStatus
+from arakne.timefmt import format_agent_timestamp
 
 # ---------------------------------------------------------------------------
 # Shared
@@ -75,11 +76,10 @@ class SearchGraphInput(BaseModel):
 
 class GetNodeNeighborhoodInput(BaseModel):
     node_id: str
-    depth: int = 1
 
 
 class GetNodeInput(BaseModel):
-    node_id: str
+    node_ids: list[str]  # one or more, e.g. ["node:1"] or ["node:1", "node:2"]
 
 
 class GetColdLogsInput(BaseModel):
@@ -91,10 +91,14 @@ class ListTranscriptsInput(BaseModel):
     limit: int = 20
 
 
-class GetTranscriptSpanInput(BaseModel):
+class TranscriptSpanRequest(BaseModel):
     transcript_id: str
     start_offset: int
     end_offset: int
+
+
+class GetTranscriptSpanInput(BaseModel):
+    spans: list[TranscriptSpanRequest]  # one or more
 
 
 class ListChatsInput(BaseModel):
@@ -190,10 +194,15 @@ class GetNodeNeighborhoodOutput(BaseModel):
     neighbors: list[NeighborSummary]
 
 
-class GetNodeOutput(BaseModel):
+class GetNodeResult(BaseModel):
     node: SemanticNode
     edges: list[SemanticEdge] = []
     cold_hint: str | None = None
+
+
+class GetNodeOutput(BaseModel):
+    results: list[GetNodeResult]
+    not_found: list[str] = []
 
 
 class GetColdLogsOutput(BaseModel):
@@ -205,19 +214,31 @@ class TranscriptSummary(BaseModel):
     timestamp: datetime
     audio_path: str
 
+    @field_serializer("timestamp", when_used="json")
+    def serialize_timestamp(self, value: datetime) -> str:
+        return format_agent_timestamp(value)
+
 
 class ListTranscriptsOutput(BaseModel):
     transcripts: list[TranscriptSummary]
 
 
-class GetTranscriptSpanOutput(BaseModel):
+class GetTranscriptSpanResult(BaseModel):
     transcript_id: str
     text: str
+
+
+class GetTranscriptSpanOutput(BaseModel):
+    results: list[GetTranscriptSpanResult]
 
 
 class ChatSummary(BaseModel):
     id: str
     timestamp: datetime
+
+    @field_serializer("timestamp", when_used="json")
+    def serialize_timestamp(self, value: datetime) -> str:
+        return format_agent_timestamp(value)
 
 
 class ListChatsOutput(BaseModel):

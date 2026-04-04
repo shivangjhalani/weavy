@@ -63,12 +63,14 @@ def _mock_response(tool_name: str, args: dict[str, Any], call_id: str = "tc-1") 
     msg = MagicMock()
     msg.tool_calls = [tc]
     msg.content = None
+    msg.reasoning_content = None
 
     choice = MagicMock()
     choice.message = msg
 
     resp = MagicMock()
     resp.choices = [choice]
+    resp.usage = None
     return resp
 
 
@@ -90,7 +92,7 @@ def test_query_delivers_response(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.query.theme_mode.run_theme_update") as mock_theme,
+        patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
         patch("arakne.modes.query.save_trace"),
     ):
@@ -116,7 +118,7 @@ def test_query_creates_chat_session(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.query.theme_mode.run_theme_update"),
+        patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp),
         patch("arakne.modes.query.save_trace"),
     ):
@@ -170,7 +172,7 @@ def test_query_with_graph_write_triggers_theme(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.query.theme_mode.run_theme_update") as mock_theme,
+        patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("arakne.store.system.increment_counter", return_value=fixed_chat_id),
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
         patch("arakne.modes.query.save_trace"),
@@ -201,7 +203,7 @@ def test_query_rejects_ingestion_provenance(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.query.theme_mode.run_theme_update"),
+        patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
         patch("arakne.modes.query.save_trace"),
     ):
@@ -226,7 +228,7 @@ def test_query_no_writes_skips_theme(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.query.theme_mode.run_theme_update") as mock_theme,
+        patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
         patch("arakne.modes.query.save_trace"),
     ):
@@ -252,7 +254,7 @@ def test_query_conversation_captured(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.query.theme_mode.run_theme_update"),
+        patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp),
         patch("arakne.modes.query.save_trace"),
     ):

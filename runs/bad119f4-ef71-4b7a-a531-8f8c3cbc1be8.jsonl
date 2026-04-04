@@ -1,0 +1,51 @@
+{
+  "event": "run_start",
+  "ts": "2026-04-04T09:37:40.163517+00:00",
+  "mode": "query",
+  "input_summary": "test",
+  "prompt_metadata": {
+    "model": "gemini/gemini-3-flash-preview",
+    "reasoning_effort": "medium",
+    "allowed_tools": [
+      "search_graph",
+      "get_node",
+      "get_node_neighborhood",
+      "get_cold_logs",
+      "list_transcripts",
+      "get_transcript_span",
+      "list_chats",
+      "get_chat",
+      "create_node",
+      "update_node",
+      "delete_node",
+      "create_edge",
+      "update_edge",
+      "delete_edge",
+      "get_theme",
+      "deliver_response"
+    ],
+    "system_prompt_chars": 6,
+    "initial_message_count": 0,
+    "initial_roles": [],
+    "initial_content_chars": 0
+  }
+}
+
+{
+  "event": "run_end",
+  "ts": "2026-04-04T09:37:40.163644+00:00",
+  "status": "failed",
+  "total_turns": 1,
+  "total_usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "reasoning_tokens": 0,
+    "total_tokens": 0
+  },
+  "context_limit": 1048576,
+  "completion_payload": null,
+  "touched_nodes": [],
+  "touched_edges": [],
+  "error": "Model call failed: network error"
+}
+

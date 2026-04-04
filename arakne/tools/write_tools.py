@@ -1,6 +1,5 @@
 """
 Write tools — semantic graph CRUD with provenance validation.
-Implemented in Phase 3.
 """
 
 from falkordb import Graph

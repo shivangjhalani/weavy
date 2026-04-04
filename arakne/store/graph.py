@@ -11,11 +11,14 @@ import litellm
 import tiktoken
 from falkordb import Graph
 
+_ENC = tiktoken.get_encoding("cl100k_base")
+
+from arakne.config import settings
 from arakne.models.graph import FenceEntry, LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
 from arakne.models.tools import (
     GetColdLogsOutput,
     GetNodeNeighborhoodOutput,
-    GetNodeOutput,
+    GetNodeResult,
     NeighborSummary,
     OperationResult,
     SearchGraphInput,
@@ -30,7 +33,13 @@ from arakne.models.tools import (
 
 
 def _serialize_log_entry(entry: Union[LogEntry, FenceEntry]) -> str:
-    return entry.model_dump_json()
+    return json.dumps(entry.model_dump(mode="python"), default=_json_default)
+
+
+def _json_default(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def _deserialize_log_entry(s: str) -> Union[LogEntry, FenceEntry]:
@@ -76,6 +85,12 @@ def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
     )
 
 
+def _generate_embedding(aliases: list[str], summary: str) -> list[float]:
+    text = summary + " " + " ".join(aliases)
+    response = litellm.embedding(model=settings.GEMINI_EMBEDDING_MODEL, input=[text])
+    return response.data[0]["embedding"]
+
+
 # ---------------------------------------------------------------------------
 # Node CRUD
 # ---------------------------------------------------------------------------
@@ -110,6 +125,14 @@ def create_node(
             "entry_json": entry_json,
         },
     )
+    try:
+        embedding = _generate_embedding(aliases, summary)
+        graph.query(
+            "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
+            {"id": node_id, "embedding": embedding},
+        )
+    except Exception:
+        pass
     return OperationResult(ok=True, id=node_id)
 
 
@@ -159,6 +182,19 @@ def update_node(
         f"MATCH (n:SemanticNode {{id: $id}}) SET {', '.join(set_parts)}",
         params,
     )
+
+    if new_summary is not None or new_aliases is not None:
+        try:
+            effective_aliases = new_aliases if new_aliases is not None else props.get("aliases", [])
+            effective_summary = new_summary if new_summary is not None else current_summary
+            embedding = _generate_embedding(effective_aliases, effective_summary)
+            graph.query(
+                "MATCH (n:SemanticNode {id: $id}) REMOVE n.embedding SET n.embedding = vecf32($embedding)",
+                {"id": node_id, "embedding": embedding},
+            )
+        except Exception:
+            pass
+
     return OperationResult(ok=True, id=node_id)
 
 
@@ -236,7 +272,10 @@ def delete_edge(graph: Graph, edge_id: str, reason: str) -> OperationResult:  # 
 
 
 def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
-    result = graph.query(
+    fetch_k = params.limit * 2
+
+    # --- Keyword pass ---
+    kw_result = graph.query(
         """
         MATCH (n:SemanticNode)
         WHERE ANY(a IN n.aliases WHERE toLower(a) CONTAINS toLower($query))
@@ -247,25 +286,69 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
         ORDER BY edge_count DESC
         LIMIT $limit
         """,
-        {"query": params.query, "limit": params.limit},
+        {"query": params.query, "limit": fetch_k},
     )
+    keyword_hits: dict[str, tuple] = {}
+    for row in kw_result.result_set:
+        keyword_hits[row[0]] = (row[1], row[2], int(row[3]))
+
+    # --- Vector pass ---
+    vec_hits: dict[str, tuple] = {}
+    try:
+        query_vec = _generate_embedding([], params.query)
+        vec_result = graph.query(
+            """
+            CALL db.idx.vector.queryNodes('SemanticNode', 'embedding', $k, vecf32($vec))
+            YIELD node, score
+            OPTIONAL MATCH (node)-[r:RELATES]-()
+            WITH node, score, count(r) AS edge_count
+            RETURN node.id, node.aliases, node.summary, edge_count, score
+            """,
+            {"k": fetch_k, "vec": query_vec},
+        )
+        for row in vec_result.result_set:
+            vec_hits[row[0]] = (row[1], row[2], int(row[3]), float(row[4]))
+    except Exception:
+        pass  # No index or embeddings yet — degrade to keyword-only
+
+    # --- Fusion ---
+    # Score: vec + keyword = vec_score + 0.5, vec-only = vec_score, keyword-only = 0.4
+    candidates: dict[str, dict] = {}
+    for nid, (aliases, summary, edge_count, vec_score) in vec_hits.items():
+        combined = vec_score + (0.5 if nid in keyword_hits else 0.0)
+        candidates[nid] = {
+            "aliases": aliases,
+            "summary": summary,
+            "edge_count": edge_count,
+            "score": combined,
+        }
+    for nid, (aliases, summary, edge_count) in keyword_hits.items():
+        if nid not in candidates:
+            candidates[nid] = {
+                "aliases": aliases,
+                "summary": summary,
+                "edge_count": edge_count,
+                "score": 0.4,
+            }
+
+    ranked = sorted(candidates.items(), key=lambda x: x[1]["score"], reverse=True)
+
     results = []
-    for row in result.result_set:
-        node_id, aliases, summary, edge_count = row
-        canonical_alias = aliases[0] if aliases else node_id
-        summary_line = summary.splitlines()[0] if summary else ""
+    for nid, item in ranked[: params.limit]:
+        aliases = item["aliases"]
+        summary = item["summary"]
         results.append(
             SearchResult(
-                id=node_id,
-                canonical_alias=canonical_alias,
-                summary_line=summary_line,
-                edge_count=int(edge_count),
+                id=nid,
+                canonical_alias=aliases[0] if aliases else nid,
+                summary_line=summary.splitlines()[0] if summary else "",
+                edge_count=item["edge_count"],
             )
         )
     return SearchGraphOutput(results=results)
 
 
-def get_node(graph: Graph, node_id: str) -> GetNodeOutput:
+def get_node(graph: Graph, node_id: str) -> GetNodeResult:
     # Fetch node properties and outgoing edges in one query
     result = graph.query(
         """
@@ -314,30 +397,21 @@ def get_node(graph: Graph, node_id: str) -> GetNodeOutput:
     if cold:
         fence_count = sum(1 for e in cold if isinstance(e, FenceEntry))
         regular_count = sum(1 for e in cold if isinstance(e, LogEntry))
-        if cold:
-            earliest = None
-            latest = None
-            for e in cold:
-                ts = e.timestamp
-                if earliest is None or ts < earliest:
-                    earliest = ts
-                if latest is None or ts > latest:
-                    latest = ts
-            date_range = ""
-            if earliest and latest:
-                date_range = f" ({earliest.strftime('%b %Y')} \u2192 {latest.strftime('%b %Y')})"
-            cold_hint = (
-                f"{fence_count} fence(s) behind covering {regular_count} entries{date_range}. "
-                f"Use get_cold_logs({node_id}) to retrieve."
-            )
+        timestamps = [e.timestamp for e in cold]
+        earliest = min(timestamps)
+        latest = max(timestamps)
+        date_range = f" ({earliest.strftime('%b %Y')} \u2192 {latest.strftime('%b %Y')})"
+        cold_hint = (
+            f"{fence_count} fence(s) behind covering {regular_count} entries{date_range}. "
+            f"Use get_cold_logs({node_id}) to retrieve."
+        )
 
-    return GetNodeOutput(node=node, edges=edges, cold_hint=cold_hint)
+    return GetNodeResult(node=node, edges=edges, cold_hint=cold_hint)
 
 
 def get_node_neighborhood(
-    graph: Graph, node_id: str, depth: int  # noqa: ARG001
+    graph: Graph, node_id: str
 ) -> GetNodeNeighborhoodOutput:
-    # depth=1 implemented; deeper traversal deferred
     result = graph.query(
         """
         MATCH (n:SemanticNode {id: $id})
@@ -399,16 +473,18 @@ def get_node_neighborhood(
 
 def _hot_segment_token_count(hot_entries: list) -> int:
     """Estimate token count of hot log entries using tiktoken."""
-    enc = tiktoken.get_encoding("cl100k_base")
-    return sum(len(enc.encode(_serialize_log_entry(e))) for e in hot_entries)
+    return sum(len(_ENC.encode(_serialize_log_entry(e))) for e in hot_entries)
 
 
-def create_fence(graph: Graph, node_id: str, model: str) -> None:
+def create_fence(
+    graph: Graph, node_id: str, model: str, node_output: "GetNodeResult | None" = None
+) -> None:
     """
     Summarize the hot log segment of a node into a FenceEntry and append it.
     No-op if the hot segment is empty.
     """
-    node_output = get_node(graph, node_id)
+    if node_output is None:
+        node_output = get_node(graph, node_id)
     _, _, hot = _split_log(node_output.node.log)
     regular_hot = [e for e in hot if isinstance(e, LogEntry)]
 
@@ -462,7 +538,7 @@ def run_fence_checks(
         _, _, hot = _split_log(node_output.node.log)
         regular_hot = [e for e in hot if isinstance(e, LogEntry)]
         if _hot_segment_token_count(regular_hot) > log_token_budget:
-            create_fence(graph, node_id, model)
+            create_fence(graph, node_id, model, node_output=node_output)
 
 
 def get_cold_logs(graph: Graph, node_id: str) -> GetColdLogsOutput:

@@ -20,13 +20,6 @@ _COUNTER_FIELD: dict[CounterName, str] = {
     "chat": "next_chat_id",
 }
 
-_TOKEN_PREFIX: dict[CounterName, str] = {
-    "node": "node",
-    "edge": "edge",
-    "rec": "rec",
-    "chat": "chat",
-}
-
 
 class SystemState(BaseModel):
     next_node_id: int
@@ -54,6 +47,16 @@ def _row_to_state(props: dict) -> SystemState:
     )
 
 
+def _ensure_vector_index(graph: Graph) -> None:
+    try:
+        graph.query(
+            "CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
+            "OPTIONS {dimension:3072, similarityFunction:'cosine'}"
+        )
+    except Exception:
+        pass  # Index already exists
+
+
 def init_system(graph: Graph) -> SystemState:
     """Create the System node if it does not exist; return current state."""
     result = graph.query(
@@ -75,6 +78,7 @@ def init_system(graph: Graph) -> SystemState:
             "hot_budget": settings.HOT_THEME_TOKEN_BUDGET,
         },
     )
+    _ensure_vector_index(graph)
     node = result.result_set[0][0]
     return _row_to_state(node.properties)
 
@@ -110,7 +114,7 @@ def increment_counter(graph: Graph, counter: CounterName) -> str:
     The counter field is left pointing at the next available value.
     """
     field = _COUNTER_FIELD[counter]
-    prefix = _TOKEN_PREFIX[counter]
+    prefix = counter
     result = graph.query(
         f"""
         MATCH (s:System)

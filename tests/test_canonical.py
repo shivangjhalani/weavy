@@ -4,6 +4,7 @@ Requires a running FalkorDB instance (provided by devenv up).
 Uses the "arakne_test" graph to avoid touching the main graph.
 """
 
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -109,13 +110,13 @@ def test_list_transcripts_date_range(graph: Graph) -> None:
     # Range that covers the transcript
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     end = datetime(2024, 12, 31, tzinfo=timezone.utc)
-    output = list_transcripts(graph, ListTranscriptsInput(date_range=(start, end)))
+    output = list_transcripts(graph, ListTranscriptsInput(date_range=[start, end]))
     assert any(ts.id == t.id for ts in output.transcripts)
 
     # Range that excludes the transcript
     past_start = datetime(2023, 1, 1, tzinfo=timezone.utc)
     past_end = datetime(2023, 12, 31, tzinfo=timezone.utc)
-    output_empty = list_transcripts(graph, ListTranscriptsInput(date_range=(past_start, past_end)))
+    output_empty = list_transcripts(graph, ListTranscriptsInput(date_range=[past_start, past_end]))
     assert all(ts.id != t.id for ts in output_empty.transcripts)
 
 
@@ -124,6 +125,15 @@ def test_list_transcripts_limit(graph: Graph) -> None:
         _make_transcript(graph)
     output = list_transcripts(graph, ListTranscriptsInput(limit=2))
     assert len(output.transcripts) <= 2
+
+
+def test_list_transcripts_json_humanizes_timestamp(graph: Graph) -> None:
+    _make_transcript(graph)
+    output = list_transcripts(graph, ListTranscriptsInput(limit=1))
+
+    payload = json.loads(output.model_dump_json())
+    assert "UTC" in payload["transcripts"][0]["timestamp"]
+    assert "2024" in payload["transcripts"][0]["timestamp"]
 
 
 def test_get_transcript_span_with_timestamps(graph: Graph) -> None:
@@ -185,12 +195,30 @@ def test_list_chats(graph: Graph) -> None:
     assert s2.id in ids
 
 
+def test_list_chats_json_humanizes_timestamp(graph: Graph) -> None:
+    _make_chat(graph)
+    output = list_chats(graph, ListChatsInput(limit=1))
+
+    payload = json.loads(output.model_dump_json())
+    assert "UTC" in payload["chats"][0]["timestamp"]
+    assert "2024" in payload["chats"][0]["timestamp"]
+
+
 def test_get_chat_full(graph: Graph) -> None:
     s = _make_chat(graph)
     result = get_chat(graph, s.id, None, None)
 
     assert len(result.session.messages) == 3
     assert result.session.messages[2].content == "How are you?"
+
+
+def test_get_chat_json_humanizes_timestamp(graph: Graph) -> None:
+    s = _make_chat(graph)
+    result = get_chat(graph, s.id, None, None)
+
+    payload = json.loads(result.model_dump_json())
+    assert "UTC" in payload["session"]["timestamp"]
+    assert "2024" in payload["session"]["timestamp"]
 
 
 def test_get_chat_with_start_index(graph: Graph) -> None:

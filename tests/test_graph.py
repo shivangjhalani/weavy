@@ -4,6 +4,7 @@ Requires a running FalkorDB instance (provided by devenv up).
 Uses the "arakne_test" graph to avoid touching the main graph.
 """
 
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -25,7 +26,7 @@ from arakne.models.tools import (
 from arakne.models.traces import RunTrace
 from arakne.store import graph as store_graph
 from arakne.store.client import get_graph
-from arakne.store.system import init_system
+from arakne.store.system import increment_counter, init_system
 from arakne.tools import write_tools
 
 TEST_GRAPH = "arakne_test"
@@ -391,10 +392,10 @@ def test_get_node_returns_edges(graph: Graph) -> None:
     write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="test edge"), _ingestion_trace())
 
     from arakne.tools.read_tools import get_node as read_get_node
-    out = read_get_node(graph, GetNodeInput(node_id=a))
-    assert len(out.edges) == 1
-    assert out.edges[0].label == "test edge"
-    assert out.cold_hint is None  # no fence yet
+    out = read_get_node(graph, GetNodeInput(node_ids=[a]))
+    assert len(out.results[0].edges) == 1
+    assert out.results[0].edges[0].label == "test edge"
+    assert out.results[0].cold_hint is None  # no fence yet
 
 
 def test_get_node_hot_cold_split(graph: Graph) -> None:
@@ -431,13 +432,56 @@ def test_get_node_hot_cold_split(graph: Graph) -> None:
     write_tools.update_node(graph, UpdateNodeInput(node_id=node_id, note="hot update", provenance=p3), _ingestion_trace())
 
     from arakne.tools.read_tools import get_node as read_get_node
-    out = read_get_node(graph, GetNodeInput(node_id=node_id))
+    out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
     # Returned log should be [fence, hot_entry]
-    assert len(out.node.log) == 2
-    assert isinstance(out.node.log[0], FenceEntry)
-    assert isinstance(out.node.log[1], LogEntry)
-    assert out.cold_hint is not None
-    assert "get_cold_logs" in out.cold_hint
+    assert len(out.results[0].node.log) == 2
+    assert isinstance(out.results[0].node.log[0], FenceEntry)
+    assert isinstance(out.results[0].node.log[1], LogEntry)
+    assert out.results[0].cold_hint is not None
+    assert "get_cold_logs" in out.results[0].cold_hint
+
+
+def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
+    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    node_id = write_tools.create_node(
+        graph, CreateNodeInput(aliases=["test node"], summary="Test.", note="initial", provenance=prov), _ingestion_trace()
+    ).id
+
+    from arakne.tools.read_tools import get_node as read_get_node
+
+    out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
+    payload = json.loads(out.model_dump_json())
+    assert "UTC" in payload["results"][0]["node"]["log"][0]["timestamp"]
+
+
+def test_get_cold_logs_json_humanizes_fence_dates(graph: Graph) -> None:
+    fence = FenceEntry(
+        is_fence=True,
+        timestamp=datetime.now(tz=timezone.utc),
+        note="Fence summarizing entries.",
+        entries_behind=2,
+        date_range=(datetime.now(tz=timezone.utc), datetime.now(tz=timezone.utc)),
+    )
+    node_id = increment_counter(graph, "node")
+    store_graph.create_node(
+        graph,
+        ["test node"],
+        "Test.",
+        "initial",
+        ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10),
+        node_id,
+    )
+    graph.query(
+        "MATCH (n:SemanticNode {id: $id}) SET n.log = n.log + [$fence_json]",
+        {"id": node_id, "fence_json": store_graph._serialize_log_entry(fence)},
+    )
+
+    from arakne.tools.read_tools import get_cold_logs as read_get_cold_logs
+
+    out = read_get_cold_logs(graph, GetColdLogsInput(node_id=node_id))
+    payload = json.loads(out.model_dump_json())
+    assert "UTC" in payload["entries"][-1]["timestamp"]
+    assert all("UTC" in item for item in payload["entries"][-1]["date_range"])
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +504,7 @@ def test_get_node_neighborhood(graph: Graph) -> None:
     write_tools.create_edge(graph, CreateEdgeInput(from_node_id=c, to_node_id=a, label="influences"), _ingestion_trace())
 
     from arakne.tools.read_tools import get_node_neighborhood as read_neighborhood
-    out = read_neighborhood(graph, GetNodeNeighborhoodInput(node_id=a, depth=1))
+    out = read_neighborhood(graph, GetNodeNeighborhoodInput(node_id=a))
     assert out.node.id == a
     assert out.node.summary == "Career direction concerns."
     neighbor_ids = {n.node_id for n in out.neighbors}

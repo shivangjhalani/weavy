@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_serializer, field_validator, model_validator
+
+from arakne.timefmt import format_agent_date_range, format_agent_timestamp
 
 
 class LogEntry(BaseModel):
@@ -12,6 +14,10 @@ class LogEntry(BaseModel):
     end_offset: int | None  # seconds for rec, null for chat
     note: str
 
+    @field_serializer("timestamp", when_used="json")
+    def serialize_timestamp(self, value: datetime) -> str:
+        return format_agent_timestamp(value)
+
 
 class FenceEntry(BaseModel):
     is_fence: Literal[True]
@@ -19,6 +25,14 @@ class FenceEntry(BaseModel):
     note: str
     entries_behind: int
     date_range: tuple[datetime, datetime]
+
+    @field_serializer("timestamp", when_used="json")
+    def serialize_timestamp(self, value: datetime) -> str:
+        return format_agent_timestamp(value)
+
+    @field_serializer("date_range", when_used="json")
+    def serialize_date_range(self, value: tuple[datetime, datetime]) -> list[str]:
+        return format_agent_date_range(value[0], value[1])
 
 
 AnyLogEntry = Annotated[Union[LogEntry, FenceEntry], ...]

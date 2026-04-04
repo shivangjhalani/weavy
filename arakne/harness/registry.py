@@ -62,7 +62,7 @@ REGISTRY: dict[str, ToolEntry] = {
     ),
     "get_node": ToolEntry(
         name="get_node",
-        description="Retrieve a node's full details: summary, aliases, hot log entries, outgoing edges, and cold-log hint if applicable.",
+        description="Retrieve one or more semantic nodes by ID. Pass a list with one ID to fetch a single node, or multiple IDs to fetch in bulk. Returns full details per node: summary, aliases, hot log entries, outgoing edges, and cold-log hint if applicable.",
         input_model=GetNodeInput,
         fn=lambda p, ctx: read_tools.get_node(ctx.graph, p),
     ),
@@ -86,7 +86,7 @@ REGISTRY: dict[str, ToolEntry] = {
     ),
     "get_transcript_span": ToolEntry(
         name="get_transcript_span",
-        description="Retrieve a time-bounded span of transcript text by start and end offset in seconds.",
+        description="Retrieve one or more transcript spans in one call. Each span requires transcript_id, start_offset, and end_offset in seconds. Pass a list with one span to fetch a single excerpt, or multiple spans to fetch in bulk.",
         input_model=GetTranscriptSpanInput,
         fn=lambda p, ctx: read_tools.get_transcript_span(ctx.graph, p),
     ),
@@ -156,21 +156,21 @@ REGISTRY: dict[str, ToolEntry] = {
         name="create_theme",
         description="Create a new theme node with name, state description, anchor node ids, and status labels.",
         input_model=CreateThemeInput,
-        fn=lambda p, ctx: theme_tools.create_theme(ctx.graph, p, ctx.trace),
+        fn=lambda p, ctx: theme_tools.create_theme(ctx.graph, p),
         is_mutation=True,
     ),
     "update_theme": ToolEntry(
         name="update_theme",
         description="Update a theme's state description, anchor nodes, or status labels.",
         input_model=UpdateThemeInput,
-        fn=lambda p, ctx: theme_tools.update_theme(ctx.graph, p, ctx.trace),
+        fn=lambda p, ctx: theme_tools.update_theme(ctx.graph, p),
         is_mutation=True,
     ),
     "retire_theme": ToolEntry(
         name="retire_theme",
         description="Retire a theme, marking it as no longer active.",
         input_model=RetireThemeInput,
-        fn=lambda p, ctx: theme_tools.retire_theme(ctx.graph, p, ctx.trace),
+        fn=lambda p, ctx: theme_tools.retire_theme(ctx.graph, p),
         is_mutation=True,
     ),
     # ---- Completion tools ----

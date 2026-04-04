@@ -32,6 +32,7 @@ class TurnUsage(BaseModel):
 
 class Turn(BaseModel):
     turn_number: int
+    input_messages: list[dict[str, Any]] = []
     reasoning_content: str | None = None
     text_content: str | None = None
     tool_calls: list[ToolCall] = []
@@ -47,11 +48,10 @@ class RunTrace(BaseModel):
     input_summary: str
     turns: list[Turn] = []
     total_usage: TurnUsage = Field(default_factory=TurnUsage)
-    tool_calls: list[ToolCall] = []  # deprecated — kept for compat, no longer populated
-    llm_outputs: list[str] = []  # deprecated — kept for compat, no longer populated
     completion_payload: dict[str, Any] | None = None
     touched_nodes: list[TouchedNode] = []
     touched_edges: list[TouchedEdge] = []
     status: Literal["running", "completed", "failed"] = "running"
     error: str | None = None
     conversation: list[dict] | None = None
+

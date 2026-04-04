@@ -92,7 +92,6 @@ def run_theme_update(
         system_prompt=system_prompt,
         initial_messages=[{"role": "user", "content": delta_content}],
         allowed_tools=reg.THEME_MODE_TOOLS,
-        completion_tool="complete_theme_update",
         run_context={"input_summary": f"Theme update after: {summary[:80]}"},
         graph=graph,
     )

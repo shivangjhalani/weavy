@@ -65,12 +65,20 @@ def _mock_response(tool_name: str, args: dict[str, Any], call_id: str = "tc-1") 
     msg = MagicMock()
     msg.tool_calls = [tc]
     msg.content = None
+    msg.reasoning_content = None
 
     choice = MagicMock()
     choice.message = msg
 
+    usage = MagicMock()
+    usage.prompt_tokens = 100
+    usage.completion_tokens = 50
+    usage.total_tokens = 150
+    usage.completion_tokens_details = None
+
     resp = MagicMock()
     resp.choices = [choice]
+    resp.usage = usage
     return resp
 
 
@@ -97,7 +105,7 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.ingestion.theme_mode.run_theme_update") as mock_theme,
+        patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
         patch("arakne.modes.ingestion.save_trace"),
     ):
@@ -141,7 +149,7 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.ingestion.theme_mode.run_theme_update"),
+        patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[update_resp, done_resp]),
         patch("arakne.modes.ingestion.save_trace"),
     ):
@@ -172,7 +180,7 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.ingestion.theme_mode.run_theme_update"),
+        patch("arakne.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
         patch("arakne.modes.ingestion.save_trace"),
     ):
@@ -192,7 +200,7 @@ def test_ingest_no_writes_skips_theme(graph: Graph) -> None:
 
     with (
         patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.ingestion.theme_mode.run_theme_update") as mock_theme,
+        patch("arakne.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
         patch("arakne.modes.ingestion.save_trace"),
     ):
@@ -215,6 +223,26 @@ def test_ingest_missing_transcript_raises(graph: Graph) -> None:
 
         with pytest.raises(ValueError, match="not found"):
             run_ingestion("rec:999")
+
+
+def test_ingest_prompt_humanizes_recorded_timestamp(graph: Graph) -> None:
+    rec_id = _store_transcript(graph)
+    done_resp = _mock_response("complete_ingestion", {"summary": "Nothing to change."})
+
+    with (
+        patch("arakne.modes.ingestion.get_graph", return_value=graph),
+        patch("arakne.modes.theme.run_theme_update"),
+        patch("litellm.completion", return_value=done_resp) as mock_completion,
+        patch("arakne.modes.ingestion.save_trace"),
+    ):
+        from arakne.modes.ingestion import run_ingestion
+
+        run_ingestion(rec_id)
+
+    sent_messages = mock_completion.call_args.kwargs["messages"]
+    user_message = sent_messages[1]["content"]
+    assert "Recorded: " in user_message
+    assert "UTC" in user_message
 
 
 # ---------------------------------------------------------------------------

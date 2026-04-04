@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "falkordb>=1.6.0",
     "google-genai>=1.14.0",
+    "humanize>=4.14.0",
     "litellm>=1.82.1",
     "pydantic>=2.12.5",
     "pytest>=9.0.2",

@@ -10,12 +10,12 @@ from arakne.harness import registry as reg
 from arakne.harness.runner import run
 from arakne.harness.tracing import save_trace
 from arakne.models.traces import RunTrace
-from arakne.modes import theme as theme_mode
+from arakne.modes._common import run_post_trace_hooks
 from arakne.store import canonical as store_canonical
-from arakne.store import graph as store_graph
 from arakne.store import system as store_system
-from arakne.store import themes as store_themes
 from arakne.store.client import get_graph
+from arakne.store.themes import build_themes_context
+from arakne.timefmt import format_agent_timestamp
 
 _INGESTION_SYSTEM_PROMPT_TEMPLATE = """\
 You are an ingestion agent. Your job is to read a voice journal transcript and build or \
@@ -40,6 +40,13 @@ free-form natural language labels like "causes anxiety about", "is attempting to
 There is no fixed schema. You decide what deserves a node and how to label a relationship. \
 The only invariant: each node must have an honest summary and every write must carry provenance \
 back to the exact moment in the recording where this information appeared.
+
+This graph is for retrieval, not for exhaustively mirroring the transcript. Be conservative. \
+Capture the major things that are most likely to matter later: enduring people, core \
+relationships, recurring tensions, meaningful decisions, identity-shaping beliefs, important \
+places or contexts, and projects with real narrative weight. Small passing details, one-off \
+examples, and minor supporting facts usually belong in log notes on existing nodes, not as new \
+nodes or edges.
 
 ---
 
@@ -79,6 +86,12 @@ The read tool tiers:
 - get_cold_logs(node_id) — older log history behind the last fence. Use this if the cold hint \
   on get_node suggests relevant deep history.
 
+When you think a node may need updating, read its history before writing. Start with get_node. \
+If it has a cold-history hint and the older arc could affect your judgment, call get_cold_logs \
+too. Do this especially before rewriting summaries, adding aliases, or writing a note about a \
+theme that may already have been logged repeatedly. The goal is to understand the node's full \
+trajectory and avoid adding redundant logs that merely restate what is already there.
+
 **Step 3 — Plan before writing.**
 After reading the transcript and exploring the graph, reason about what this recording means \
 for the semantic graph:
@@ -91,6 +104,18 @@ for the semantic graph:
 Prefer updates over creates. If a concept is mentioned that clearly refers to an existing \
 node — even if named differently — update the existing node. Only create a new node for \
 something genuinely distinct that cannot be accurately represented by updating an existing one.
+
+Before you create anything, apply a usefulness test:
+- Will this node be a strong future retrieval handle on its own?
+- Does it have an arc likely to persist across sessions?
+- Would collapsing it into an existing node lose important meaning?
+
+If the answer is no, do not create the node. Put the detail in the relevant node's log note \
+instead.
+
+Be especially conservative with edges. Create an edge only when the relationship itself is \
+meaningful enough that traversing it later would help retrieval or synthesis. Do not create \
+edges for every mention, adjacency, or obvious contextual co-occurrence.
 
 **Step 4 — Write.**
 Execute writes. Every write requires honest, substantive notes and precise provenance.
@@ -126,6 +151,12 @@ When you rewrite a summary, the harness automatically archives the old one into 
 Your note in that write should explain what changed and why — what you now understand that \
 makes the old summary inadequate.
 
+Do not write repetitive log notes. Before updating a node, check what its existing logs \
+already say. If this transcript reinforces an existing pattern without materially changing the \
+node, either do not update the node at all or write a note that makes the incremental change \
+explicit: what is newly confirmed, intensified, contradicted, or resolved here. Avoid notes \
+that just restate the node summary or paraphrase prior log entries.
+
 ---
 
 ## What deserves a node
@@ -144,7 +175,7 @@ Good node candidates:
   its own arc
 
 Do not create a node for every thing mentioned. One well-written node with a careful summary \
-is worth ten thin ones.
+is worth ten thin ones. The graph should stay sparse, legible, and high-signal.
 
 ---
 
@@ -197,28 +228,18 @@ def run_ingestion(transcript_id: str) -> RunTrace:
 
     transcript = store_canonical.get_transcript(graph, transcript_id)
     system_state = store_system.get_system(graph)
-    all_themes = store_themes.list_all_themes(graph)
 
-    # Render theme context; fall back gracefully if priority_order is stale
-    try:
-        hot_block, cold_names = store_themes.render_hot_themes(
-            all_themes,
-            system_state.theme_priority_order,
-            system_state.hot_theme_token_budget,
-        )
-    except ValueError:
-        hot_block = ""
-        cold_names = [t.name for t in all_themes]
+    themes_context = build_themes_context(
+        graph,
+        system_state.theme_priority_order,
+        system_state.hot_theme_token_budget,
+        empty_msg="(No themes yet — this may be the first ingestion.)",
+    )
 
-    if hot_block:
-        cold_index = ("\n\nOther themes: " + ", ".join(cold_names)) if cold_names else ""
-        themes_context = hot_block + cold_index
-    elif cold_names:
-        themes_context = "Themes (no hot set rendered): " + ", ".join(cold_names)
-    else:
-        themes_context = "(No themes yet — this may be the first ingestion.)"
-
-    current_time = datetime.now(tz=timezone.utc).strftime("%A %d %b %Y, %I:%M %p UTC")
+    current_time = format_agent_timestamp(
+        datetime.now(tz=timezone.utc),
+        include_relative=False,
+    )
     system_prompt = _INGESTION_SYSTEM_PROMPT_TEMPLATE.format(
         current_time=current_time,
         themes_context=themes_context,
@@ -227,7 +248,7 @@ def run_ingestion(transcript_id: str) -> RunTrace:
     transcript_message = (
         f"Ingest this transcript.\n\n"
         f"ID: {transcript.id}\n"
-        f"Recorded: {transcript.timestamp}\n\n"
+        f"Recorded: {format_agent_timestamp(transcript.timestamp)}\n\n"
         f"{transcript.text}"
     )
 
@@ -236,27 +257,10 @@ def run_ingestion(transcript_id: str) -> RunTrace:
         system_prompt=system_prompt,
         initial_messages=[{"role": "user", "content": transcript_message}],
         allowed_tools=reg.INGESTION_TOOLS,
-        completion_tool="complete_ingestion",
         run_context={"input_summary": f"Ingesting {transcript_id}"},
         graph=graph,
     )
 
     save_trace(trace, "runs")
-
-    # Post-run: fence checks + theme update (only when writes occurred)
-    if trace.status == "completed" and trace.touched_nodes:
-        live_node_ids = [
-            n.node_id for n in trace.touched_nodes if n.action != "deleted"
-        ]
-        if live_node_ids:
-            store_graph.run_fence_checks(
-                graph,
-                live_node_ids,
-                system_state.log_token_budget,
-                settings.GEMINI_MODEL,
-            )
-
-        summary = (trace.completion_payload or {}).get("summary", "")
-        theme_mode.run_theme_update(summary, trace.touched_nodes, trace.touched_edges)
-
+    run_post_trace_hooks(trace, graph, system_state, completion_key="summary")
     return trace

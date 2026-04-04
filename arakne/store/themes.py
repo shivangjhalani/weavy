@@ -1,6 +1,5 @@
 """
 Theme persistence — Theme node CRUD and anchor edge management in FalkorDB.
-Implemented in Phase 6.
 """
 
 import json
@@ -11,12 +10,28 @@ from falkordb import Graph
 from arakne.models.themes import Theme, ThemeStatus
 from arakne.models.tools import GetThemeOutput, OperationResult
 
+_ENC = tiktoken.get_encoding("cl100k_base")
+
 
 def _parse_status(raw: list | str | None) -> list[ThemeStatus]:
     """Parse status from DB (may be list or JSON string)."""
     if isinstance(raw, str):
         return json.loads(raw)
     return list(raw) if raw else []
+
+
+def _validate_anchors(graph: Graph, anchor_ids: list[str]) -> None:
+    """Raise ValueError if any anchor_ids do not exist as SemanticNodes."""
+    if not anchor_ids:
+        return
+    result = graph.query(
+        "MATCH (n:SemanticNode) WHERE n.id IN $ids RETURN n.id",
+        {"ids": anchor_ids},
+    )
+    found = {row[0] for row in result.result_set}
+    missing = [a for a in anchor_ids if a not in found]
+    if missing:
+        raise ValueError(f"Anchor target(s) not found as SemanticNode: {', '.join(missing)}")
 
 
 def create_theme(
@@ -26,14 +41,7 @@ def create_theme(
     anchors: list[str],
     status: list[ThemeStatus],
 ) -> OperationResult:
-    # Validate anchor targets exist
-    for anchor_id in anchors:
-        result = graph.query(
-            "MATCH (n:SemanticNode {id: $id}) RETURN n.id",
-            {"id": anchor_id},
-        )
-        if not result.result_set:
-            raise ValueError(f"Anchor target '{anchor_id}' not found as a SemanticNode.")
+    _validate_anchors(graph, anchors)
 
     graph.query(
         "CREATE (t:Theme {name: $name, state: $state, status: $status})",
@@ -107,14 +115,7 @@ def update_theme(
         )
 
     if new_anchors is not None:
-        # Validate all new anchor targets exist
-        for anchor_id in new_anchors:
-            result = graph.query(
-                "MATCH (n:SemanticNode {id: $id}) RETURN n.id",
-                {"id": anchor_id},
-            )
-            if not result.result_set:
-                raise ValueError(f"Anchor target '{anchor_id}' not found as a SemanticNode.")
+        _validate_anchors(graph, new_anchors)
 
         # Get current anchors
         result = graph.query(
@@ -202,7 +203,6 @@ def render_hot_themes(
     if not themes:
         return ("", [])
 
-    enc = tiktoken.get_encoding("cl100k_base")
     theme_map = {t.name: t for t in themes}
 
     for name in priority_order:
@@ -219,7 +219,7 @@ def render_hot_themes(
         status_str = ", ".join(theme.status)
         anchors_str = ", ".join(theme.anchors) if theme.anchors else "none"
         rendered = f"{theme.name} [{status_str}]\n{theme.state}\n\u2192 {anchors_str}"
-        token_count = len(enc.encode(rendered))
+        token_count = len(_ENC.encode(rendered))
 
         if tokens_used + token_count <= token_budget:
             hot_parts.append(rendered)
@@ -244,3 +244,25 @@ def render_hot_themes(
         hot_block += "\n\nOther themes: " + ", ".join(cold_names)
 
     return (hot_block, cold_names)
+
+
+def build_themes_context(
+    graph: Graph,
+    priority_order: list[str],
+    budget: int,
+    empty_msg: str = "(No themes yet.)",
+) -> str:
+    """Render the themes context block for a system prompt."""
+    all_themes = list_all_themes(graph)
+    try:
+        hot_block, cold_names = render_hot_themes(all_themes, priority_order, budget)
+    except ValueError:
+        hot_block = ""
+        cold_names = [t.name for t in all_themes]
+
+    if hot_block:
+        cold_index = ("\n\nOther themes: " + ", ".join(cold_names)) if cold_names else ""
+        return hot_block + cold_index
+    if cold_names:
+        return "Themes (no hot set rendered): " + ", ".join(cold_names)
+    return empty_msg
