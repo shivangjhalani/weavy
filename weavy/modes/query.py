@@ -4,20 +4,20 @@ Query/chat mode — grounded retrieval and conversational graph mutation.
 
 from datetime import datetime, timezone
 
-from arakne.config import settings
-from arakne.harness import registry as reg
-from arakne.harness.runner import run
-from arakne.harness.tracing import ChatSessionTracer
-from arakne.models.canonical import ChatSession
-from arakne.models.traces import RunTrace
-from arakne.modes._common import (
+from weavy.config import settings
+from weavy.harness import registry as reg
+from weavy.harness.runner import run
+from weavy.harness.tracing import ChatSessionTracer
+from weavy.models.canonical import ChatSession
+from weavy.models.traces import RunTrace
+from weavy.modes._common import (
     build_themed_system_prompt,
     conversation_to_chat_messages,
     run_post_trace_hooks,
 )
-from arakne.store import canonical as store_canonical
-from arakne.store import system as store_system
-from arakne.store.client import get_graph
+from weavy.store import canonical as store_canonical
+from weavy.store import system as store_system
+from weavy.store.client import get_graph
 
 
 def _persist_chat_session(
@@ -51,7 +51,7 @@ def run_query(
         chat_id = store_system.increment_counter(graph, "chat")
 
     system_prompt = build_themed_system_prompt(
-        "arakne-query",
+        "weavy-query",
         graph,
         system_state,
         empty_themes_message="(No themes yet — start with search_graph or list_transcripts.)",
@@ -94,7 +94,7 @@ def run_chat_repl() -> None:
     session_tracer = ChatSessionTracer(chat_id)
     message_count = 0
 
-    print("Arakne chat — type 'exit' or Ctrl-D to quit.\n")
+    print("Weavy chat — type 'exit' or Ctrl-D to quit.\n")
     while True:
         try:
             question = input("You: ").strip()
@@ -120,7 +120,7 @@ def run_chat_repl() -> None:
             continue
 
         answer = (trace.completion_payload or {}).get("answer", "")
-        print(f"\nArakne: {answer}\n")
+        print(f"\nWeavy: {answer}\n")
 
         if trace.conversation:
             conversation = trace.conversation

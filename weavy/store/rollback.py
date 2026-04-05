@@ -2,27 +2,25 @@
 Ingestion rollback — reverse all graph mutations caused by a transcript ingestion run.
 
 Usage:
-    from arakne.store.rollback import rollback_ingestion
+    from weavy.store.rollback import rollback_ingestion
     rollback_ingestion("rec:3")
 
 After a successful rollback the transcript's ingestion_status is reset to 0
 and its run_manifest is cleared, making the transcript eligible for re-ingestion.
 """
 
-import litellm
 from falkordb import Graph
 
-from arakne.config import settings
-from arakne.models.traces import EdgeSnapshot, MutationOp, NodeSnapshot
-from arakne.store import canonical as store_canonical
-from arakne.store.client import get_graph
+from weavy.config import settings
+from weavy.models.traces import EdgeSnapshot, MutationOp, NodeSnapshot
+from weavy.store import canonical as store_canonical
+from weavy.store.client import get_graph
+from weavy.store.graph import generate_embedding as _generate_embedding_strict
 
 
 def _generate_embedding(aliases: list[str], summary: str) -> list[float] | None:
     try:
-        text = summary + " " + " ".join(aliases)
-        response = litellm.embedding(model=settings.GEMINI_EMBEDDING_MODEL, input=[text])
-        return response.data[0]["embedding"]
+        return _generate_embedding_strict(aliases, summary)
     except Exception:
         return None
 

@@ -21,7 +21,7 @@ def score_trace(
         value: Numeric score, typically 0.0–1.0.
         comment: Optional explanation for the score.
     """
-    from arakne.langfuse_client import get_langfuse
+    from weavy.langfuse_client import get_langfuse
 
     get_langfuse().create_score(
         trace_id=trace_id,

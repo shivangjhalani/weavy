@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, field_serializer, field_validator, model_validator
 
-from arakne.timefmt import format_agent_date_range, format_agent_timestamp
+from weavy.timefmt import format_agent_date_range, format_agent_timestamp
 
 
 class LogEntry(BaseModel):

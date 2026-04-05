@@ -5,17 +5,14 @@ Implemented in Phase 3.
 
 import json
 from datetime import datetime, timezone
-from typing import Union
 
 import litellm
 import tiktoken
 from falkordb import Graph
 
-_ENC = tiktoken.get_encoding("cl100k_base")
-
-from arakne.config import settings
-from arakne.models.graph import FenceEntry, LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
-from arakne.models.tools import (
+from weavy.config import settings
+from weavy.models.graph import FenceEntry, LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
+from weavy.models.tools import (
     GetColdLogsOutput,
     GetNodeNeighborhoodOutput,
     GetNodeResult,
@@ -26,13 +23,15 @@ from arakne.models.tools import (
     SearchResult,
 )
 
+_ENC = tiktoken.get_encoding("cl100k_base")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _serialize_log_entry(entry: Union[LogEntry, FenceEntry]) -> str:
+def _serialize_log_entry(entry: LogEntry | FenceEntry) -> str:
     return json.dumps(entry.model_dump(mode="python"), default=_json_default)
 
 
@@ -42,17 +41,16 @@ def _json_default(value: object) -> str:
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
-def _deserialize_log_entry(s: str) -> Union[LogEntry, FenceEntry]:
+def _deserialize_log_entry(s: str) -> LogEntry | FenceEntry:
     data = json.loads(s)
     if data.get("is_fence"):
         return FenceEntry(**data)
     return LogEntry(**data)
 
 
-
 def _split_log(
-    entries: list[Union[LogEntry, FenceEntry]],
-) -> tuple[list[Union[LogEntry, FenceEntry]], FenceEntry | None, list[Union[LogEntry, FenceEntry]]]:
+    entries: list[LogEntry | FenceEntry],
+) -> tuple[list[LogEntry | FenceEntry], FenceEntry | None, list[LogEntry | FenceEntry]]:
     """Split log into (cold, last_fence, hot).
 
     hot  = everything after the last FenceEntry (all entries if no fence)
@@ -85,7 +83,7 @@ def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
     )
 
 
-def _generate_embedding(aliases: list[str], summary: str) -> list[float]:
+def generate_embedding(aliases: list[str], summary: str) -> list[float]:
     text = summary + " " + " ".join(aliases)
     response = litellm.embedding(model=settings.GEMINI_EMBEDDING_MODEL, input=[text])
     return response.data[0]["embedding"]
@@ -126,7 +124,7 @@ def create_node(
         },
     )
     try:
-        embedding = _generate_embedding(aliases, summary)
+        embedding = generate_embedding(aliases, summary)
         graph.query(
             "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
             {"id": node_id, "embedding": embedding},
@@ -187,9 +185,9 @@ def update_node(
         try:
             effective_aliases = new_aliases if new_aliases is not None else props.get("aliases", [])
             effective_summary = new_summary if new_summary is not None else current_summary
-            embedding = _generate_embedding(effective_aliases, effective_summary)
+            embedding = generate_embedding(effective_aliases, effective_summary)
             graph.query(
-                "MATCH (n:SemanticNode {id: $id}) REMOVE n.embedding SET n.embedding = vecf32($embedding)",
+                "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
                 {"id": node_id, "embedding": embedding},
             )
         except Exception:
@@ -295,7 +293,7 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
     # --- Vector pass ---
     vec_hits: dict[str, tuple] = {}
     try:
-        query_vec = _generate_embedding([], params.query)
+        query_vec = generate_embedding([], params.query)
         vec_result = graph.query(
             """
             CALL db.idx.vector.queryNodes('SemanticNode', 'embedding', $k, vecf32($vec))
@@ -369,7 +367,7 @@ def get_node(graph: Graph, node_id: str) -> GetNodeResult:
     cold, last_fence, hot = _split_log(all_entries)
 
     # Construct SemanticNode with only [last_fence] + hot in .log
-    trimmed_log: list[Union[LogEntry, FenceEntry]] = []
+    trimmed_log: list[LogEntry | FenceEntry] = []
     if last_fence is not None:
         trimmed_log.append(last_fence)
     trimmed_log.extend(hot)
@@ -431,7 +429,7 @@ def get_node_neighborhood(
     _, _, hot = _split_log(all_entries)
 
     # Return last 2 hot entries for orientation
-    orientation_log: list[Union[LogEntry, FenceEntry]] = hot[-2:] if hot else []
+    orientation_log: list[LogEntry | FenceEntry] = hot[-2:] if hot else []
 
     node = SemanticNode(
         id=node_props["id"],
@@ -554,7 +552,7 @@ def get_cold_logs(graph: Graph, node_id: str) -> GetColdLogsOutput:
     cold, last_fence, _hot = _split_log(all_entries)
 
     # cold = everything before the last fence; include last_fence too for full cold view
-    cold_entries: list[Union[LogEntry, FenceEntry]] = list(cold)
+    cold_entries: list[LogEntry | FenceEntry] = list(cold)
     if last_fence is not None:
         cold_entries.append(last_fence)
 

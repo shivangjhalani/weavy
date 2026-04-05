@@ -24,7 +24,7 @@ class EvalItem(BaseModel):
 
 def load_dataset(dataset_name: str) -> list[EvalItem]:
     """Fetch all items from a Langfuse dataset and return as EvalItem list."""
-    from arakne.langfuse_client import get_langfuse
+    from weavy.langfuse_client import get_langfuse
 
     dataset = get_langfuse().get_dataset(dataset_name)
     items: list[EvalItem] = []

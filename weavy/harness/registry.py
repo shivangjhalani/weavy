@@ -9,7 +9,7 @@ from typing import Any, Callable
 from falkordb import Graph
 from pydantic import BaseModel
 
-from arakne.models.tools import (
+from weavy.models.tools import (
     CompleteIngestionInput,
     CompleteThemeUpdateInput,
     CreateEdgeInput,
@@ -32,8 +32,8 @@ from arakne.models.tools import (
     UpdateNodeInput,
     UpdateThemeInput,
 )
-from arakne.models.traces import RunTrace
-from arakne.tools import completion_tools, read_tools, theme_tools, write_tools
+from weavy.models.traces import RunTrace
+from weavy.tools import completion_tools, read_tools, theme_tools, write_tools
 
 
 @dataclass

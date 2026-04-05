@@ -33,8 +33,8 @@ from typing import Any, Literal
 
 import litellm
 
-from arakne.config import settings
-from arakne.models.traces import RunTrace, TouchedEdge, TouchedNode, TurnUsage, graph_delta
+from weavy.config import settings
+from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode, TurnUsage, graph_delta
 
 
 @lru_cache(maxsize=64)
@@ -82,7 +82,7 @@ class ChatSessionTracer:
     """
 
     def __init__(self, chat_id: str) -> None:
-        from arakne.langfuse_client import get_langfuse
+        from weavy.langfuse_client import get_langfuse
 
         self._lf = get_langfuse()
         self.root = self._lf.start_observation(
@@ -125,7 +125,7 @@ class RunTracer:
         session_id: str | None = None,
         parent_observation: Any = None,
     ) -> None:
-        from arakne.langfuse_client import get_langfuse
+        from weavy.langfuse_client import get_langfuse
 
         self._lf = get_langfuse()
         self._owns_root = parent_observation is None

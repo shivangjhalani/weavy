@@ -17,3 +17,8 @@ class Theme(BaseModel):
         if not 1 <= len(v) <= 2:
             raise ValueError("status must have 1 or 2 items")
         return v
+
+    def render_block(self) -> str:
+        status_str = ", ".join(self.status)
+        anchors_str = ", ".join(self.anchors) if self.anchors else "none"
+        return f"{self.name} [{status_str}]\n{self.state}\n\u2192 {anchors_str}"

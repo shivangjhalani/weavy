@@ -1,6 +1,6 @@
 """
-Arakne CLI — entry point for operational commands.
-Run as: python -m arakne.cli <command>
+Weavy CLI — entry point for operational commands.
+Run as: python -m weavy.cli <command>
 """
 
 import argparse
@@ -9,49 +9,43 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from arakne.models.canonical import ChatMessage, ChatSession, Transcript
-from arakne.models.tools import ListChatsInput, ListTranscriptsInput
-from arakne.store.canonical import (
+from weavy.models.canonical import ChatMessage, ChatSession, Transcript
+from weavy.models.tools import ListChatsInput, ListTranscriptsInput
+from weavy.store.canonical import (
     create_chat_session,
     create_transcript,
     list_chats,
     list_transcripts,
 )
-from arakne.store.client import get_graph
-from arakne.store.system import get_system, increment_counter, init_system
+from weavy.store.client import get_graph
+from weavy.store.system import SystemState, get_system, increment_counter, init_system
+
+
+def _print_system_state(header: str, state: SystemState) -> None:
+    print(f"{header}:")
+    print(f"  next_node_id          = {state.next_node_id}")
+    print(f"  next_edge_id          = {state.next_edge_id}")
+    print(f"  next_rec_id           = {state.next_rec_id}")
+    print(f"  next_chat_id          = {state.next_chat_id}")
+    print(f"  log_token_budget      = {state.log_token_budget}")
+    print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
+    print(f"  theme_priority_order  = {state.theme_priority_order}")
 
 
 def cmd_init_system(args: argparse.Namespace) -> None:
     graph = get_graph()
     state = init_system(graph)
-    print("System node initialised:")
-    print(f"  next_node_id          = {state.next_node_id}")
-    print(f"  next_edge_id          = {state.next_edge_id}")
-    print(f"  next_rec_id           = {state.next_rec_id}")
-    print(f"  next_chat_id          = {state.next_chat_id}")
-    print(f"  log_token_budget      = {state.log_token_budget}")
-    print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
-    print(f"  theme_priority_order  = {state.theme_priority_order}")
+    _print_system_state("System node initialised", state)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
     graph = get_graph()
     state = get_system(graph)
-    print("System state:")
-    print(f"  next_node_id          = {state.next_node_id}")
-    print(f"  next_edge_id          = {state.next_edge_id}")
-    print(f"  next_rec_id           = {state.next_rec_id}")
-    print(f"  next_chat_id          = {state.next_chat_id}")
-    print(f"  log_token_budget      = {state.log_token_budget}")
-    print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
-    print(f"  theme_priority_order  = {state.theme_priority_order}")
+    _print_system_state("System state", state)
 
 
 def cmd_create_transcript(args: argparse.Namespace) -> None:
     text_path = Path(args.text_file)
-    if not text_path.exists():
-        print(f"Error: text file not found: {text_path}", file=sys.stderr)
-        sys.exit(1)
     text = text_path.read_text()
     graph = get_graph()
     get_system(graph)  # ensures System node exists
@@ -78,9 +72,6 @@ def cmd_list_transcripts(args: argparse.Namespace) -> None:
 
 def cmd_create_chat(args: argparse.Namespace) -> None:
     messages_path = Path(args.messages_file)
-    if not messages_path.exists():
-        print(f"Error: messages file not found: {messages_path}", file=sys.stderr)
-        sys.exit(1)
     raw = json.loads(messages_path.read_text())
     messages = [ChatMessage(**m) for m in raw]
     graph = get_graph()
@@ -106,7 +97,7 @@ def cmd_list_chats(args: argparse.Namespace) -> None:
 
 
 def cmd_ingest(args: argparse.Namespace) -> None:
-    from arakne.modes.ingestion import run_ingestion
+    from weavy.modes.ingestion import run_ingestion
 
     trace = run_ingestion(args.transcript_id)
     print(f"Status: {trace.status}")
@@ -120,14 +111,14 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 
 
 def cmd_rollback(args: argparse.Namespace) -> None:
-    from arakne.store.rollback import rollback_ingestion
+    from weavy.store.rollback import rollback_ingestion
 
     rollback_ingestion(args.transcript_id)
     print(f"Rolled back {args.transcript_id}. Status reset to 0, ready to re-ingest.")
 
 
 def cmd_transcribe(args: argparse.Namespace) -> None:
-    from arakne.transcribe import transcribe_audio
+    from weavy.transcribe import transcribe_audio
 
     print(f"Transcribing {args.audio_path} ...")
     text = transcribe_audio(args.audio_path)
@@ -149,11 +140,11 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
 
 def cmd_query(args: argparse.Namespace) -> None:
     if args.question is None:
-        from arakne.modes.query import run_chat_repl
+        from weavy.modes.query import run_chat_repl
         run_chat_repl()
         return
 
-    from arakne.modes.query import run_query
+    from weavy.modes.query import run_query
 
     trace = run_query(args.question)
     print(f"Status: {trace.status}")
@@ -165,7 +156,7 @@ def cmd_query(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="arakne", description="Arakne CLI")
+    parser = argparse.ArgumentParser(prog="weavy", description="Weavy CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("init-system", help="Initialise the System node in FalkorDB")

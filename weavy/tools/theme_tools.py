@@ -4,13 +4,13 @@ Theme tools — theme map maintenance.
 
 from falkordb import Graph
 
-from arakne.models.tools import (
+from weavy.models.tools import (
     CreateThemeInput,
     OperationResult,
     RetireThemeInput,
     UpdateThemeInput,
 )
-from arakne.store import themes as store_themes
+from weavy.store import themes as store_themes
 
 
 def create_theme(graph: Graph, params: CreateThemeInput) -> OperationResult:

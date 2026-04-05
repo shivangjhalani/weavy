@@ -68,7 +68,7 @@ Notes:
 - `GROQ_API_KEY` is only required for audio transcription.
 - `LANGFUSE_*` is required for prompt fetches and tracing.
 - FalkorDB defaults to `localhost:6379`.
-- The default graph name is `arakne`.
+- The default graph name is `weavy`.
 
 ## Start The Services
 
@@ -135,7 +135,7 @@ If prompts are missing, ingestion and query runs will fail when `fetch_prompt()`
 Run this once per graph before using the app:
 
 ```bash
-uv run python -m arakne.cli init-system
+uv run python -m weavy.cli init-system
 ```
 
 This creates the singleton `System` node, including:
@@ -157,12 +157,12 @@ If the `System` node does not exist, many operations will fail with a message te
 
 ## Create Or Transcribe Transcripts
 
-Arakne ingests stored transcripts, not raw audio directly. You have two main paths.
+Weavy ingests stored transcripts, not raw audio directly. You have two main paths.
 
 ### Option 1: Transcribe Audio
 
 ```bash
-uv run python -m arakne.cli transcribe /path/to/recording.m4a
+uv run python -m weavy.cli transcribe /path/to/recording.m4a
 ```
 
 What happens:
@@ -215,7 +215,7 @@ WHISPER_TEMPERATURE=0
 If you already have transcript text:
 
 ```bash
-uv run python -m arakne.cli create-transcript \
+uv run python -m weavy.cli create-transcript \
   --audio-path /path/to/original-audio.m4a \
   --text-file /path/to/transcript.txt
 ```
@@ -229,8 +229,8 @@ Notes:
 ### List Stored Transcripts
 
 ```bash
-uv run python -m arakne.cli list-transcripts
-uv run python -m arakne.cli list-transcripts --limit 5
+uv run python -m weavy.cli list-transcripts
+uv run python -m weavy.cli list-transcripts --limit 5
 ```
 
 Expect output shaped like:
@@ -244,7 +244,7 @@ rec:1  2026-04-04T12:34:56+00:00  /path/to/audio.m4a
 Once you have a `rec:N`, ingest it:
 
 ```bash
-uv run python -m arakne.cli ingest rec:1
+uv run python -m weavy.cli ingest rec:1
 ```
 
 What ingestion does:
@@ -277,7 +277,7 @@ Important expectations:
 Run a one-shot query:
 
 ```bash
-uv run python -m arakne.cli query "What have I been thinking about recently?"
+uv run python -m weavy.cli query "What have I been thinking about recently?"
 ```
 
 What query mode does:
@@ -300,13 +300,13 @@ What the CLI prints:
 If you omit the question argument:
 
 ```bash
-uv run python -m arakne.cli query
+uv run python -m weavy.cli query
 ```
 
-Arakne starts a REPL:
+Weavy starts a REPL:
 
 ```text
-Arakne chat — type 'exit' or Ctrl-D to quit.
+Weavy chat — type 'exit' or Ctrl-D to quit.
 ```
 
 Behavior to expect:
@@ -318,12 +318,12 @@ Behavior to expect:
 
 ## Chat And Transcript Canonical Records
 
-Arakne keeps canonical records alongside the derived semantic graph.
+Weavy keeps canonical records alongside the derived semantic graph.
 
 You can also manually create chat sessions:
 
 ```bash
-uv run python -m arakne.cli create-chat --messages-file messages.json
+uv run python -m weavy.cli create-chat --messages-file messages.json
 ```
 
 Where `messages.json` looks like:
@@ -338,8 +338,8 @@ Where `messages.json` looks like:
 List stored chats:
 
 ```bash
-uv run python -m arakne.cli list-chats
-uv run python -m arakne.cli list-chats --limit 10
+uv run python -m weavy.cli list-chats
+uv run python -m weavy.cli list-chats --limit 10
 ```
 
 ## Themes And Automatic Post-Run Behavior
@@ -383,11 +383,11 @@ These are not saved to a local `runs/` folder. If you want to inspect a run, use
 
 ### Prompts
 
-Arakne fetches prompts by name from Langfuse with the `production` label:
+Weavy fetches prompts by name from Langfuse with the `production` label:
 
-- `arakne-ingestion`
-- `arakne-query`
-- `arakne-theme`
+- `weavy-ingestion`
+- `weavy-query`
+- `weavy-theme`
 
 If you change prompts in Langfuse, that changes runtime behavior without a code change.
 
@@ -442,17 +442,17 @@ The eval flow is Python-level and Langfuse-backed:
 
 Relevant modules:
 
-- `arakne.evals.scenarios`
-- `arakne.evals.runner`
-- `arakne.evals.judges`
-- `arakne.evals.reports`
+- `weavy.evals.scenarios`
+- `weavy.evals.runner`
+- `weavy.evals.judges`
+- `weavy.evals.reports`
 
 ## Full CLI Reference
 
 All commands run through:
 
 ```bash
-uv run python -m arakne.cli <command>
+uv run python -m weavy.cli <command>
 ```
 
 Commands:
@@ -479,7 +479,7 @@ query [question]
 Run:
 
 ```bash
-uv run python -m arakne.cli init-system
+uv run python -m weavy.cli init-system
 ```
 
 ### Prompt fetch or trace failures
@@ -509,7 +509,7 @@ Check:
 
 ### Tests failing in this environment
 
-Some test runs may fail before collection if native dependencies used by `litellm` or `tokenizers` are missing from the runtime environment. That is an environment issue, not necessarily an Arakne logic issue.
+Some test runs may fail before collection if native dependencies used by `litellm` or `tokenizers` are missing from the runtime environment. That is an environment issue, not necessarily an Weavy logic issue.
 
 ## Current Limits
 
@@ -531,8 +531,8 @@ docker compose -f docker-compose.langfuse.yml up -d
 
 devenv shell
 uv run python scripts/seed_prompts.py
-uv run python -m arakne.cli init-system
-uv run python -m arakne.cli transcribe /path/to/recording.m4a
-uv run python -m arakne.cli ingest rec:1
-uv run python -m arakne.cli query "What has been on my mind recently?"
+uv run python -m weavy.cli init-system
+uv run python -m weavy.cli transcribe /path/to/recording.m4a
+uv run python -m weavy.cli ingest rec:1
+uv run python -m weavy.cli query "What has been on my mind recently?"
 ```

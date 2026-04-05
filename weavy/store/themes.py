@@ -7,8 +7,8 @@ import json
 import tiktoken
 from falkordb import Graph
 
-from arakne.models.themes import Theme, ThemeStatus
-from arakne.models.tools import GetThemeOutput, OperationResult
+from weavy.models.themes import Theme, ThemeStatus
+from weavy.models.tools import GetThemeOutput, OperationResult
 
 _ENC = tiktoken.get_encoding("cl100k_base")
 
@@ -216,9 +216,7 @@ def render_hot_themes(
 
     for name in priority_order:
         theme = theme_map[name]
-        status_str = ", ".join(theme.status)
-        anchors_str = ", ".join(theme.anchors) if theme.anchors else "none"
-        rendered = f"{theme.name} [{status_str}]\n{theme.state}\n\u2192 {anchors_str}"
+        rendered = theme.render_block()
         token_count = len(_ENC.encode(rendered))
 
         if tokens_used + token_count <= token_budget:
@@ -261,8 +259,7 @@ def build_themes_context(
         cold_names = [t.name for t in all_themes]
 
     if hot_block:
-        cold_index = ("\n\nOther themes: " + ", ".join(cold_names)) if cold_names else ""
-        return hot_block + cold_index
+        return hot_block
     if cold_names:
         return "Themes (no hot set rendered): " + ", ".join(cold_names)
     return empty_msg

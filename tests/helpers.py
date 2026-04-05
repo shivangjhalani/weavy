@@ -10,7 +10,7 @@ from weavy.store import canonical as store_canonical
 from weavy.store.client import get_graph
 from weavy.store.system import increment_counter, init_system
 
-TEST_GRAPH = "arakne_test"
+TEST_GRAPH = "weavy_test"
 
 
 def reset_test_graph(*extra_labels: str) -> Graph:

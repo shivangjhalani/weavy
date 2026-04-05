@@ -10,10 +10,10 @@ from typing import Any, Literal
 import litellm
 from falkordb import Graph
 
-from arakne.config import settings
-from arakne.harness import registry as reg
-from arakne.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
-from arakne.models.traces import RunTrace, ToolCall, Turn, TurnUsage
+from weavy.config import settings
+from weavy.harness import registry as reg
+from weavy.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
+from weavy.models.traces import RunTrace, ToolCall, Turn, TurnUsage
 
 _MAX_COMPLETION_NUDGES = 1
 

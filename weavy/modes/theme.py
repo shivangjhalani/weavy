@@ -2,14 +2,14 @@
 Theme mode — delta-driven theme map maintenance.
 """
 
-from arakne.config import settings
-from arakne.harness import registry as reg
-from arakne.harness.runner import run
-from arakne.models.traces import RunTrace, TouchedEdge, TouchedNode
-from arakne.modes._common import fetch_prompt
-from arakne.store import system as store_system
-from arakne.store import themes as store_themes
-from arakne.store.client import get_graph
+from weavy.config import settings
+from weavy.harness import registry as reg
+from weavy.harness.runner import run
+from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode
+from weavy.modes._common import fetch_prompt
+from weavy.store import system as store_system
+from weavy.store import themes as store_themes
+from weavy.store.client import get_graph
 
 
 def _render_full_theme_map(themes: list, priority_order: list[str]) -> str:
@@ -18,9 +18,7 @@ def _render_full_theme_map(themes: list, priority_order: list[str]) -> str:
 
     lines = ["CURRENT THEME MAP:\n"]
     for theme in themes:
-        status_str = ", ".join(theme.status)
-        anchors_str = ", ".join(theme.anchors) if theme.anchors else "none"
-        lines.append(f"{theme.name} [{status_str}]\n{theme.state}\n\u2192 {anchors_str}\n")
+        lines.append(f"{theme.render_block()}\n")
     lines.append(f"\nCurrent priority order: {priority_order}")
     return "\n".join(lines)
 
@@ -36,7 +34,7 @@ def run_theme_update(
     system_state = store_system.get_system(graph)
 
     theme_map_text = _render_full_theme_map(all_themes, system_state.theme_priority_order)
-    system_prompt = fetch_prompt("arakne-theme", {"theme_map": theme_map_text})
+    system_prompt = fetch_prompt("weavy-theme", {"theme_map": theme_map_text})
 
     touched_nodes_text = (
         "\n".join(f"  - {n.node_id} ({n.action})" for n in touched_nodes)

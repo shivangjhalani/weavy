@@ -4,8 +4,8 @@ Write tools — semantic graph CRUD with provenance validation.
 
 from falkordb import Graph
 
-from arakne.models.graph import ProvenanceInput
-from arakne.models.tools import (
+from weavy.models.graph import ProvenanceInput
+from weavy.models.tools import (
     CreateEdgeInput,
     CreateNodeInput,
     DeleteEdgeInput,
@@ -14,7 +14,7 @@ from arakne.models.tools import (
     UpdateEdgeInput,
     UpdateNodeInput,
 )
-from arakne.models.traces import (
+from weavy.models.traces import (
     EdgeSnapshot,
     MutationOp,
     NodeSnapshot,
@@ -22,8 +22,8 @@ from arakne.models.traces import (
     TouchedEdge,
     TouchedNode,
 )
-from arakne.store import graph as store_graph
-from arakne.store import system as store_system
+from weavy.store import graph as store_graph
+from weavy.store import system as store_system
 
 
 def _validate_node_provenance(provenance: ProvenanceInput | None, mode: str) -> None:

@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, field_serializer
 
-from arakne.timefmt import format_agent_timestamp
+from weavy.timefmt import format_agent_timestamp
 
 
 class ChatMessage(BaseModel):

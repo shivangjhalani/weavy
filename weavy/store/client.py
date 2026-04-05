@@ -1,6 +1,6 @@
 from falkordb import FalkorDB, Graph
 
-from arakne.config import settings
+from weavy.config import settings
 
 
 def get_graph(graph_name: str | None = None) -> Graph:

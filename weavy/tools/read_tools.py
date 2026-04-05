@@ -4,7 +4,7 @@ Read tools — graph and source retrieval.
 
 from falkordb import Graph
 
-from arakne.models.tools import (
+from weavy.models.tools import (
     GetChatInput,
     GetChatOutput,
     GetColdLogsInput,
@@ -25,9 +25,9 @@ from arakne.models.tools import (
     SearchGraphInput,
     SearchGraphOutput,
 )
-from arakne.store import canonical as store_canonical
-from arakne.store import graph as store_graph
-from arakne.store import themes as store_themes
+from weavy.store import canonical as store_canonical
+from weavy.store import graph as store_graph
+from weavy.store import themes as store_themes
 
 
 def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:

@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 
 from falkordb import Graph
 
-from arakne.config import settings
-from arakne.models.canonical import ChatMessage
-from arakne.models.traces import RunTrace
-from arakne.store import graph as store_graph
-from arakne.store.system import SystemState
-from arakne.store.themes import build_themes_context
-from arakne.timefmt import format_agent_timestamp
+from weavy.config import settings
+from weavy.models.canonical import ChatMessage
+from weavy.models.traces import RunTrace
+from weavy.store import graph as store_graph
+from weavy.store.system import SystemState
+from weavy.store.themes import build_themes_context
+from weavy.timefmt import format_agent_timestamp
 
 
 def _unique_live_node_ids(trace: RunTrace) -> list[str]:
@@ -31,7 +31,7 @@ def fetch_prompt(name: str, variables: dict) -> str:
 
     Raises on any failure — no silent fallback. Langfuse must be running.
     """
-    from arakne.langfuse_client import get_langfuse
+    from weavy.langfuse_client import get_langfuse
 
     prompt = get_langfuse().get_prompt(name, label="production")
     return prompt.compile(**variables)
@@ -86,6 +86,6 @@ def run_post_trace_hooks(
             graph, live_node_ids, system_state.log_token_budget, settings.GEMINI_MODEL
         )
 
-    from arakne.modes import theme as theme_mode  # local import avoids circular dep
+    from weavy.modes import theme as theme_mode  # local import avoids circular dep
 
     theme_mode.run_theme_update(completion_text, trace.touched_nodes, trace.touched_edges)

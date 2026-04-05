@@ -1,7 +1,7 @@
 """
 Phase 5 + 6 tests — Ingestion flow, theme mode, and fence creation.
 Mocks litellm.completion to avoid real LLM calls.
-Uses the "arakne_test" graph to avoid touching the main graph.
+Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
 from unittest.mock import MagicMock, patch

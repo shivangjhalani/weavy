@@ -5,14 +5,14 @@ Each scenario run is linked to its Langfuse dataset item so results are visible
 in the Langfuse Experiments UI. Scores are posted separately via judges.py.
 """
 
-from arakne.evals.scenarios import EvalItem, load_dataset
-from arakne.models.traces import TouchedEdge, TouchedNode
+from weavy.evals.scenarios import EvalItem, load_dataset
+from weavy.models.traces import TouchedEdge, TouchedNode
 
 
 def _run_eval_item(item: EvalItem):
-    from arakne.modes import ingestion as ingestion_mode
-    from arakne.modes import query as query_mode
-    from arakne.modes import theme as theme_mode
+    from weavy.modes import ingestion as ingestion_mode
+    from weavy.modes import query as query_mode
+    from weavy.modes import theme as theme_mode
 
     if item.mode == "ingestion":
         return ingestion_mode.run_ingestion(item.input["transcript_id"])

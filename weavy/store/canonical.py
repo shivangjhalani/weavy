@@ -8,9 +8,9 @@ from datetime import datetime
 
 from falkordb import Graph
 
-from arakne.models.canonical import ChatMessage, ChatSession, Transcript
-from arakne.models.traces import EdgeSnapshot, MutationOp, NodeSnapshot
-from arakne.models.tools import (
+from weavy.models.canonical import ChatMessage, ChatSession, Transcript
+from weavy.models.traces import EdgeSnapshot, MutationOp, NodeSnapshot
+from weavy.models.tools import (
     ChatSummary,
     GetChatOutput,
     GetTranscriptSpanResult,

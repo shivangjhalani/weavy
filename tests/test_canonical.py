@@ -1,7 +1,7 @@
 """
 Phase 2 tests — Transcript and ChatSession CRUD.
 Requires a running FalkorDB instance (provided by devenv up).
-Uses the "arakne_test" graph to avoid touching the main graph.
+Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
 import json
@@ -25,7 +25,7 @@ from weavy.store.canonical import (
 from weavy.store.client import get_graph
 from weavy.store.system import increment_counter, init_system
 
-TEST_GRAPH = "arakne_test"
+TEST_GRAPH = "weavy_test"
 
 TRANSCRIPT_TEXT = """\
 [0:00] So I've been thinking about this career decision a lot lately.

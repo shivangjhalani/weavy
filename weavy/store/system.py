@@ -9,7 +9,7 @@ from typing import Literal
 from falkordb import Graph
 from pydantic import BaseModel
 
-from arakne.config import settings
+from weavy.config import settings
 
 CounterName = Literal["node", "edge", "rec", "chat"]
 
@@ -88,7 +88,7 @@ def get_system(graph: Graph) -> SystemState:
     result = graph.query("MATCH (s:System) RETURN s")
     if not result.result_set:
         raise RuntimeError(
-            "System node not found. Run init_system() or `python -m arakne.cli init-system` first."
+            "System node not found. Run init_system() or `python -m weavy.cli init-system` first."
         )
     node = result.result_set[0][0]
     return _row_to_state(node.properties)

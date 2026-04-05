@@ -8,10 +8,10 @@ from typing import Annotated
 
 from pydantic import BaseModel, StringConstraints, field_serializer
 
-from arakne.models.canonical import ChatSession, Transcript
-from arakne.models.graph import AnyLogEntry, ProvenanceInput, SemanticEdge, SemanticNode
-from arakne.models.themes import Theme, ThemeStatus
-from arakne.timefmt import format_agent_timestamp
+from weavy.models.canonical import ChatSession
+from weavy.models.graph import AnyLogEntry, ProvenanceInput, SemanticEdge, SemanticNode
+from weavy.models.themes import Theme, ThemeStatus
+from weavy.timefmt import format_agent_timestamp
 
 # ---------------------------------------------------------------------------
 # Shared

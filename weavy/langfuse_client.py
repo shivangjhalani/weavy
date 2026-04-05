@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from langfuse import Langfuse
 
-from arakne.config import settings
+from weavy.config import settings
 
 
 @lru_cache(maxsize=1)

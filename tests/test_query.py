@@ -1,7 +1,7 @@
 """
 Phase 7 tests — Query/chat mode.
 Mocks litellm.completion to avoid real LLM calls.
-Uses the "arakne_test" graph to avoid touching the main graph.
+Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
 from unittest.mock import patch

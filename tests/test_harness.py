@@ -1,7 +1,7 @@
 """
 Phase 4 tests — Agent harness: tracing, completion tools, registry, and runner loop.
 Runner tests mock litellm.completion to avoid real LLM calls.
-Integration tests that touch FalkorDB use the "arakne_test" graph.
+Integration tests that touch FalkorDB use the "weavy_test" graph.
 """
 
 from datetime import datetime, timezone
@@ -36,7 +36,7 @@ from weavy.tools.completion_tools import (
 )
 from tests.helpers import mock_tool_response
 
-TEST_GRAPH = "arakne_test"
+TEST_GRAPH = "weavy_test"
 
 
 def _running_trace(mode: str = "ingestion") -> RunTrace:

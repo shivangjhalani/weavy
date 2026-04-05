@@ -1,7 +1,7 @@
 """
 Phase 1 tests — System node initialisation and counter minting.
 Requires a running FalkorDB instance (provided by devenv up).
-Uses the "arakne_test" graph to avoid touching the main graph.
+Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
 import pytest
@@ -11,7 +11,7 @@ from weavy.store.client import get_graph
 from weavy.store.system import SystemState, get_system, increment_counter, init_system
 
 
-TEST_GRAPH = "arakne_test"
+TEST_GRAPH = "weavy_test"
 
 
 @pytest.fixture

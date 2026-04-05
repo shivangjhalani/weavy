@@ -2,13 +2,13 @@
 Completion tools — termination signals for each agent mode.
 """
 
-from arakne.models.tools import (
+from weavy.models.tools import (
     CompleteIngestionInput,
     CompleteThemeUpdateInput,
     DeliverResponseInput,
     OperationResult,
 )
-from arakne.models.traces import RunTrace, graph_delta
+from weavy.models.traces import RunTrace, graph_delta
 
 
 def complete_ingestion(params: CompleteIngestionInput, trace: RunTrace) -> OperationResult:
