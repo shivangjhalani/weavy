@@ -7,12 +7,12 @@ Uses the "arakne_test" graph to avoid touching the main graph.
 import pytest
 from falkordb import Graph
 
-from arakne.models.graph import ProvenanceInput
-from arakne.models.themes import Theme
-from arakne.store import themes as store_themes
-from arakne.store.client import get_graph
-from arakne.store.graph import create_node
-from arakne.store.system import increment_counter, init_system
+from weavy.models.graph import ProvenanceInput
+from weavy.models.themes import Theme
+from weavy.store import themes as store_themes
+from weavy.store.client import get_graph
+from weavy.store.graph import create_node
+from weavy.store.system import increment_counter, init_system
 
 TEST_GRAPH = "arakne_test"
 

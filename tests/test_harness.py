@@ -10,26 +10,26 @@ from unittest.mock import MagicMock, patch
 import pytest
 from falkordb import Graph
 
-from arakne.harness import registry as reg
-from arakne.harness import runner as harness_runner
-from arakne.harness.registry import get_tool_definitions
-from arakne.harness.runner import run
-from arakne.harness.tracing import (
+from weavy.harness import registry as reg
+from weavy.harness import runner as harness_runner
+from weavy.harness.registry import get_tool_definitions
+from weavy.harness.runner import run
+from weavy.harness.tracing import (
     RunTracer,
     finalize_trace,
     new_trace,
     record_turn,
 )
-from arakne.modes._common import run_post_trace_hooks
-from arakne.models.tools import (
+from weavy.modes._common import run_post_trace_hooks
+from weavy.models.tools import (
     CompleteIngestionInput,
     CompleteThemeUpdateInput,
     DeliverResponseInput,
 )
-from arakne.models.traces import RunTrace, ToolCall, TouchedEdge, TouchedNode, Turn, TurnUsage
-from arakne.store.client import get_graph
-from arakne.store.system import SystemState, init_system
-from arakne.tools.completion_tools import (
+from weavy.models.traces import RunTrace, ToolCall, TouchedEdge, TouchedNode, Turn, TurnUsage
+from weavy.store.client import get_graph
+from weavy.store.system import SystemState, init_system
+from weavy.tools.completion_tools import (
     complete_ingestion,
     complete_theme_update,
     deliver_response,
@@ -113,8 +113,8 @@ def test_run_post_trace_hooks_deduplicates_live_nodes() -> None:
     )
 
     with (
-        patch("arakne.modes._common.store_graph.run_fence_checks") as mock_fence_checks,
-        patch("arakne.modes.theme.run_theme_update") as mock_theme_update,
+        patch("weavy.modes._common.store_graph.run_fence_checks") as mock_fence_checks,
+        patch("weavy.modes.theme.run_theme_update") as mock_theme_update,
     ):
         run_post_trace_hooks(trace, MagicMock(), system_state, "done")
 
@@ -171,7 +171,7 @@ def _make_tracer(mode: str = "ingestion") -> tuple[RunTracer, MagicMock]:
     mock_root = MagicMock()
     mock_lf.start_observation.return_value = mock_root
 
-    with patch("arakne.langfuse_client.get_langfuse", return_value=mock_lf):
+    with patch("weavy.langfuse_client.get_langfuse", return_value=mock_lf):
         tracer = RunTracer("test-run-id", mode, "test input")
 
     tracer._lf = mock_lf
@@ -184,7 +184,7 @@ def test_run_tracer_creates_langfuse_trace() -> None:
     mock_root = MagicMock()
     mock_lf.start_observation.return_value = mock_root
 
-    with patch("arakne.langfuse_client.get_langfuse", return_value=mock_lf):
+    with patch("weavy.langfuse_client.get_langfuse", return_value=mock_lf):
         tracer = RunTracer(
             "1eaa8338-f95d-4592-838f-00d18a352b81",
             "ingestion",
@@ -380,7 +380,7 @@ def _mock_run_tracer() -> MagicMock:
 def test_run_fails_without_tool_call() -> None:
     with (
         patch("litellm.completion", return_value=_mock_no_tool_response()),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
@@ -398,7 +398,7 @@ def test_run_fails_on_unknown_tool() -> None:
     resp = mock_tool_response("nonexistent_tool", {})
     with (
         patch("litellm.completion", return_value=resp),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
@@ -417,7 +417,7 @@ def test_run_fails_on_bad_args() -> None:
     resp = mock_tool_response("search_graph", {"bad_field": 999})
     with (
         patch("litellm.completion", return_value=resp),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
@@ -440,8 +440,8 @@ def test_run_records_tool_calls() -> None:
 
     with (
         patch("litellm.completion", side_effect=[search_resp, completion_resp]),
-        patch("arakne.tools.read_tools.search_graph", return_value=search_output),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.tools.read_tools.search_graph", return_value=search_output),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
@@ -462,7 +462,7 @@ def test_run_completes_on_completion_tool() -> None:
     resp = mock_tool_response("complete_ingestion", {"summary": "all done"})
     with (
         patch("litellm.completion", return_value=resp),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
@@ -480,7 +480,7 @@ def test_run_completes_on_completion_tool() -> None:
 def test_run_fails_on_model_exception() -> None:
     with (
         patch("litellm.completion", side_effect=RuntimeError("network error")),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="query",
@@ -501,7 +501,7 @@ def test_run_caches_context_limit_lookup() -> None:
     with (
         patch("litellm.get_model_info", return_value={"max_input_tokens": 123}) as mock_info,
         patch("litellm.completion", return_value=resp),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         for _ in range(2):
             trace = run(
@@ -525,7 +525,7 @@ def test_run_caches_context_limit_lookup() -> None:
 
 def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     """Runner executes a create_node call and the trace captures the touched node."""
-    from arakne.models.graph import ProvenanceInput
+    from weavy.models.graph import ProvenanceInput
 
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=30)
     create_args = {
@@ -541,7 +541,7 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
 
     with (
         patch("litellm.completion", side_effect=[create_resp, completion_resp]),
-        patch("arakne.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",

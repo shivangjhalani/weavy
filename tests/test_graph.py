@@ -11,8 +11,8 @@ import pytest
 from falkordb import Graph
 from pydantic import ValidationError
 
-from arakne.models.graph import FenceEntry, LogEntry, ProvenanceInput
-from arakne.models.tools import (
+from weavy.models.graph import FenceEntry, LogEntry, ProvenanceInput
+from weavy.models.tools import (
     CreateEdgeInput,
     CreateNodeInput,
     DeleteEdgeInput,
@@ -24,11 +24,11 @@ from arakne.models.tools import (
     UpdateEdgeInput,
     UpdateNodeInput,
 )
-from arakne.models.traces import RunTrace
-from arakne.store import graph as store_graph
-from arakne.store.client import get_graph
-from arakne.store.system import increment_counter, init_system
-from arakne.tools import write_tools
+from weavy.models.traces import RunTrace
+from weavy.store import graph as store_graph
+from weavy.store.client import get_graph
+from weavy.store.system import increment_counter, init_system
+from weavy.tools import write_tools
 
 TEST_GRAPH = "arakne_test"
 
@@ -368,7 +368,7 @@ def test_search_graph_alias_match(graph: Graph) -> None:
         CreateNodeInput(aliases=["career anxiety", "work stress"], summary="Anxiety about career.", note="x", provenance=prov),
         _ingestion_trace(),
     )
-    from arakne.tools.read_tools import search_graph as read_search
+    from weavy.tools.read_tools import search_graph as read_search
     out = read_search(graph, SearchGraphInput(query="career"))
     assert len(out.results) >= 1
     assert any("career" in r.canonical_alias.lower() for r in out.results)
@@ -381,13 +381,13 @@ def test_search_graph_summary_match(graph: Graph) -> None:
         CreateNodeInput(aliases=["meditation"], summary="Daily mindfulness practice helping anxiety.", note="x", provenance=prov),
         _ingestion_trace(),
     )
-    from arakne.tools.read_tools import search_graph as read_search
+    from weavy.tools.read_tools import search_graph as read_search
     out = read_search(graph, SearchGraphInput(query="mindfulness"))
     assert len(out.results) >= 1
 
 
 def test_search_graph_no_match(graph: Graph) -> None:
-    from arakne.tools.read_tools import search_graph as read_search
+    from weavy.tools.read_tools import search_graph as read_search
     out = read_search(graph, SearchGraphInput(query="xyzzy_impossible_query_12345"))
     assert out.results == []
 
@@ -407,7 +407,7 @@ def test_get_node_returns_edges(graph: Graph) -> None:
     ).id
     write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="test edge"), _ingestion_trace())
 
-    from arakne.tools.read_tools import get_node as read_get_node
+    from weavy.tools.read_tools import get_node as read_get_node
     out = read_get_node(graph, GetNodeInput(node_ids=[a]))
     assert len(out.results[0].edges) == 1
     assert out.results[0].edges[0].label == "test edge"
@@ -417,8 +417,8 @@ def test_get_node_returns_edges(graph: Graph) -> None:
 def test_get_node_hot_cold_split(graph: Graph) -> None:
     """After injecting a fence entry, get_node should set cold_hint."""
     from datetime import timezone
-    from arakne.models.graph import FenceEntry
-    from arakne.store import graph as sg
+    from weavy.models.graph import FenceEntry
+    from weavy.store import graph as sg
 
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
     node_id = write_tools.create_node(
@@ -447,7 +447,7 @@ def test_get_node_hot_cold_split(graph: Graph) -> None:
     p3 = ProvenanceInput(source_id="rec:3", start_offset=0, end_offset=5)
     write_tools.update_node(graph, UpdateNodeInput(node_id=node_id, note="hot update", provenance=p3), _ingestion_trace())
 
-    from arakne.tools.read_tools import get_node as read_get_node
+    from weavy.tools.read_tools import get_node as read_get_node
     out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
     # Returned log should be [fence, hot_entry]
     assert len(out.results[0].node.log) == 2
@@ -463,7 +463,7 @@ def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
         graph, CreateNodeInput(aliases=["test node"], summary="Test.", note="initial", provenance=prov), _ingestion_trace()
     ).id
 
-    from arakne.tools.read_tools import get_node as read_get_node
+    from weavy.tools.read_tools import get_node as read_get_node
 
     out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
     payload = json.loads(out.model_dump_json())
@@ -492,7 +492,7 @@ def test_get_cold_logs_json_humanizes_fence_dates(graph: Graph) -> None:
         {"id": node_id, "fence_json": store_graph._serialize_log_entry(fence)},
     )
 
-    from arakne.tools.read_tools import get_cold_logs as read_get_cold_logs
+    from weavy.tools.read_tools import get_cold_logs as read_get_cold_logs
 
     out = read_get_cold_logs(graph, GetColdLogsInput(node_id=node_id))
     payload = json.loads(out.model_dump_json())
@@ -519,7 +519,7 @@ def test_get_node_neighborhood(graph: Graph) -> None:
     write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), _ingestion_trace())
     write_tools.create_edge(graph, CreateEdgeInput(from_node_id=c, to_node_id=a, label="influences"), _ingestion_trace())
 
-    from arakne.tools.read_tools import get_node_neighborhood as read_neighborhood
+    from weavy.tools.read_tools import get_node_neighborhood as read_neighborhood
     out = read_neighborhood(graph, GetNodeNeighborhoodInput(node_id=a))
     assert out.node.id == a
     assert out.node.summary == "Career direction concerns."
@@ -539,6 +539,6 @@ def test_get_cold_logs_empty_for_new_node(graph: Graph) -> None:
         graph, CreateNodeInput(aliases=["fresh"], summary="Fresh node.", note="x", provenance=prov), _ingestion_trace()
     ).id
 
-    from arakne.tools.read_tools import get_cold_logs as read_cold
+    from weavy.tools.read_tools import get_cold_logs as read_cold
     out = read_cold(graph, GetColdLogsInput(node_id=node_id))
     assert out.entries == []

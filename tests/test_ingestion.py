@@ -9,14 +9,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from falkordb import Graph
 
-from arakne.config import settings
-from arakne.models.graph import FenceEntry, ProvenanceInput
-from arakne.models.traces import TouchedNode
-from arakne.store import canonical as store_canonical
-from arakne.store import graph as store_graph
-from arakne.store import themes as store_themes
-from arakne.store.rollback import rollback_ingestion
-from arakne.store.system import get_system, increment_counter
+from weavy.config import settings
+from weavy.models.graph import FenceEntry, ProvenanceInput
+from weavy.models.traces import TouchedNode
+from weavy.store import canonical as store_canonical
+from weavy.store import graph as store_graph
+from weavy.store import themes as store_themes
+from weavy.store.rollback import rollback_ingestion
+from weavy.store.system import get_system, increment_counter
 from tests.helpers import mock_tool_response, reset_test_graph, store_test_transcript
 
 SAMPLE_TRANSCRIPT = (
@@ -52,11 +52,11 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
     done_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage)
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update") as mock_theme,
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
 
         trace = run_ingestion(rec_id)
 
@@ -96,11 +96,11 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
     done_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage)
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[update_resp, done_resp]),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
 
         trace = run_ingestion(rec_id)
 
@@ -130,11 +130,11 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
     )
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
 
         trace = run_ingestion(rec_id)
 
@@ -156,11 +156,11 @@ def test_ingest_invalid_node_id_format_fails_at_argument_validation(graph: Graph
     )
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
 
         trace = run_ingestion(rec_id)
 
@@ -181,11 +181,11 @@ def test_ingest_no_writes_skips_theme(graph: Graph) -> None:
     )
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update") as mock_theme,
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
 
         trace = run_ingestion(rec_id)
 
@@ -196,8 +196,8 @@ def test_ingest_no_writes_skips_theme(graph: Graph) -> None:
 
 def test_ingest_missing_transcript_raises(graph: Graph) -> None:
     """run_ingestion raises ValueError for a non-existent transcript id."""
-    with patch("arakne.modes.ingestion.get_graph", return_value=graph):
-        from arakne.modes.ingestion import run_ingestion
+    with patch("weavy.modes.ingestion.get_graph", return_value=graph):
+        from weavy.modes.ingestion import run_ingestion
 
         with pytest.raises(ValueError, match="not found"):
             run_ingestion("rec:999")
@@ -212,11 +212,11 @@ def test_ingest_prompt_humanizes_recorded_timestamp(graph: Graph) -> None:
     )
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp) as mock_completion,
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
 
         run_ingestion(rec_id)
 
@@ -254,10 +254,10 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
     done_resp = mock_tool_response("complete_theme_update", completion_args, "tc-2", usage=usage)
 
     with (
-        patch("arakne.modes.theme.get_graph", return_value=graph),
+        patch("weavy.modes.theme.get_graph", return_value=graph),
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
     ):
-        from arakne.modes.theme import run_theme_update
+        from weavy.modes.theme import run_theme_update
 
         touched = [TouchedNode(node_id=node_id, action="created")]
         trace = run_theme_update("Career anxiety noted.", touched, [])
@@ -282,10 +282,10 @@ def test_theme_update_empty_map_runs(graph: Graph) -> None:
     )
 
     with (
-        patch("arakne.modes.theme.get_graph", return_value=graph),
+        patch("weavy.modes.theme.get_graph", return_value=graph),
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.theme import run_theme_update
+        from weavy.modes.theme import run_theme_update
 
         trace = run_theme_update("First session.", [], [])
 
@@ -360,14 +360,14 @@ def test_ingestion_sets_flag(graph: Graph) -> None:
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[
             mock_tool_response("create_node", create_args, "tc-1", usage=usage),
             mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage),
         ]),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
         trace = run_ingestion(rec_id)
 
     assert trace.status == "completed"
@@ -385,11 +385,11 @@ def test_failed_ingestion_resets_flag(graph: Graph) -> None:
     )
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
         trace = run_ingestion(rec_id)
 
     assert trace.status == "failed"
@@ -402,8 +402,8 @@ def test_reingest_blocked_when_flag_is_set(graph: Graph) -> None:
     store_canonical.set_ingestion_status(graph, rec_id, 1)
     store_canonical.save_run_manifest(graph, rec_id, [])
 
-    with patch("arakne.modes.ingestion.get_graph", return_value=graph):
-        from arakne.modes.ingestion import run_ingestion
+    with patch("weavy.modes.ingestion.get_graph", return_value=graph):
+        from weavy.modes.ingestion import run_ingestion
         with pytest.raises(ValueError, match="already been ingested"):
             run_ingestion(rec_id)
 
@@ -428,19 +428,19 @@ def test_rollback_removes_created_node(graph: Graph) -> None:
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[
             mock_tool_response("create_node", create_args, "tc-1", usage=usage),
             mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage),
         ]),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
         trace = run_ingestion(rec_id)
 
     node_id = trace.touched_nodes[0].node_id
 
-    with patch("arakne.store.rollback.get_graph", return_value=graph):
+    with patch("weavy.store.rollback.get_graph", return_value=graph):
         rollback_ingestion(rec_id)
 
     # Node must be gone
@@ -472,21 +472,21 @@ def test_rollback_restores_updated_node(graph: Graph) -> None:
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[
             mock_tool_response("update_node", update_args, "tc-1", usage=usage),
             mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage),
         ]),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
         run_ingestion(rec_id)
 
     # Confirm node was updated
     node_out = store_graph.get_node(graph, node_id)
     assert node_out.node.summary == "Updated summary after ingestion."
 
-    with patch("arakne.store.rollback.get_graph", return_value=graph):
+    with patch("weavy.store.rollback.get_graph", return_value=graph):
         rollback_ingestion(rec_id)
 
     # Node must be back to original state
@@ -506,21 +506,21 @@ def test_reingest_allowed_after_rollback(graph: Graph) -> None:
     done_resp = mock_tool_response("complete_ingestion", completion_args, usage=usage)
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.ingestion import run_ingestion
+        from weavy.modes.ingestion import run_ingestion
         run_ingestion(rec_id)
 
-    with patch("arakne.store.rollback.get_graph", return_value=graph):
+    with patch("weavy.store.rollback.get_graph", return_value=graph):
         rollback_ingestion(rec_id)
 
     assert store_canonical.get_ingestion_status(graph, rec_id) == 0
 
     with (
-        patch("arakne.modes.ingestion.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.ingestion.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp),
     ):
         trace2 = run_ingestion(rec_id)
@@ -534,7 +534,7 @@ def test_rollback_no_manifest_resets_flag(graph: Graph) -> None:
     # Simulate a stuck flag from a run that failed before saving the manifest.
     store_canonical.set_ingestion_status(graph, rec_id, 1)
 
-    with patch("arakne.store.rollback.get_graph", return_value=graph):
+    with patch("weavy.store.rollback.get_graph", return_value=graph):
         rollback_ingestion(rec_id)  # must not raise
 
     assert store_canonical.get_ingestion_status(graph, rec_id) == 0

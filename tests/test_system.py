@@ -7,8 +7,8 @@ Uses the "arakne_test" graph to avoid touching the main graph.
 import pytest
 from falkordb import Graph
 
-from arakne.store.client import get_graph
-from arakne.store.system import SystemState, get_system, increment_counter, init_system
+from weavy.store.client import get_graph
+from weavy.store.system import SystemState, get_system, increment_counter, init_system
 
 
 TEST_GRAPH = "arakne_test"

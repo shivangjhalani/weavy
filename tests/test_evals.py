@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from arakne.evals.runner import run_scenario
-from arakne.evals.scenarios import EvalItem, load_dataset
+from weavy.evals.runner import run_scenario
+from weavy.evals.scenarios import EvalItem, load_dataset
 
 
 def test_load_dataset_keeps_dataset_item_reference() -> None:
@@ -12,7 +12,7 @@ def test_load_dataset_keeps_dataset_item_reference() -> None:
     dataset_item.metadata = {"priority": "high"}
     dataset = MagicMock(items=[dataset_item])
 
-    with patch("arakne.langfuse_client.get_langfuse") as mock_get_langfuse:
+    with patch("weavy.langfuse_client.get_langfuse") as mock_get_langfuse:
         mock_get_langfuse.return_value.get_dataset.return_value = dataset
         items = load_dataset("smoke-suite")
 
@@ -37,7 +37,7 @@ def test_run_scenario_uses_loaded_dataset_item_link() -> None:
         error=None,
     )
 
-    with patch("arakne.evals.runner._run_eval_item", return_value=trace):
+    with patch("weavy.evals.runner._run_eval_item", return_value=trace):
         result = run_scenario(eval_item, "smoke-run")
 
     dataset_item.link.assert_called_once_with(
@@ -68,7 +68,7 @@ def test_run_scenario_supports_theme_items() -> None:
         error=None,
     )
 
-    with patch("arakne.evals.runner._run_eval_item", return_value=trace) as mock_run_eval_item:
+    with patch("weavy.evals.runner._run_eval_item", return_value=trace) as mock_run_eval_item:
         result = run_scenario(eval_item, "smoke-run")
 
     mock_run_eval_item.assert_called_once_with(eval_item)

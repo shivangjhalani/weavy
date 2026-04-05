@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 import pytest
 from falkordb import Graph
 
-from arakne.models.canonical import ChatMessage, ChatSession, Transcript
-from arakne.models.tools import GetChatInput, GetTranscriptSpanInput, ListChatsInput, ListTranscriptsInput
-from arakne.store.canonical import (
+from weavy.models.canonical import ChatMessage, ChatSession, Transcript
+from weavy.models.tools import GetChatInput, GetTranscriptSpanInput, ListChatsInput, ListTranscriptsInput
+from weavy.store.canonical import (
     create_chat_session,
     create_transcript,
     get_chat,
@@ -22,8 +22,8 @@ from arakne.store.canonical import (
     list_chats,
     list_transcripts,
 )
-from arakne.store.client import get_graph
-from arakne.store.system import increment_counter, init_system
+from weavy.store.client import get_graph
+from weavy.store.system import increment_counter, init_system
 
 TEST_GRAPH = "arakne_test"
 

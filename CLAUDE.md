@@ -1,4 +1,4 @@
-# Arakne
+# Weavy
 
 The complete idea lives in `markdowns/Memory-v5.md`
 

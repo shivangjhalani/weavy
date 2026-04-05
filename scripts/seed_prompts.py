@@ -16,8 +16,8 @@ import sys
 
 sys.path.insert(0, ".")
 
-from arakne.config import settings
-from arakne.langfuse_client import get_langfuse
+from weavy.config import settings
+from weavy.langfuse_client import get_langfuse
 
 # ---------------------------------------------------------------------------
 # Prompt templates (source of truth until stored in Langfuse)
@@ -406,9 +406,9 @@ the COMPLETE ordered list of all active theme names.\
 # ---------------------------------------------------------------------------
 
 PROMPTS = {
-    "arakne-ingestion": INGESTION_PROMPT,
-    "arakne-query": QUERY_PROMPT,
-    "arakne-theme": THEME_PROMPT,
+    "weavy-ingestion": INGESTION_PROMPT,
+    "weavy-query": QUERY_PROMPT,
+    "weavy-theme": THEME_PROMPT,
 }
 
 

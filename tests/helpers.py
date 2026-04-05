@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 
 from falkordb import Graph
 
-from arakne.models.canonical import Transcript
-from arakne.store import canonical as store_canonical
-from arakne.store.client import get_graph
-from arakne.store.system import increment_counter, init_system
+from weavy.models.canonical import Transcript
+from weavy.store import canonical as store_canonical
+from weavy.store.client import get_graph
+from weavy.store.system import increment_counter, init_system
 
 TEST_GRAPH = "arakne_test"
 

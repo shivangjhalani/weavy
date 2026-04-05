@@ -9,8 +9,8 @@ from unittest.mock import patch
 import pytest
 from falkordb import Graph
 
-from arakne.models.graph import ProvenanceInput
-from arakne.store import canonical as store_canonical
+from weavy.models.graph import ProvenanceInput
+from weavy.store import canonical as store_canonical
 from tests.helpers import mock_tool_response, reset_test_graph, store_test_transcript
 
 SAMPLE_TRANSCRIPT = (
@@ -39,11 +39,11 @@ def test_query_delivers_response(graph: Graph) -> None:
     done_resp = mock_tool_response("deliver_response", deliver_args)
 
     with (
-        patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update") as mock_theme,
+        patch("weavy.modes.query.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.query import run_query
+        from weavy.modes.query import run_query
 
         trace = run_query("What have I been thinking about?")
 
@@ -64,11 +64,11 @@ def test_query_creates_chat_session(graph: Graph) -> None:
     done_resp = mock_tool_response("deliver_response", deliver_args)
 
     with (
-        patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.query.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.query import run_query
+        from weavy.modes.query import run_query
 
         trace = run_query("What have I been thinking about?")
 
@@ -117,12 +117,12 @@ def test_query_with_graph_write_triggers_theme(graph: Graph) -> None:
     done_resp = mock_tool_response("deliver_response", deliver_args, "tc-2")
 
     with (
-        patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update") as mock_theme,
-        patch("arakne.store.system.increment_counter", return_value=fixed_chat_id),
+        patch("weavy.modes.query.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update") as mock_theme,
+        patch("weavy.store.system.increment_counter", return_value=fixed_chat_id),
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
     ):
-        from arakne.modes.query import run_query
+        from weavy.modes.query import run_query
 
         trace = run_query("I just decided to leave my job.")
 
@@ -147,11 +147,11 @@ def test_query_rejects_ingestion_provenance(graph: Graph) -> None:
     bad_resp = mock_tool_response("create_node", bad_args)
 
     with (
-        patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.query.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
     ):
-        from arakne.modes.query import run_query
+        from weavy.modes.query import run_query
 
         trace = run_query("Test question.")
 
@@ -171,11 +171,11 @@ def test_query_no_writes_skips_theme(graph: Graph) -> None:
     done_resp = mock_tool_response("deliver_response", deliver_args)
 
     with (
-        patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update") as mock_theme,
+        patch("weavy.modes.query.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.query import run_query
+        from weavy.modes.query import run_query
 
         trace = run_query("Anything new?")
 
@@ -196,11 +196,11 @@ def test_query_conversation_captured(graph: Graph) -> None:
     done_resp = mock_tool_response("deliver_response", deliver_args)
 
     with (
-        patch("arakne.modes.query.get_graph", return_value=graph),
-        patch("arakne.modes.theme.run_theme_update"),
+        patch("weavy.modes.query.get_graph", return_value=graph),
+        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=done_resp),
     ):
-        from arakne.modes.query import run_query
+        from weavy.modes.query import run_query
 
         trace = run_query("Am I anxious about my career?")
 

@@ -1,4 +1,4 @@
-# Arakne
+# Weavy
 
 A web of your thoughts
 
@@ -26,7 +26,7 @@ Arakne fixes this by catching what you say in the moment, organizing it automati
 
 ## Who It’s For
 
-Arakne is built for people who have a rich inner life but no good way to handle it.
+Weavy is built for people who have a rich inner life but no good way to handle it.
 
 - **The Striver**: You’re ambitious and always thinking about your next move—career growth, side projects, becoming a better version of yourself. You need to untangle your goals and remember why you made certain choices.
 
@@ -62,7 +62,7 @@ There are no streaks to maintain, no notifications guilt-tripping you, no dashbo
 
 That quiet confidence is the entire point.
 
-## What Arakne Is Not
+## What Weavy Is Not
 
 To stay true to the vision, we deliberately avoid certain things:
 
@@ -73,6 +73,6 @@ To stay true to the vision, we deliberately avoid certain things:
 | Therapy             | Not clinical or diagnostic. It helps you witness yourself; it does not treat you. |
 | A black hole        | Never just a pile of raw audio files. It always surfaces meaning and clarity.     |
 
-Arakne exists for one reason only: to give you a better relationship with your own mind—by letting you speak freely and then handing back an organized, evolving reflection of who you are becoming.
+Weavy exists for one reason only: to give you a better relationship with your own mind—by letting you speak freely and then handing back an organized, evolving reflection of who you are becoming.
 
 This is the app that finally makes your inner life feel manageable, visible, and yours.

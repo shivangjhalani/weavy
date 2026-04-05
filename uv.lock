@@ -161,62 +161,6 @@ wheels = [
 ]
 
 [[package]]
-name = "arakne"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "falkordb" },
-    { name = "google-genai" },
-    { name = "humanize" },
-    { name = "langfuse" },
-    { name = "litellm" },
-    { name = "pydantic" },
-    { name = "pytest" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "ragas" },
-    { name = "tiktoken" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "hatchling" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "falkordb", specifier = ">=1.6.0" },
-    { name = "google-genai", specifier = ">=1.14.0" },
-    { name = "humanize", specifier = ">=4.14.0" },
-    { name = "langfuse", specifier = ">=2.0.0" },
-    { name = "litellm", specifier = ">=1.82.1" },
-    { name = "pydantic", specifier = ">=2.12.5" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "ragas", specifier = ">=0.4.3" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "tiktoken", specifier = ">=0.12.0" },
-]
-provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "hatchling", specifier = ">=1.29.0" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "ruff", specifier = ">=0.15.7" },
-]
-
-[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2940,6 +2884,62 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/65/36/2d24b2cbe78547c6532da33fb8613debd3126eccc33a6374ab788f5e46e9/uuid_utils-0.14.1-cp39-abi3-win32.whl", hash = "sha256:b54d6aa6252d96bac1fdbc80d26ba71bad9f220b2724d692ad2f2310c22ef523", size = 183476, upload-time = "2026-02-20T22:50:32.745Z" },
     { url = "https://files.pythonhosted.org/packages/83/92/2d7e90df8b1a69ec4cff33243ce02b7a62f926ef9e2f0eca5a026889cd73/uuid_utils-0.14.1-cp39-abi3-win_amd64.whl", hash = "sha256:fc27638c2ce267a0ce3e06828aff786f91367f093c80625ee21dad0208e0f5ba", size = 187147, upload-time = "2026-02-20T22:50:45.807Z" },
     { url = "https://files.pythonhosted.org/packages/d9/26/529f4beee17e5248e37e0bc17a2761d34c0fa3b1e5729c88adb2065bae6e/uuid_utils-0.14.1-cp39-abi3-win_arm64.whl", hash = "sha256:b04cb49b42afbc4ff8dbc60cf054930afc479d6f4dd7f1ec3bbe5dbfdde06b7a", size = 188132, upload-time = "2026-02-20T22:50:41.718Z" },
+]
+
+[[package]]
+name = "weavy"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "falkordb" },
+    { name = "google-genai" },
+    { name = "humanize" },
+    { name = "langfuse" },
+    { name = "litellm" },
+    { name = "pydantic" },
+    { name = "pytest" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "ragas" },
+    { name = "tiktoken" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "hatchling" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "falkordb", specifier = ">=1.6.0" },
+    { name = "google-genai", specifier = ">=1.14.0" },
+    { name = "humanize", specifier = ">=4.14.0" },
+    { name = "langfuse", specifier = ">=2.0.0" },
+    { name = "litellm", specifier = ">=1.82.1" },
+    { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "ragas", specifier = ">=0.4.3" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "tiktoken", specifier = ">=0.12.0" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "hatchling", specifier = ">=1.29.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "ruff", specifier = ">=0.15.7" },
 ]
 
 [[package]]

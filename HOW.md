@@ -1,6 +1,6 @@
-# How to Use Arakne
+# How to Use Weavy
 
-Arakne is a local, CLI-first memory system built on top of:
+Weavy is a local, CLI-first memory system built on top of:
 
 - FalkorDB for canonical records, semantic graph state, themes, and system counters
 - Gemini via LiteLLM for ingestion, query, and theme agents
@@ -28,7 +28,7 @@ There is no web app or API layer in this repo right now. The main way to use the
 
 ## What To Expect
 
-- Arakne is synchronous and explicit. If a dependency is missing, it tends to fail loudly rather than silently degrading.
+- Weavy is synchronous and explicit. If a dependency is missing, it tends to fail loudly rather than silently degrading.
 - The graph is a derived memory layer, not the source of truth. Canonical transcripts and chats remain the primary records.
 - Query runs may mutate the graph if the agent decides your new statement should update memory.
 - Theme updates are automatic after completed runs that touched graph nodes.
@@ -91,7 +91,7 @@ devenv shell
 Or prefix a single command:
 
 ```bash
-devenv shell -- uv run python -m arakne.cli status
+devenv shell -- uv run python -m weavy.cli status
 ```
 
 ### Langfuse
@@ -123,9 +123,9 @@ uv run python scripts/seed_prompts.py
 
 What this does:
 
-- creates or updates the `arakne-ingestion` prompt
-- creates or updates the `arakne-query` prompt
-- creates or updates the `arakne-theme` prompt
+- creates or updates the `weavy-ingestion` prompt
+- creates or updates the `weavy-query` prompt
+- creates or updates the `weavy-theme` prompt
 - tags them with the `production` label
 
 If prompts are missing, ingestion and query runs will fail when `fetch_prompt()` tries to load them.
@@ -150,7 +150,7 @@ Safe to run again. It uses `MERGE`.
 Inspect current state any time:
 
 ```bash
-uv run python -m arakne.cli status
+uv run python -m weavy.cli status
 ```
 
 If the `System` node does not exist, many operations will fail with a message telling you to run `init-system` first.

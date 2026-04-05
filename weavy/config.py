@@ -40,7 +40,7 @@ def _langfuse_host() -> str:
 class Settings:
     FALKORDB_HOST: str = _getenv("FALKORDB_HOST", "localhost")
     FALKORDB_PORT: int = int(_getenv("FALKORDB_PORT", "6379"))
-    GRAPH_NAME: str = _getenv("GRAPH_NAME", "arakne")
+    GRAPH_NAME: str = _getenv("GRAPH_NAME", "weavy")
 
     GEMINI_MODEL: str = _getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
     REASONING_EFFORT: str = _getenv("REASONING_EFFORT", "medium")

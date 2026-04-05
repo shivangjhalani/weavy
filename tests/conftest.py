@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from arakne.langfuse_client import get_langfuse
+from weavy.langfuse_client import get_langfuse
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def clear_langfuse_cache():
 def mock_run_tracer():
     """Prevent real Langfuse calls from RunTracer in all tests."""
     try:
-        from arakne.harness import runner
+        from weavy.harness import runner
     except ImportError:
         yield None
         return
@@ -39,7 +39,7 @@ def mock_run_tracer():
 def mock_fetch_prompt():
     """Prevent real Langfuse prompt fetches in all tests."""
     try:
-        from arakne.modes import _common
+        from weavy.modes import _common
     except ImportError:
         yield None
         return
