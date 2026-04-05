@@ -34,7 +34,7 @@ from arakne.tools.completion_tools import (
     complete_theme_update,
     deliver_response,
 )
-from tests.conftest import mock_tool_response
+from tests.helpers import mock_tool_response
 
 TEST_GRAPH = "arakne_test"
 
@@ -171,7 +171,7 @@ def _make_tracer(mode: str = "ingestion") -> tuple[RunTracer, MagicMock]:
     mock_root = MagicMock()
     mock_lf.start_observation.return_value = mock_root
 
-    with patch("arakne.langfuse_client.langfuse", mock_lf):
+    with patch("arakne.langfuse_client.get_langfuse", return_value=mock_lf):
         tracer = RunTracer("test-run-id", mode, "test input")
 
     tracer._lf = mock_lf
@@ -184,15 +184,22 @@ def test_run_tracer_creates_langfuse_trace() -> None:
     mock_root = MagicMock()
     mock_lf.start_observation.return_value = mock_root
 
-    with patch("arakne.langfuse_client.langfuse", mock_lf):
-        tracer = RunTracer("run-123", "ingestion", "Ingesting rec:1", session_id="rec:1")
+    with patch("arakne.langfuse_client.get_langfuse", return_value=mock_lf):
+        tracer = RunTracer(
+            "1eaa8338-f95d-4592-838f-00d18a352b81",
+            "ingestion",
+            "Ingesting rec:1",
+            session_id="rec:1",
+        )
 
     mock_lf.start_observation.assert_called_once()
     call_kwargs = mock_lf.start_observation.call_args[1]
-    assert call_kwargs["trace_context"] == {"trace_id": "run-123"}
+    assert call_kwargs["trace_context"] == {
+        "trace_id": "1eaa8338f95d4592838f00d18a352b81"
+    }
     assert call_kwargs["name"] == "ingestion-run"
     assert call_kwargs["input"] == "Ingesting rec:1"
-    assert tracer.get_trace_id() == "run-123"
+    assert tracer.get_trace_id() == "1eaa8338-f95d-4592-838f-00d18a352b81"
 
 
 def test_run_tracer_start_and_end_turn() -> None:

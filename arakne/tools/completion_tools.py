@@ -8,11 +8,14 @@ from arakne.models.tools import (
     DeliverResponseInput,
     OperationResult,
 )
-from arakne.models.traces import RunTrace
+from arakne.models.traces import RunTrace, graph_delta
 
 
 def complete_ingestion(params: CompleteIngestionInput, trace: RunTrace) -> OperationResult:
-    trace.completion_payload = params.model_dump()
+    trace.completion_payload = {
+        **params.model_dump(),
+        **graph_delta(trace.touched_nodes, trace.touched_edges),
+    }
     return OperationResult(ok=True)
 
 

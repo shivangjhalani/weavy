@@ -119,6 +119,13 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         print(f"Summary: {summary}")
 
 
+def cmd_rollback(args: argparse.Namespace) -> None:
+    from arakne.store.rollback import rollback_ingestion
+
+    rollback_ingestion(args.transcript_id)
+    print(f"Rolled back {args.transcript_id}. Status reset to 0, ready to re-ingest.")
+
+
 def cmd_transcribe(args: argparse.Namespace) -> None:
     from arakne.transcribe import transcribe_audio
 
@@ -189,6 +196,11 @@ def main() -> None:
     p = subparsers.add_parser("ingest", help="Run ingestion for a stored transcript")
     p.add_argument("transcript_id", help="Transcript id to ingest (e.g. rec:1)")
 
+    p = subparsers.add_parser(
+        "rollback", help="Undo all graph mutations from a transcript's ingestion run"
+    )
+    p.add_argument("transcript_id", help="Transcript id to roll back (e.g. rec:1)")
+
     p = subparsers.add_parser("query", help="Ask a question against the memory graph")
     p.add_argument(
         "question",
@@ -207,6 +219,7 @@ def main() -> None:
         "list-chats": cmd_list_chats,
         "transcribe": cmd_transcribe,
         "ingest": cmd_ingest,
+        "rollback": cmd_rollback,
         "query": cmd_query,
     }
     dispatch[args.command](args)

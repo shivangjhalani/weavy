@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 import pytest
 from falkordb import Graph
+from pydantic import ValidationError
 
 from arakne.models.graph import FenceEntry, LogEntry, ProvenanceInput
 from arakne.models.tools import (
@@ -237,6 +238,21 @@ def test_update_node_increments_log_count(graph: Graph) -> None:
         )
     out = store_graph.get_node(graph, node_id)
     assert out.node.total_log_count == 4
+
+
+def test_node_and_edge_ids_reject_trailing_punctuation() -> None:
+    with pytest.raises(ValidationError, match=r"node:\d+"):
+        UpdateNodeInput(
+            node_id="node:4,",
+            note="bad id",
+            provenance=ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=1),
+        )
+
+    with pytest.raises(ValidationError, match=r"node:\d+"):
+        CreateEdgeInput(from_node_id="node:1", to_node_id="node:2.", label="related")
+
+    with pytest.raises(ValidationError, match=r"edge:\d+"):
+        UpdateEdgeInput(edge_id="edge:3)", new_label="updated")
 
 
 # ---------------------------------------------------------------------------

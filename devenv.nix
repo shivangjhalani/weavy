@@ -42,7 +42,7 @@
         docker run --rm \
           --name falkordb-dev \
           -p 6379:6379 \
-          -p 3000:3000 \
+          -p 127.0.0.1:3000:3000 \
           -v "${config.devenv.root}/.devenv/falkordb-data:/var/lib/falkordb/data" \
           falkordb/falkordb:latest \
           --appendonly yes

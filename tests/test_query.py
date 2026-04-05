@@ -11,11 +11,7 @@ from falkordb import Graph
 
 from arakne.models.graph import ProvenanceInput
 from arakne.store import canonical as store_canonical
-from arakne.store.client import get_graph
-from arakne.store.system import init_system
-from tests.conftest import mock_tool_response, store_test_transcript
-
-TEST_GRAPH = "arakne_test"
+from tests.helpers import mock_tool_response, reset_test_graph, store_test_transcript
 
 SAMPLE_TRANSCRIPT = (
     "[0:00] I've been thinking about changing jobs a lot lately.\n"
@@ -25,14 +21,7 @@ SAMPLE_TRANSCRIPT = (
 
 @pytest.fixture
 def graph() -> Graph:
-    g = get_graph(TEST_GRAPH)
-    g.query("MATCH (s:System) DELETE s")
-    g.query("MATCH (n:SemanticNode) DETACH DELETE n")
-    g.query("MATCH (t:Theme) DETACH DELETE t")
-    g.query("MATCH (t:Transcript) DELETE t")
-    g.query("MATCH (c:ChatSession) DELETE c")
-    init_system(g)
-    return g
+    return reset_test_graph("Theme", "Transcript", "ChatSession")
 # ---------------------------------------------------------------------------
 # run_query
 # ---------------------------------------------------------------------------

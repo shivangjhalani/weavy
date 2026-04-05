@@ -4,8 +4,9 @@ and returns one *Output model. Pydantic validates both boundaries.
 """
 
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, StringConstraints, field_serializer
 
 from arakne.models.canonical import ChatSession, Transcript
 from arakne.models.graph import AnyLogEntry, ProvenanceInput, SemanticEdge, SemanticNode
@@ -15,6 +16,10 @@ from arakne.timefmt import format_agent_timestamp
 # ---------------------------------------------------------------------------
 # Shared
 # ---------------------------------------------------------------------------
+
+
+NodeId = Annotated[str, StringConstraints(pattern=r"^node:\d+$")]
+EdgeId = Annotated[str, StringConstraints(pattern=r"^edge:\d+$")]
 
 
 class OperationResult(BaseModel):
@@ -36,7 +41,7 @@ class CreateNodeInput(BaseModel):
 
 
 class UpdateNodeInput(BaseModel):
-    node_id: str
+    node_id: NodeId
     note: str
     new_summary: str | None = None
     new_aliases: list[str] | None = None
@@ -44,23 +49,23 @@ class UpdateNodeInput(BaseModel):
 
 
 class CreateEdgeInput(BaseModel):
-    from_node_id: str
-    to_node_id: str
+    from_node_id: NodeId
+    to_node_id: NodeId
     label: str
 
 
 class UpdateEdgeInput(BaseModel):
-    edge_id: str
+    edge_id: EdgeId
     new_label: str
 
 
 class DeleteNodeInput(BaseModel):
-    node_id: str
+    node_id: NodeId
     reason: str
 
 
 class DeleteEdgeInput(BaseModel):
-    edge_id: str
+    edge_id: EdgeId
     reason: str
 
 
@@ -75,15 +80,15 @@ class SearchGraphInput(BaseModel):
 
 
 class GetNodeNeighborhoodInput(BaseModel):
-    node_id: str
+    node_id: NodeId
 
 
 class GetNodeInput(BaseModel):
-    node_ids: list[str]  # one or more, e.g. ["node:1"] or ["node:1", "node:2"]
+    node_ids: list[NodeId]  # one or more, e.g. ["node:1"] or ["node:1", "node:2"]
 
 
 class GetColdLogsInput(BaseModel):
-    node_id: str
+    node_id: NodeId
 
 
 class ListTranscriptsInput(BaseModel):
@@ -124,14 +129,14 @@ class GetThemeInput(BaseModel):
 class CreateThemeInput(BaseModel):
     name: str
     state: str
-    anchors: list[str]
+    anchors: list[NodeId]
     status: list[ThemeStatus]
 
 
 class UpdateThemeInput(BaseModel):
     name: str
     new_state: str | None = None
-    new_anchors: list[str] | None = None
+    new_anchors: list[NodeId] | None = None
     new_status: list[ThemeStatus] | None = None
 
 

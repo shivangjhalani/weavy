@@ -70,6 +70,22 @@ def _append_tool_call_error(
     )
 
 
+def _build_turn_usage(usage_raw: Any) -> TurnUsage:
+    usage = TurnUsage()
+    if not usage_raw:
+        return usage
+
+    usage.prompt_tokens = getattr(usage_raw, "prompt_tokens", 0) or 0
+    usage.completion_tokens = getattr(usage_raw, "completion_tokens", 0) or 0
+    usage.total_tokens = getattr(usage_raw, "total_tokens", 0) or 0
+    details = getattr(usage_raw, "completion_tokens_details", None)
+    if isinstance(details, dict):
+        usage.reasoning_tokens = details.get("reasoning_tokens", 0) or 0
+    elif details is not None:
+        usage.reasoning_tokens = getattr(details, "reasoning_tokens", 0) or 0
+    return usage
+
+
 def run(
     mode: Literal["ingestion", "query", "theme"],
     system_prompt: str,
@@ -78,6 +94,7 @@ def run(
     run_context: dict[str, Any],
     graph: Graph,
     session_id: str | None = None,
+    parent_observation: Any = None,
 ) -> RunTrace:
     """
     Execute an agentic loop until the mode's completion tool is called.
@@ -85,7 +102,10 @@ def run(
     """
     input_summary = run_context.get("input_summary", "")
     trace = new_trace(mode, input_summary)
-    tracer = RunTracer(trace.run_id, mode, input_summary, session_id=session_id)
+    tracer = RunTracer(
+        trace.run_id, mode, input_summary,
+        session_id=session_id, parent_observation=parent_observation,
+    )
     ctx = reg.ToolContext(graph=graph, trace=trace)
 
     messages: list[dict[str, Any]] = [
@@ -124,17 +144,7 @@ def run(
         tool_calls = getattr(message, "tool_calls", None) or []
 
         # --- Build turn usage ---
-        usage_raw = getattr(response, "usage", None)
-        turn_usage = TurnUsage()
-        if usage_raw:
-            turn_usage.prompt_tokens = getattr(usage_raw, "prompt_tokens", 0) or 0
-            turn_usage.completion_tokens = getattr(usage_raw, "completion_tokens", 0) or 0
-            turn_usage.total_tokens = getattr(usage_raw, "total_tokens", 0) or 0
-            details = getattr(usage_raw, "completion_tokens_details", None)
-            if details and isinstance(details, dict):
-                turn_usage.reasoning_tokens = details.get("reasoning_tokens", 0) or 0
-            elif details:
-                turn_usage.reasoning_tokens = getattr(details, "reasoning_tokens", 0) or 0
+        turn_usage = _build_turn_usage(getattr(response, "usage", None))
 
         reasoning = getattr(message, "reasoning_content", None)
         serialized_tool_calls = [
@@ -235,7 +245,6 @@ def run(
                 result = entry.fn(params, ctx)
             except Exception as e:
                 err = f"Tool '{tool_name}' raised: {e}"
-                duration_ms = (datetime.now(tz=timezone.utc).timestamp() - t0) * 1000
                 tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
                 return _finalize_failed_run(

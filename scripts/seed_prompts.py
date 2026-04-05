@@ -16,9 +16,8 @@ import sys
 
 sys.path.insert(0, ".")
 
-from langfuse import Langfuse
-
 from arakne.config import settings
+from arakne.langfuse_client import get_langfuse
 
 # ---------------------------------------------------------------------------
 # Prompt templates (source of truth until stored in Langfuse)
@@ -205,6 +204,7 @@ IMPORTANT: from_node_id and to_node_id in create_edge must be node:N identifiers
 returned by create_node or get_node (e.g. node:1, node:4). Never pass an alias or name. \
 If you don't know a node's id yet, call get_node or check the result of the create_node call \
 that created it.
+Treat node ids as exact machine tokens, not prose: pass "node:4", not "node:4," or "(node:4)".
 
 Edges do not carry logs — their narrative lives in the node logs on either end. When a \
 relationship evolves, update the edge label to reflect the current state.
@@ -359,6 +359,8 @@ Rules:
 - cited_sources in deliver_response must reference rec:N or chat:N spans, not graph node ids.
 - For transcript citations, provide start_offset and end_offset as seconds into the recording.
 - For chat citations, provide start_offset as the message index and end_offset as null.
+- Any node ids you pass to tools or in consulted_nodes must be exact tokens like node:4 with no
+  trailing punctuation, brackets, or quotes copied from surrounding prose.
 - If you are uncertain, say so clearly. Do not fabricate citations.
 - If you rely on inference, make the inference explicit in the answer and cite the evidence it \
   is based on.
@@ -390,6 +392,8 @@ Rules:
 - Make targeted updates only. If only one theme was affected, only change that theme.
 - When creating a theme, pick a short kebab-case name (e.g. "career-direction").
 - Anchors are node IDs (e.g. node:4) — direct entry points into the semantic graph.
+- Pass anchor ids exactly as raw tokens like node:4. Do not include commas, periods, brackets, or
+  any other surrounding punctuation.
 - Status is your editorial judgment — not mechanical. Consider depth, recency, and maturity.
 - Status values: deep | active | emerging | dormant (1-2 values per theme).
 
@@ -409,11 +413,7 @@ PROMPTS = {
 
 
 def seed() -> None:
-    lf = Langfuse(
-        public_key=settings.LANGFUSE_PUBLIC_KEY,
-        secret_key=settings.LANGFUSE_SECRET_KEY,
-        host=settings.LANGFUSE_HOST,
-    )
+    lf = get_langfuse()
 
     for name, prompt_text in PROMPTS.items():
         print(f"Seeding prompt '{name}' ... ", end="", flush=True)

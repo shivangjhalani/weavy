@@ -1,275 +1,538 @@
 # How to Use Arakne
 
+Arakne is a local, CLI-first memory system built on top of:
+
+- FalkorDB for canonical records, semantic graph state, themes, and system counters
+- Gemini via LiteLLM for ingestion, query, and theme agents
+- Groq Whisper via LiteLLM for audio transcription
+- Langfuse for prompt management, run traces, and eval visibility
+
+There is no web app or API layer in this repo right now. The main way to use the app is:
+
+1. Start the backing services
+2. Initialize the `System` node
+3. Create or transcribe transcripts
+4. Ingest those transcripts into the graph
+5. Query the graph from the CLI
+
 ## What Works Right Now
 
-- Store voice journal transcripts as canonical records
-- Run an LLM agent to ingest a transcript into the semantic memory graph
-- Ask questions against the graph; agent retrieves and cites source spans
-- Themes are automatically maintained after every ingestion and graph-mutating query
-- Log fences keep long node histories navigable
-- Full run traces saved to disk after every session
+- Store transcripts as canonical `Transcript` records
+- Transcribe audio into `[M:SS]`-annotated transcript text
+- Ingest a transcript into the semantic graph with provenance-aware node writes
+- Ask grounded questions against the graph
+- Persist chat sessions as canonical `ChatSession` records
+- Automatically run theme maintenance after ingestion and graph-mutating query sessions
+- Track agent runs and prompt versions in Langfuse
+- Run eval scenarios through Langfuse-backed datasets
 
-**Not yet wired in:** Vector/semantic search is keyword-only until embeddings are generated.
+## What To Expect
 
----
+- Arakne is synchronous and explicit. If a dependency is missing, it tends to fail loudly rather than silently degrading.
+- The graph is a derived memory layer, not the source of truth. Canonical transcripts and chats remain the primary records.
+- Query runs may mutate the graph if the agent decides your new statement should update memory.
+- Theme updates are automatic after completed runs that touched graph nodes.
+- Long node histories are compacted by fence checks using the configured token budget.
+- Run traces are not written to disk. Langfuse is the trace store.
+- Prompt loading is Langfuse-backed. If Langfuse is not running or prompts are not seeded, ingestion/query/theme runs will fail.
 
 ## Prerequisites
 
-- **Docker** — FalkorDB runs in a container managed by devenv
-- **Gemini API key** — all LLM and (future) embedding calls go through Google AI Studio
-- **Groq API key** — only needed when the Whisper transcription CLI is added; optional for now
+You need:
 
----
+- `devenv`
+- Docker
+- a Gemini API key
+- a Groq API key if you want to use `transcribe`
+- a running Langfuse stack if you want ingestion/query/theme/evals to work
 
-## 1. Setup
+At minimum, copy the example env file:
 
 ```bash
-# Copy and fill in your keys
 cp .example.env .env
-# edit .env — set GEMINI_API_KEY at minimum
 ```
 
-Start FalkorDB (runs in Docker, persists data under `.devenv/falkordb-data/`):
+Then set the values you need:
+
+```env
+GEMINI_API_KEY=...
+GROQ_API_KEY=...
+
+LANGFUSE_HOST=http://localhost:3100
+LANGFUSE_PUBLIC_KEY=...
+LANGFUSE_SECRET_KEY=...
+```
+
+Notes:
+
+- `GROQ_API_KEY` is only required for audio transcription.
+- `LANGFUSE_*` is required for prompt fetches and tracing.
+- FalkorDB defaults to `localhost:6379`.
+- The default graph name is `arakne`.
+
+## Start The Services
+
+### FalkorDB
+
+The project expects FalkorDB to be available before you use the CLI:
 
 ```bash
 devenv up
 ```
 
-This keeps running in the foreground. Open a second terminal for everything else. FalkorDB's browser UI is available at **http://localhost:3000**.
+Keep that running in one terminal. Open another terminal for commands.
 
-All commands below are run inside the devenv shell:
+Then enter the environment:
 
 ```bash
 devenv shell
 ```
 
-Or prefix any single command with `devenv shell --`:
+Or prefix a single command:
 
 ```bash
-devenv shell -- uv run python -m arakne.cli <command>
+devenv shell -- uv run python -m arakne.cli status
 ```
 
----
+### Langfuse
 
-## 2. Initialise the System Node
+Langfuse is effectively part of the app flow now because prompts are fetched from it and traces are recorded there.
 
-Must be done once before anything else:
+To avoid browser session collisions between the two local UIs, open them on different hostnames:
+
+- FalkorDB UI: `http://127.0.0.1:3000`
+- Langfuse UI: `http://localhost:3100`
+
+You can start the included local stack with:
+
+```bash
+docker compose -f docker-compose.langfuse.yml up -d
+```
+
+The UI is available at:
+
+```text
+http://localhost:3100
+```
+
+After Langfuse is up, create or copy your API keys into `.env`, then seed the prompts:
+
+```bash
+uv run python scripts/seed_prompts.py
+```
+
+What this does:
+
+- creates or updates the `arakne-ingestion` prompt
+- creates or updates the `arakne-query` prompt
+- creates or updates the `arakne-theme` prompt
+- tags them with the `production` label
+
+If prompts are missing, ingestion and query runs will fail when `fetch_prompt()` tries to load them.
+
+## Initialize The System Node
+
+Run this once per graph before using the app:
 
 ```bash
 uv run python -m arakne.cli init-system
 ```
 
-This creates the singleton `System` node in FalkorDB that holds global counters and token budgets. Safe to run again — it's idempotent.
+This creates the singleton `System` node, including:
 
-Check current state at any time:
+- next ids for nodes, edges, transcripts, and chats
+- `theme_priority_order`
+- `log_token_budget`
+- `hot_theme_token_budget`
+
+Safe to run again. It uses `MERGE`.
+
+Inspect current state any time:
 
 ```bash
 uv run python -m arakne.cli status
 ```
 
----
+If the `System` node does not exist, many operations will fail with a message telling you to run `init-system` first.
 
-## 3. Transcribe an Audio File
+## Create Or Transcribe Transcripts
 
-The fastest path. Give it an audio file — it calls Groq Whisper, formats the output with inline `[M:SS]` segment markers, stores it in FalkorDB, and prints the transcript with its new id.
+Arakne ingests stored transcripts, not raw audio directly. You have two main paths.
+
+### Option 1: Transcribe Audio
 
 ```bash
 uv run python -m arakne.cli transcribe /path/to/recording.m4a
 ```
 
-Output:
+What happens:
 
-```
+- the file is sent to Groq Whisper through LiteLLM
+- the response is normalized into transcript lines with inline `[M:SS]` markers
+- a canonical `Transcript` is created in FalkorDB
+- the CLI prints the new `rec:N` id and the transcript text
+
+Supported audio extensions:
+
+- `.mp3`
+- `.mp4`
+- `.mpeg`
+- `.mpga`
+- `.m4a`
+- `.wav`
+- `.webm`
+- `.ogg`
+
+Important behavior:
+
+- missing files raise `FileNotFoundError`
+- unsupported extensions raise `ValueError`
+- the transcription call always asks for `verbose_json`
+- the stored transcript is plain text with inline timestamps
+
+Example output:
+
+```text
 Transcribing /path/to/recording.m4a ...
 Stored as rec:1
 
-[0:00] So I've been thinking about this career decision a lot lately.
-[0:14] I know I should probably just quit but the mortgage keeps stopping me.
-[0:28] And honestly I think I'm scared of what happens if I actually do it.
-[1:05] Had a really good conversation with my mentor yesterday though.
-[1:20] She said risk is the only way through.
+[0:00] I've been thinking about changing jobs a lot lately.
+[0:14] The mortgage scares me but I'm feeling trapped.
+[0:28] Had a great talk with my mentor yesterday about risk.
 ```
 
-**Supported formats:** `.mp3`, `.mp4`, `.mpeg`, `.mpga`, `.m4a`, `.wav`, `.webm`, `.ogg`
+Whisper-related env vars:
 
-The `[M:SS]` markers become provenance anchors — the ingestion agent uses them to record exactly which seconds of the recording each graph node came from.
-
-Whisper behaviour is controlled by `.env`:
-
-```
-WHISPER_MODEL=groq/whisper-large-v3-turbo     # model to use
-WHISPER_LANGUAGE=en                            # leave blank for auto-detect
-WHISPER_PROMPT=An audio journal...             # context hint improves accuracy
-WHISPER_TEMPERATURE=0                          # 0 = deterministic
+```env
+WHISPER_MODEL=groq/whisper-large-v3-turbo
+WHISPER_LANGUAGE=
+WHISPER_PROMPT=
+WHISPER_TEMPERATURE=0
 ```
 
-**Alternative: store a pre-existing transcript text file** (if you already have the text):
+### Option 2: Create A Transcript From Existing Text
+
+If you already have transcript text:
 
 ```bash
 uv run python -m arakne.cli create-transcript \
-  --audio-path /path/to/audio.m4a \
+  --audio-path /path/to/original-audio.m4a \
   --text-file /path/to/transcript.txt
 ```
 
-List stored transcripts:
+Notes:
+
+- `--audio-path` is stored as metadata only
+- the text file must exist
+- the CLI creates a new `rec:N`
+
+### List Stored Transcripts
 
 ```bash
 uv run python -m arakne.cli list-transcripts
 uv run python -m arakne.cli list-transcripts --limit 5
 ```
 
----
+Expect output shaped like:
 
-## 4. Ingest a Transcript
+```text
+rec:1  2026-04-04T12:34:56+00:00  /path/to/audio.m4a
+```
 
-This runs the ingestion agent against a stored transcript. The agent reads the full text, explores the existing graph, and creates or updates semantic nodes and edges with provenance.
+## Ingest A Transcript
+
+Once you have a `rec:N`, ingest it:
 
 ```bash
 uv run python -m arakne.cli ingest rec:1
 ```
 
-The agent will:
+What ingestion does:
 
-1. Read the full transcript
-2. Search the existing graph for related nodes
-3. Create new nodes or update existing ones, each with a log entry pointing back to the transcript span
-4. Call `complete_ingestion` with a natural-language summary
-5. After completion: check if any node's hot log exceeds the token budget (creates fences if so), then run the theme agent to update the themes map
+1. Loads the transcript from FalkorDB
+2. Builds the ingestion system prompt from Langfuse plus current hot-theme context
+3. Runs the harness with read/write graph tools
+4. Lets the agent search, inspect, create, and update semantic graph entities
+5. Requires provenance on every node write
+6. Finalizes with `complete_ingestion`
+7. Runs post-trace hooks:
+   - fence checks on touched live nodes
+   - theme update pass
 
-Output shows status, touched nodes, and the ingestion summary.
+What the CLI prints:
 
-Run traces are saved to `runs/` as JSON — every tool call, touched node, and completion payload is recorded.
+- final run status
+- touched node ids
+- the ingestion summary
 
----
+Important expectations:
 
-## 5. Query the Graph
+- ingestion fails if the transcript id does not exist
+- ingestion fails if Langfuse prompt fetch fails
+- ingestion may create new nodes, update existing nodes, and create/update edges
+- provenance is anchored back to transcript time offsets, so timestamp quality matters
 
-Ask anything in natural language. The agent navigates the semantic graph, retrieves the relevant nodes, traces back to the original transcript spans for evidence, and delivers a grounded answer.
+## Query The Graph
+
+Run a one-shot query:
 
 ```bash
 uv run python -m arakne.cli query "What have I been thinking about recently?"
-uv run python -m arakne.cli query "What is the relationship between my career anxiety and my mentor?"
-uv run python -m arakne.cli query "What did I say about risk?"
 ```
 
-The query agent will:
+What query mode does:
 
-1. Orient using the hot themes block
-2. Search the graph and traverse neighborhoods
-3. Fetch the exact transcript span(s) as evidence
-4. Call `deliver_response` with the answer and citations
+1. Mints or reuses a `chat:N`
+2. Builds the query system prompt from Langfuse plus hot themes
+3. Lets the agent search the graph, inspect neighborhoods, and retrieve transcript evidence
+4. Finishes via `deliver_response`
+5. Persists the conversation as a canonical `ChatSession`
+6. If graph nodes were touched, runs fence checks and a theme update
 
-A `ChatSession` canonical record is automatically created for every query run, so the conversation is preserved alongside transcripts as a permanent artifact.
+What the CLI prints:
 
-If you **correct or add context** during the query ("Actually I already quit that job"), the agent can update the graph in real time using the chat session as provenance. A theme update pass is triggered automatically if any writes occur.
+- `Status: completed` or `Status: failed`
+- the final answer if successful
+- the error if the run failed
 
----
+### Interactive Chat Mode
 
-## 6. Inspect What's in the Graph
-
-**FalkorDB browser** at http://localhost:3000 — connect to `localhost:6379`, open the `arakne` graph. You can run Cypher queries directly:
-
-```cypher
--- See all semantic nodes
-MATCH (n:SemanticNode) RETURN n.id, n.aliases, n.summary LIMIT 20
-
--- See all themes
-MATCH (t:Theme) RETURN t.name, t.state, t.status
-
--- See a node's full log
-MATCH (n:SemanticNode {id: "node:1"}) RETURN n.log
-
--- See all edges
-MATCH (a:SemanticNode)-[r:RELATES]->(b:SemanticNode)
-RETURN a.id, r.label, b.id
-
--- See theme anchors
-MATCH (t:Theme)-[:ANCHORS]->(n:SemanticNode)
-RETURN t.name, n.id, n.aliases[0]
-
--- See stored transcripts
-MATCH (t:Transcript) RETURN t.id, t.timestamp, t.audio_path
-
--- See chat sessions created by queries
-MATCH (c:ChatSession) RETURN c.id, c.timestamp
-```
-
-**Run traces** in `runs/` — each is a JSON file with the full execution record: every tool call, its args and result, touched nodes, completion payload.
-
----
-
-## 7. Run the Tests
+If you omit the question argument:
 
 ```bash
-uv run pytest -v
+uv run python -m arakne.cli query
 ```
 
-All 100 tests mock the LLM so no API keys are needed. They do require FalkorDB running (the tests use an `arakne_test` graph that is cleaned before each test).
+Arakne starts a REPL:
 
----
+```text
+Arakne chat — type 'exit' or Ctrl-D to quit.
+```
+
+Behavior to expect:
+
+- one `chat:N` is created for the full REPL session
+- full prior conversation is fed back into subsequent turns
+- on exit, the chat session is persisted if there was any conversation
+- if a turn fails, the REPL prints the error and continues
+
+## Chat And Transcript Canonical Records
+
+Arakne keeps canonical records alongside the derived semantic graph.
+
+You can also manually create chat sessions:
+
+```bash
+uv run python -m arakne.cli create-chat --messages-file messages.json
+```
+
+Where `messages.json` looks like:
+
+```json
+[
+  { "role": "user", "content": "I think I want to move cities." },
+  { "role": "assistant", "content": "What makes that feel urgent right now?" }
+]
+```
+
+List stored chats:
+
+```bash
+uv run python -m arakne.cli list-chats
+uv run python -m arakne.cli list-chats --limit 10
+```
+
+## Themes And Automatic Post-Run Behavior
+
+Theme maintenance is not a top-level CLI command. It runs automatically after:
+
+- a completed ingestion that touched nodes
+- a completed query/chat run that touched nodes
+
+What the theme pass receives:
+
+- the completion summary or answer text
+- touched node ids and actions
+- touched edge ids and actions
+- the current full theme map
+
+What to expect:
+
+- new themes may be created
+- existing themes may be updated or retired
+- `theme_priority_order` on the `System` node may change
+
+## Tracing, Prompts, And Langfuse
+
+Langfuse is used for three distinct jobs:
+
+- prompt storage and versioning
+- run traces
+- eval dataset and experiment visibility
+
+### Traces
+
+Each harness run creates a Langfuse trace with nested spans for:
+
+- the run root
+- each turn
+- each LLM generation
+- each tool call
+
+These are not saved to a local `runs/` folder. If you want to inspect a run, use Langfuse.
+
+### Prompts
+
+Arakne fetches prompts by name from Langfuse with the `production` label:
+
+- `arakne-ingestion`
+- `arakne-query`
+- `arakne-theme`
+
+If you change prompts in Langfuse, that changes runtime behavior without a code change.
+
+## Inspect The Database
+
+You can inspect FalkorDB directly. The current local setup usually exposes the database on:
+
+```text
+localhost:6379
+```
+
+Useful example Cypher queries:
+
+```cypher
+MATCH (n:SemanticNode)
+RETURN n.id, n.aliases, n.summary
+LIMIT 20
+```
+
+```cypher
+MATCH (t:Theme)
+RETURN t.name, t.state, t.status
+```
+
+```cypher
+MATCH (t:Transcript)
+RETURN t.id, t.timestamp, t.audio_path
+ORDER BY t.timestamp DESC
+```
+
+```cypher
+MATCH (c:ChatSession)
+RETURN c.id, c.timestamp
+ORDER BY c.timestamp DESC
+```
+
+```cypher
+MATCH (t:Theme)-[:ANCHORS]->(n:SemanticNode)
+RETURN t.name, n.id, n.aliases[0]
+```
+
+## Evals
+
+This repo includes eval execution code, but not a CLI command for it.
+
+The eval flow is Python-level and Langfuse-backed:
+
+- datasets live in Langfuse
+- dataset items are loaded into `EvalItem`
+- `ingestion`, `query`, and `theme` scenario items are supported
+- results are linked back to the Langfuse dataset item as experiment runs
+
+Relevant modules:
+
+- `arakne.evals.scenarios`
+- `arakne.evals.runner`
+- `arakne.evals.judges`
+- `arakne.evals.reports`
 
 ## Full CLI Reference
 
-```
-uv run python -m arakne.cli <command>
-
-  init-system                  Create the System node (run once)
-  status                       Print current System node counters and budgets
-
-  create-transcript            Store a transcript
-    --audio-path PATH          Path to the audio artifact (stored as metadata)
-    --text-file PATH           Path to the transcript text file
-
-  list-transcripts             List stored transcripts
-    --limit N                  Max results (default: 20)
-
-  create-chat                  Store a manually-constructed chat session
-    --messages-file PATH       JSON file: [{"role": "user", "content": "..."}, ...]
-
-  list-chats                   List stored chat sessions
-    --limit N                  Max results (default: 20)
-
-  transcribe <audio_path>      Transcribe audio and store as a transcript
-
-  ingest <transcript_id>       Run ingestion agent (e.g. rec:1)
-
-  query "<question>"           Run a query/chat session
-```
-
----
-
-## Token Budgets (optional tuning)
-
-Set in `.env` — defaults are shown:
-
-```
-LOG_TOKEN_BUDGET=2000        # tokens in a node's hot log before a fence is created
-HOT_THEME_TOKEN_BUDGET=250   # tokens for the hot themes block injected into every prompt
-```
-
-At ~50-80 tokens per theme, the default 250-token budget fits 3-5 hot themes. Increase if you want more orientation context; decrease to save on input tokens.
-
----
-
-## Typical First Session
+All commands run through:
 
 ```bash
-# 1. Start FalkorDB
-devenv up &
+uv run python -m arakne.cli <command>
+```
 
-# 2. Enter shell
-devenv shell
+Commands:
 
-# 3. One-time setup
+```text
+init-system
+status
+
+create-transcript --audio-path PATH --text-file PATH
+list-transcripts [--limit N]
+
+create-chat --messages-file PATH
+list-chats [--limit N]
+
+transcribe <audio_path>
+ingest <transcript_id>
+query [question]
+```
+
+## Common Failure Modes
+
+### `System node not found`
+
+Run:
+
+```bash
 uv run python -m arakne.cli init-system
+```
 
-# 4. Transcribe an audio recording (needs GROQ_API_KEY in .env)
+### Prompt fetch or trace failures
+
+Check:
+
+- Langfuse is running
+- `LANGFUSE_HOST` is correct
+- `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set
+- prompts were seeded with `uv run python scripts/seed_prompts.py`
+
+### Transcription failures
+
+Check:
+
+- `GROQ_API_KEY` is set
+- the file exists
+- the extension is supported
+
+### LLM or query failures
+
+Check:
+
+- `GEMINI_API_KEY` is set
+- the graph is reachable
+- Langfuse is available
+
+### Tests failing in this environment
+
+Some test runs may fail before collection if native dependencies used by `litellm` or `tokenizers` are missing from the runtime environment. That is an environment issue, not necessarily an Arakne logic issue.
+
+## Current Limits
+
+- CLI-first only
+- no API server
+- no UI for normal app usage
+- no separate manual theme-update CLI command
+- prompt management depends on Langfuse
+- semantic/vector behavior depends on the graph/index/runtime setup and may not be fully production-shaped yet
+
+If you want the shortest happy path, use this sequence:
+
+```bash
+cp .example.env .env
+# fill in GEMINI_API_KEY, GROQ_API_KEY, LANGFUSE_* as needed
+
+devenv up
+docker compose -f docker-compose.langfuse.yml up -d
+
+devenv shell
+uv run python scripts/seed_prompts.py
+uv run python -m arakne.cli init-system
 uv run python -m arakne.cli transcribe /path/to/recording.m4a
-# → Stored as rec:1
-
-# 5. Ingest it
 uv run python -m arakne.cli ingest rec:1
-
-# 6. Ask something
-uv run python -m arakne.cli query "What is stopping me from quitting my job?"
+uv run python -m arakne.cli query "What has been on my mind recently?"
 ```
