@@ -11,13 +11,12 @@ import pytest
 from falkordb import Graph
 from pydantic import ValidationError
 
-from weavy.models.graph import FenceEntry, LogEntry, ProvenanceInput
+from weavy.models.graph import LogEntry, ProvenanceInput
 from weavy.models.tools import (
     CreateEdgeInput,
     CreateNodeInput,
     DeleteEdgeInput,
     DeleteNodeInput,
-    GetColdLogsInput,
     GetNodeInput,
     GetNodeNeighborhoodInput,
     SearchGraphInput,
@@ -411,50 +410,6 @@ def test_get_node_returns_edges(graph: Graph) -> None:
     out = read_get_node(graph, GetNodeInput(node_ids=[a]))
     assert len(out.results[0].edges) == 1
     assert out.results[0].edges[0].label == "test edge"
-    assert out.results[0].cold_hint is None  # no fence yet
-
-
-def test_get_node_hot_cold_split(graph: Graph) -> None:
-    """After injecting a fence entry, get_node should set cold_hint."""
-    from datetime import timezone
-    from weavy.models.graph import FenceEntry
-    from weavy.store import graph as sg
-
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = write_tools.create_node(
-        graph, CreateNodeInput(aliases=["test node"], summary="Test.", note="initial", provenance=prov), _ingestion_trace()
-    ).id
-
-    # Add a second log entry
-    p2 = ProvenanceInput(source_id="rec:2", start_offset=0, end_offset=5)
-    write_tools.update_node(graph, UpdateNodeInput(node_id=node_id, note="update", provenance=p2), _ingestion_trace())
-
-    # Manually inject a fence entry into the log (simulating Phase 8 fence creation)
-    fence = FenceEntry(
-        is_fence=True,
-        timestamp=datetime.now(tz=timezone.utc),
-        note="Fence summarizing 2 entries.",
-        entries_behind=2,
-        date_range=(datetime.now(tz=timezone.utc), datetime.now(tz=timezone.utc)),
-    )
-    fence_json = sg._serialize_log_entry(fence)
-    graph.query(
-        "MATCH (n:SemanticNode {id: $id}) SET n.log = n.log + [$fence_json]",
-        {"id": node_id, "fence_json": fence_json},
-    )
-
-    # Add a hot entry after the fence
-    p3 = ProvenanceInput(source_id="rec:3", start_offset=0, end_offset=5)
-    write_tools.update_node(graph, UpdateNodeInput(node_id=node_id, note="hot update", provenance=p3), _ingestion_trace())
-
-    from weavy.tools.read_tools import get_node as read_get_node
-    out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
-    # Returned log should be [fence, hot_entry]
-    assert len(out.results[0].node.log) == 2
-    assert isinstance(out.results[0].node.log[0], FenceEntry)
-    assert isinstance(out.results[0].node.log[1], LogEntry)
-    assert out.results[0].cold_hint is not None
-    assert "get_cold_logs" in out.results[0].cold_hint
 
 
 def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
@@ -468,36 +423,6 @@ def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
     out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
     payload = json.loads(out.model_dump_json())
     assert "UTC" in payload["results"][0]["node"]["log"][0]["timestamp"]
-
-
-def test_get_cold_logs_json_humanizes_fence_dates(graph: Graph) -> None:
-    fence = FenceEntry(
-        is_fence=True,
-        timestamp=datetime.now(tz=timezone.utc),
-        note="Fence summarizing entries.",
-        entries_behind=2,
-        date_range=(datetime.now(tz=timezone.utc), datetime.now(tz=timezone.utc)),
-    )
-    node_id = increment_counter(graph, "node")
-    store_graph.create_node(
-        graph,
-        ["test node"],
-        "Test.",
-        "initial",
-        ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10),
-        node_id,
-    )
-    graph.query(
-        "MATCH (n:SemanticNode {id: $id}) SET n.log = n.log + [$fence_json]",
-        {"id": node_id, "fence_json": store_graph._serialize_log_entry(fence)},
-    )
-
-    from weavy.tools.read_tools import get_cold_logs as read_get_cold_logs
-
-    out = read_get_cold_logs(graph, GetColdLogsInput(node_id=node_id))
-    payload = json.loads(out.model_dump_json())
-    assert "UTC" in payload["entries"][-1]["timestamp"]
-    assert all("UTC" in item for item in payload["entries"][-1]["date_range"])
 
 
 # ---------------------------------------------------------------------------
@@ -528,17 +453,4 @@ def test_get_node_neighborhood(graph: Graph) -> None:
     assert c in neighbor_ids
 
 
-# ---------------------------------------------------------------------------
-# get_cold_logs
-# ---------------------------------------------------------------------------
 
-
-def test_get_cold_logs_empty_for_new_node(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = write_tools.create_node(
-        graph, CreateNodeInput(aliases=["fresh"], summary="Fresh node.", note="x", provenance=prov), _ingestion_trace()
-    ).id
-
-    from weavy.tools.read_tools import get_cold_logs as read_cold
-    out = read_cold(graph, GetColdLogsInput(node_id=node_id))
-    assert out.entries == []

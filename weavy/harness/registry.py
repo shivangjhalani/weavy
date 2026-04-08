@@ -19,7 +19,6 @@ from weavy.models.tools import (
     DeleteNodeInput,
     DeliverResponseInput,
     GetChatInput,
-    GetColdLogsInput,
     GetNodeInput,
     GetNodeNeighborhoodInput,
     GetThemeInput,
@@ -71,12 +70,6 @@ REGISTRY: dict[str, ToolEntry] = {
         description="Retrieve a node and its direct neighbors with edge labels and one-line summaries for quick orientation. node_id must be an exact node:N token like node:4 with no trailing punctuation.",
         input_model=GetNodeNeighborhoodInput,
         fn=lambda p, ctx: read_tools.get_node_neighborhood(ctx.graph, p),
-    ),
-    "get_cold_logs": ToolEntry(
-        name="get_cold_logs",
-        description="Retrieve archived (cold) log entries for a node — everything at or before the last fence entry. node_id must be an exact node:N token like node:4 with no trailing punctuation.",
-        input_model=GetColdLogsInput,
-        fn=lambda p, ctx: read_tools.get_cold_logs(ctx.graph, p),
     ),
     "list_transcripts": ToolEntry(
         name="list_transcripts",
@@ -203,7 +196,6 @@ GRAPH_READ_TOOLS = [
     "search_graph",
     "get_node",
     "get_node_neighborhood",
-    "get_cold_logs",
     "list_transcripts",
     "get_transcript_span",
     "list_chats",
@@ -224,7 +216,7 @@ INGESTION_TOOLS: list[str] = GRAPH_READ_TOOLS + GRAPH_WRITE_TOOLS + ["complete_i
 QUERY_TOOLS: list[str] = GRAPH_READ_TOOLS + GRAPH_WRITE_TOOLS + ["get_theme", "deliver_response"]
 
 THEME_MODE_TOOLS: list[str] = (
-    ["search_graph", "get_node", "get_node_neighborhood", "get_cold_logs"]
+    ["search_graph", "get_node", "get_node_neighborhood"]
     + ["get_theme", "create_theme", "update_theme", "retire_theme"]
     + ["complete_theme_update"]
 )

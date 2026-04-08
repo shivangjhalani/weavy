@@ -2909,6 +2909,9 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+langfuse = [
+    { name = "langfuse" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -2922,7 +2925,8 @@ requires-dist = [
     { name = "falkordb", specifier = ">=1.6.0" },
     { name = "google-genai", specifier = ">=1.14.0" },
     { name = "humanize", specifier = ">=4.14.0" },
-    { name = "langfuse", specifier = ">=2.0.0" },
+    { name = "langfuse", specifier = ">=4.0.6" },
+    { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=2.0.0" },
     { name = "litellm", specifier = ">=1.82.1" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pytest", specifier = ">=9.0.2" },
@@ -2933,7 +2937,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "tiktoken", specifier = ">=0.12.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["langfuse", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

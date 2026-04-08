@@ -27,7 +27,6 @@ class SystemState(BaseModel):
     next_rec_id: int
     next_chat_id: int
     theme_priority_order: list[str]
-    log_token_budget: int
     hot_theme_token_budget: int
 
 
@@ -42,7 +41,6 @@ def _row_to_state(props: dict) -> SystemState:
         next_rec_id=props["next_rec_id"],
         next_chat_id=props["next_chat_id"],
         theme_priority_order=priority,
-        log_token_budget=props["log_token_budget"],
         hot_theme_token_budget=props["hot_theme_token_budget"],
     )
 
@@ -53,8 +51,10 @@ def _ensure_vector_index(graph: Graph) -> None:
             "CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
             "OPTIONS {dimension:3072, similarityFunction:'cosine'}"
         )
-    except Exception:
-        pass  # Index already exists
+    except Exception as e:
+        if "already" in str(e).lower() or "exists" in str(e).lower():
+            return
+        raise
 
 
 def init_system(graph: Graph) -> SystemState:
@@ -69,12 +69,10 @@ def init_system(graph: Graph) -> SystemState:
             s.next_rec_id  = 1,
             s.next_chat_id = 1,
             s.theme_priority_order  = [],
-            s.log_token_budget      = $log_budget,
             s.hot_theme_token_budget = $hot_budget
         RETURN s
         """,
         {
-            "log_budget": settings.LOG_TOKEN_BUDGET,
             "hot_budget": settings.HOT_THEME_TOKEN_BUDGET,
         },
     )

@@ -24,11 +24,15 @@ def _render_full_theme_map(themes: list, priority_order: list[str]) -> str:
 
 
 def run_theme_update(
-    summary: str,
-    touched_nodes: list[TouchedNode],
-    touched_edges: list[TouchedEdge],
+    summary: str = "",
+    touched_nodes: list[TouchedNode] | None = None,
+    touched_edges: list[TouchedEdge] | None = None,
 ) -> RunTrace:
-    """Update themes from a session delta. Triggered after ingestion or chat writes."""
+    """Update themes. Can be triggered manually or after any session that writes nodes."""
+    if touched_nodes is None:
+        touched_nodes = []
+    if touched_edges is None:
+        touched_edges = []
     graph = get_graph(settings.GRAPH_NAME)
     all_themes = store_themes.list_all_themes(graph)
     system_state = store_system.get_system(graph)

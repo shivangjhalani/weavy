@@ -86,8 +86,7 @@ def run_query(
 
 def run_chat_repl() -> None:
     """Interactive REPL: prompts user, runs query turns with full history.
-    Creates one Langfuse trace for the whole session; persists a single
-    ChatSession on exit."""
+    Persists a single ChatSession on exit."""
     graph = get_graph(settings.GRAPH_NAME)
     chat_id = store_system.increment_counter(graph, "chat")
     conversation: list[dict] = []

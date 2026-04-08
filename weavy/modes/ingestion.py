@@ -6,7 +6,7 @@ from weavy.config import settings
 from weavy.harness import registry as reg
 from weavy.harness.runner import run
 from weavy.models.traces import RunTrace
-from weavy.modes._common import build_themed_system_prompt, run_post_trace_hooks
+from weavy.modes._common import build_themed_system_prompt
 from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
 from weavy.store.client import get_graph
@@ -14,17 +14,12 @@ from weavy.timefmt import format_agent_timestamp
 
 
 def run_ingestion(transcript_id: str) -> RunTrace:
-    """Load transcript, run ingestion harness, trigger post-run theme pass.
-
-    Raises ValueError if the transcript has already been ingested.
-    Call rollback_ingestion(transcript_id) first to undo before re-ingesting.
-    """
+    """Load transcript and run ingestion harness. Theme update must be triggered manually."""
     graph = get_graph(settings.GRAPH_NAME)
 
     if store_canonical.get_ingestion_status(graph, transcript_id) == 1:
         raise ValueError(
-            f"Transcript '{transcript_id}' has already been ingested. "
-            "Call rollback_ingestion() first to undo before re-ingesting."
+            f"Transcript '{transcript_id}' has already been ingested."
         )
 
     transcript = store_canonical.get_transcript(graph, transcript_id)
@@ -65,16 +60,5 @@ def run_ingestion(transcript_id: str) -> RunTrace:
         # Failed run — reset flag so the transcript can be re-ingested cleanly.
         store_canonical.set_ingestion_status(graph, transcript_id, 0)
         return trace
-
-    run_post_trace_hooks(
-        trace,
-        graph,
-        system_state,
-        completion_text=(trace.completion_payload or {}).get("summary", ""),
-    )
-
-    # Persist the ordered mutation log on the transcript node.
-    # Even an empty list is saved so the manifest can be queried.
-    store_canonical.save_run_manifest(graph, transcript_id, trace.mutation_ops)
 
     return trace

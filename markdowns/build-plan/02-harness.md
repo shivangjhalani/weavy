@@ -2,22 +2,23 @@
 
 ## Goal
 
-Build one reusable agent harness that runs ingestion, query, and theme modes with different prompts and allowed tools, but identical execution semantics.
+Build one reusable agent harness that runs ingestion, query, and theme modes with different prompts and allowed actions, but identical execution semantics.
 
 ## Core Harness Responsibilities
 
 - render mode-specific context
-- expose a validated tool registry
+- expose a static validated action surface
 - execute tool calls in a loop
-- track touched nodes and edges
 - capture a run trace
 - terminate only on the mode's completion tool
+- delegate workflow side effects to a shared finalizer
 
 The harness should not:
 - repair malformed tool calls silently
 - retry failed tool calls automatically
 - decide retrieval strategy itself
 - hide model or tool failures
+- own graph invariants that belong in the memory service
 
 ## Harness Inputs
 
@@ -25,8 +26,7 @@ Each run should accept:
 - `mode`
 - `system_prompt`
 - `initial_messages`
-- `allowed_tools`
-- `completion_tool`
+- `allowed_actions`
 - `run_context`
 
 Suggested `run_context` fields:
@@ -71,12 +71,15 @@ When the model invokes a tool:
 - parse its arguments through the tool's Pydantic request model
 - reject the call if parsing fails
 
-### Step 4: Execute Tool
+### Step 4: Execute Action
 
-- run the tool
+- run the action
 - append structured result to the conversation
-- update touched entity tracking if the tool is a write tool
 - record the tool call and tool result in the trace
+
+Rules:
+- touched entity tracking should come from the write path, not from the harness inferring mutation semantics itself
+- provenance validation should live in the memory service, not in passive wrappers
 
 ### Step 5: Detect Completion
 
@@ -88,6 +91,18 @@ Completion tools:
 - theme: `complete_theme_update`
 
 If the model stops without calling completion, fail the run.
+
+### Step 6: Finalize Workflow
+
+After completion or failure, hand off to a shared workflow finalizer.
+
+The finalizer should own:
+- persistence derived from the run
+- post-run theme maintenance
+- transcript lifecycle cleanup
+- failure cleanup
+
+This step must be shared across ingestion, query, and theme modes unless a workflow intentionally opts out.
 
 ## Mode Contracts
 
@@ -131,7 +146,7 @@ Allowed write tools:
 
 ## Touched Entity Tracking
 
-The harness must track graph mutations centrally.
+The system must track graph mutations centrally.
 
 Track:
 - node id
@@ -140,45 +155,48 @@ Track:
 - action: `created | updated | deleted`
 
 Rules:
-- tracking is derived from executed write tools, not from model self-reporting
+- tracking is derived from executed write actions, not from model self-reporting
 - the completion payload should not be trusted for this data
+- the write path should append touched entities directly as part of mutation execution
 
 ## Post-Run Hooks
 
-Use explicit synchronous post-run steps.
+Use explicit synchronous post-run steps through the shared finalizer.
 
 ### After Ingestion or Query with Graph Writes
 
 Run in order:
-1. fence check for touched nodes
-2. theme pass
+1. theme pass
 
 Optional:
-3. synchronous embedding update if embeddings are implemented in the same phase
+2. synchronous embedding update if embeddings are implemented in the same phase
 
 Rules:
 - no hidden queue or worker
-- if a post-run step fails, surface the failure
+- if a post-run step fails, surface the failure clearly
+- theme maintenance must not be scattered across mode implementations
 
-## Tool Registry Plan
+## Action Surface Plan
 
-Keep the registry explicit and static.
+Keep the action surface explicit and static.
 
-Each tool should define:
+Each action should define:
 - name
 - request model
 - response model
 - executor function
 - mutation metadata
 
-The registry should not:
+The action surface should not:
 - do name aliasing
 - support partial argument coercion
 - allow unregistered tools
 
+Thin pass-through wrappers should be avoided. If a layer does not add validation, invariants, or translation, collapse it.
+
 ## Trace Storage
 
-Store traces as local artifacts under a deterministic path such as `private/evals/runs/` or a similar debug folder.
+Store traces in-memory for the runtime path and optionally mirror them to Langfuse or local artifacts for debugging/evals.
 
 Each trace should include:
 - prompt inputs

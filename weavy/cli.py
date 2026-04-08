@@ -27,7 +27,6 @@ def _print_system_state(header: str, state: SystemState) -> None:
     print(f"  next_edge_id          = {state.next_edge_id}")
     print(f"  next_rec_id           = {state.next_rec_id}")
     print(f"  next_chat_id          = {state.next_chat_id}")
-    print(f"  log_token_budget      = {state.log_token_budget}")
     print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
     print(f"  theme_priority_order  = {state.theme_priority_order}")
 
@@ -110,13 +109,6 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         print(f"Summary: {summary}")
 
 
-def cmd_rollback(args: argparse.Namespace) -> None:
-    from weavy.store.rollback import rollback_ingestion
-
-    rollback_ingestion(args.transcript_id)
-    print(f"Rolled back {args.transcript_id}. Status reset to 0, ready to re-ingest.")
-
-
 def cmd_transcribe(args: argparse.Namespace) -> None:
     from weavy.transcribe import transcribe_audio
 
@@ -136,6 +128,17 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
 
     print(f"Stored as {rec_id}\n")
     print(text)
+
+
+def cmd_update_themes(args: argparse.Namespace) -> None:
+    from weavy.modes.theme import run_theme_update
+
+    trace = run_theme_update()
+    print(f"Status: {trace.status}")
+    if trace.error:
+        print(f"Error: {trace.error}", file=sys.stderr)
+    else:
+        print(f"Theme update complete.")
 
 
 def cmd_query(args: argparse.Namespace) -> None:
@@ -187,10 +190,7 @@ def main() -> None:
     p = subparsers.add_parser("ingest", help="Run ingestion for a stored transcript")
     p.add_argument("transcript_id", help="Transcript id to ingest (e.g. rec:1)")
 
-    p = subparsers.add_parser(
-        "rollback", help="Undo all graph mutations from a transcript's ingestion run"
-    )
-    p.add_argument("transcript_id", help="Transcript id to roll back (e.g. rec:1)")
+    subparsers.add_parser("update-themes", help="Manually run the theme agent over the current graph")
 
     p = subparsers.add_parser("query", help="Ask a question against the memory graph")
     p.add_argument(
@@ -210,7 +210,7 @@ def main() -> None:
         "list-chats": cmd_list_chats,
         "transcribe": cmd_transcribe,
         "ingest": cmd_ingest,
-        "rollback": cmd_rollback,
+        "update-themes": cmd_update_themes,
         "query": cmd_query,
     }
     dispatch[args.command](args)

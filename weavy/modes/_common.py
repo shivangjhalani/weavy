@@ -3,38 +3,44 @@ Shared helpers for mode orchestration.
 """
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from falkordb import Graph
 
 from weavy.config import settings
 from weavy.models.canonical import ChatMessage
 from weavy.models.traces import RunTrace
-from weavy.store import graph as store_graph
 from weavy.store.system import SystemState
 from weavy.store.themes import build_themes_context
 from weavy.timefmt import format_agent_timestamp
 
 
-def _unique_live_node_ids(trace: RunTrace) -> list[str]:
-    seen: set[str] = set()
-    live_node_ids: list[str] = []
-    for node in trace.touched_nodes:
-        if node.action == "deleted" or node.node_id in seen:
-            continue
-        seen.add(node.node_id)
-        live_node_ids.append(node.node_id)
-    return live_node_ids
+def _langfuse_enabled() -> bool:
+    return bool(settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY)
 
 
 def fetch_prompt(name: str, variables: dict) -> str:
-    """Fetch a versioned prompt from Langfuse and compile it with the given variables.
+    """Load a prompt template and compile it with the given variables.
 
-    Raises on any failure — no silent fallback. Langfuse must be running.
+    Checks local prompt files first (weavy/prompts/{name}.txt). Falls back to
+    Langfuse only when Langfuse keys are configured and the local file doesn't exist.
     """
-    from weavy.langfuse_client import get_langfuse
+    prompt_path = Path(__file__).parent.parent / "prompts" / f"{name}.txt"
+    if prompt_path.exists():
+        template = prompt_path.read_text()
+        for key, value in variables.items():
+            template = template.replace("{{" + key + "}}", str(value))
+        return template
 
-    prompt = get_langfuse().get_prompt(name, label="production")
-    return prompt.compile(**variables)
+    if _langfuse_enabled():
+        from weavy.langfuse_client import get_langfuse
+
+        prompt = get_langfuse().get_prompt(name, label="production")
+        return prompt.compile(**variables)
+
+    raise FileNotFoundError(
+        f"Prompt '{name}' not found at {prompt_path} and Langfuse is not enabled."
+    )
 
 
 def build_themed_system_prompt(
@@ -76,15 +82,9 @@ def run_post_trace_hooks(
     system_state: SystemState,
     completion_text: str,
 ) -> None:
-    """Run fence checks and trigger a theme update after a completed session."""
+    """Trigger a theme update after a completed session."""
     if not (trace.status == "completed" and trace.touched_nodes):
         return
-
-    live_node_ids = _unique_live_node_ids(trace)
-    if live_node_ids:
-        store_graph.run_fence_checks(
-            graph, live_node_ids, system_state.log_token_budget, settings.GEMINI_MODEL
-        )
 
     from weavy.modes import theme as theme_mode  # local import avoids circular dep
 

@@ -86,17 +86,15 @@ The read tool tiers:
   edge count. Use this to locate candidates.
 - get_node_neighborhood(node_id) — returns the node plus its direct neighbors with edge labels \
   and one-line summaries. Use this to understand local structure and recent log history.
-- get_node(node_id) — full detail: all aliases, summary, hot log entries, last fence summary \
-  if the node is old. Use this when you need to understand a node's full current state before \
-  deciding whether to update it.
-- get_cold_logs(node_id) — older log history behind the last fence. Use this if the cold hint \
-  on get_node suggests relevant deep history.
+- get_node(node_id) — full detail: all aliases, summary, all log entries, and outgoing edges. \
+  Use this when you need to understand a node's full current state before deciding whether to \
+  update it.
 
-When you think a node may need updating, read its history before writing. Start with get_node. \
-If it has a cold-history hint and the older arc could affect your judgment, call get_cold_logs \
-too. Do this especially before rewriting summaries, adding aliases, or writing a note about a \
-theme that may already have been logged repeatedly. The goal is to understand the node's full \
-trajectory and avoid adding redundant logs that merely restate what is already there.
+When you think a node may need updating, read its history before writing. Start with \
+get_node_neighborhood for a quick look, then get_node for full detail. Do this especially \
+before rewriting summaries, adding aliases, or writing a note about a theme that may already \
+have been logged repeatedly. The goal is to understand the node's full trajectory and avoid \
+adding redundant logs that merely restate what is already there.
 
 **Step 3 — Plan before writing.**
 After reading the transcript and exploring the graph, reason about what this recording means \
@@ -284,9 +282,7 @@ weak candidates immediately.
 Use read tools progressively:
 - search_graph(query) — locate plausible nodes
 - get_node_neighborhood(node_id) — inspect local structure and recent movement
-- get_node(node_id) — read full current state when the node looks central
-- get_cold_logs(node_id) — only if the question is explicitly historical or the cold hint \
-  suggests older history is likely to matter
+- get_node(node_id) — read full current state and complete log history when the node looks central
 
 Read deeply only on the candidates that remain plausible after the previous tier. This is \
 targeted retrieval, not exhaustive survey.

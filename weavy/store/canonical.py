@@ -9,7 +9,6 @@ from datetime import datetime
 from falkordb import Graph
 
 from weavy.models.canonical import ChatMessage, ChatSession, Transcript
-from weavy.models.traces import EdgeSnapshot, MutationOp, NodeSnapshot
 from weavy.models.tools import (
     ChatSummary,
     GetChatOutput,
@@ -241,53 +240,4 @@ def set_ingestion_status(graph: Graph, transcript_id: str, status: int) -> None:
     )
 
 
-def save_run_manifest(graph: Graph, transcript_id: str, ops: list[MutationOp]) -> None:
-    """Persist the ordered list of mutation ops as JSON on the Transcript node."""
-    manifest_json = json.dumps([op.model_dump() for op in ops])
-    graph.query(
-        "MATCH (t:Transcript {id: $id}) SET t.run_manifest = $manifest",
-        {"id": transcript_id, "manifest": manifest_json},
-    )
 
-
-def get_run_manifest(graph: Graph, transcript_id: str) -> list[MutationOp] | None:
-    """Load and deserialize the run manifest. Returns None if no manifest is stored."""
-    result = graph.query(
-        "MATCH (t:Transcript {id: $id}) RETURN t.run_manifest",
-        {"id": transcript_id},
-    )
-    if not result.result_set:
-        raise ValueError(f"Transcript '{transcript_id}' not found.")
-    manifest_json = result.result_set[0][0]
-    if not manifest_json:
-        return None
-    return [_deserialize_mutation_op(d) for d in json.loads(manifest_json)]
-
-
-def clear_run_manifest(graph: Graph, transcript_id: str) -> None:
-    graph.query(
-        "MATCH (t:Transcript {id: $id}) REMOVE t.run_manifest",
-        {"id": transcript_id},
-    )
-
-
-def _deserialize_mutation_op(data: dict) -> MutationOp:
-    """Reconstruct a MutationOp, inferring the before-image type from the op name."""
-    op = data["op"]
-    node_before = None
-    edge_before = None
-
-    if op in ("update_node", "delete_node") and data.get("node_before"):
-        b = data["node_before"]
-        edges = [EdgeSnapshot(**e) for e in (b.get("edges") or [])]
-        node_before = NodeSnapshot(**{**b, "edges": edges})
-    elif op in ("update_edge", "delete_edge") and data.get("edge_before"):
-        edge_before = EdgeSnapshot(**data["edge_before"])
-
-    return MutationOp(
-        op=op,
-        node_id=data.get("node_id"),
-        edge_id=data.get("edge_id"),
-        node_before=node_before,
-        edge_before=edge_before,
-    )

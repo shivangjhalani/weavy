@@ -11,7 +11,7 @@ This phase covers:
 - loading full transcript context into ingestion mode
 - exploring the graph
 - writing semantic changes with provenance
-- triggering theme maintenance synchronously after completion
+- shared workflow finalization after completion
 
 This phase does not require:
 - full conversational query UX
@@ -54,13 +54,14 @@ The model should:
 
 ### Step 3: Post-Run Processing
 
-After successful completion:
-1. run fence checks on touched nodes
-2. run theme mode with the generated delta
+After successful completion, finalize the workflow through the shared finalizer.
 
-If graph writes did not occur:
-- skip fence checks
-- skip theme mode
+The finalizer should:
+- mark the transcript ingestion lifecycle as `completed`
+- trigger theme maintenance only if graph mutation occurred
+- leave the transcript recoverable if the run failed
+
+Manual `weavy update-themes` should remain available as a repair/rebuild path, not as the normal ingestion path.
 
 ## Tool Surface for Ingestion
 
@@ -68,8 +69,6 @@ Read tools:
 - `search_graph`
 - `get_node_neighborhood`
 - `get_node`
-- `get_cold_logs`
-- `get_theme`
 
 Write tools:
 - `create_node`
@@ -93,6 +92,7 @@ Every node write must include:
 Validation behavior:
 - offsets must be valid transcript offsets
 - invalid or missing provenance fails the write
+- provenance enforcement should happen in the graph write path itself
 
 ## Graph Write Rules During Ingestion
 
@@ -140,3 +140,4 @@ Recommendation:
 - every node write creates a valid log entry
 - touched nodes and edges are captured in the run trace
 - theme maintenance runs after successful graph mutation
+- transcript lifecycle is explicit: `pending -> running -> completed` or `failed`

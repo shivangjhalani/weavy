@@ -15,36 +15,6 @@ class TouchedEdge(BaseModel):
     action: Literal["created", "updated", "deleted"]
 
 
-class EdgeSnapshot(BaseModel):
-    """Full edge state captured before a mutation, for rollback."""
-    id: str
-    from_node_id: str
-    to_node_id: str
-    label: str
-
-
-class NodeSnapshot(BaseModel):
-    """Full node state captured before a mutation, for rollback."""
-    id: str
-    name: str
-    aliases: list[str]
-    summary: str
-    log: list[str]  # raw JSON strings as stored in FalkorDB
-    total_log_count: int
-    edges: list[EdgeSnapshot] = []  # populated for delete_node ops only
-
-
-class MutationOp(BaseModel):
-    """Single reversible operation recorded during a harness run."""
-    op: Literal[
-        "create_node", "update_node", "delete_node",
-        "create_edge", "update_edge", "delete_edge",
-    ]
-    node_id: str | None = None
-    edge_id: str | None = None
-    node_before: NodeSnapshot | None = None  # set for update_node, delete_node
-    edge_before: EdgeSnapshot | None = None  # set for update_edge, delete_edge
-
 
 class ToolCall(BaseModel):
     tool_name: str
@@ -98,7 +68,6 @@ class RunTrace(BaseModel):
     completion_payload: dict[str, Any] | None = None
     touched_nodes: list[TouchedNode] = []
     touched_edges: list[TouchedEdge] = []
-    mutation_ops: list[MutationOp] = []
     status: Literal["running", "completed", "failed"] = "running"
     error: str | None = None
     conversation: list[dict] | None = None

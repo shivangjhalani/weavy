@@ -2,7 +2,7 @@
 
 ## Goal
 
-Implement the `Memory-v5` storage model directly in FalkorDB with minimal translation layers. The code should preserve the exact architectural distinction between canonical sources, the semantic graph, themes, and the singleton system state.
+Implement the `Memory-v5` storage model directly in FalkorDB with minimal translation layers. The code should preserve the architectural distinction between canonical sources, the semantic graph, themes, and the singleton system state, while keeping runtime policy out of the store unless it truly belongs there.
 
 ## Store Structure
 
@@ -34,11 +34,13 @@ Properties:
 - `audio_path`
 - `timestamp`
 - `text`
+- `ingestion_state`: `pending | running | completed | failed`
 
 Implementation notes:
 - `text` should be stored in normalized inline timestamp format
 - `timestamp` should be stored once in canonical form and rendered for the agent on read
 - transcript ids are sequential and human-readable
+- ingestion lifecycle should be explicit; avoid overloaded boolean-like flags
 
 ### ChatSession
 
@@ -67,7 +69,7 @@ Rules:
 - `aliases[0]` is the canonical label surfaced to the agent
 - no `type` property
 - `embedding` may start as nullable if semantic search is deferred, but the field should exist in the data model
-- `total_log_count` counts only regular entries, not fences
+- `total_log_count` counts all log entries on this node
 
 ## Semantic Edges
 
@@ -95,6 +97,7 @@ Rules:
 - no theme ids; `name` is the identifier
 - anchors are not stored as arrays and must only exist as `ANCHORS` edges
 - themes have no logs or version history
+- themes are auxiliary derived state; core correctness must not depend on them being fresh
 
 ## System Node
 
@@ -104,13 +107,13 @@ Properties:
 - `next_rec_id`
 - `next_chat_id`
 - `theme_priority_order`
-- `log_token_budget`
 - `hot_theme_token_budget`
 
 Rules:
 - exactly one `System` node should exist
 - initialization should fail if multiple `System` nodes exist
 - the code should not infer missing counters; missing required properties are an error
+- `System` should store graph-owned global state only, not general runtime policy
 
 ## Log Model
 
@@ -133,23 +136,8 @@ Chat-driven regular entries use:
 - `start_offset = message_index`
 - `end_offset = null`
 
-### Fence Entry
-
-```json
-{
-  "is_fence": true,
-  "timestamp": "...",
-  "note": "...",
-  "entries_behind": 30,
-  "date_range": ["...", "..."]
-}
-```
-
 Rules:
 - logs are append-only
-- fences are never rewritten
-- hot segment is everything after the last fence
-- cold segment is everything at or before the last fence
 
 ## Provenance Rules
 
@@ -185,6 +173,18 @@ Rules:
 - do not let agents propose ids
 - do not use UUIDs
 - increment counters atomically within the write operation that creates the entity
+
+## Workflow State Plan
+
+Canonical sources may carry explicit workflow state when the state is needed for correctness or recovery.
+
+Initial use:
+- transcript ingestion lifecycle
+
+Rules:
+- states should be human-readable and unambiguous
+- "running" and "completed" must not share the same stored value
+- cleanup logic should be driven from explicit state transitions, not ad hoc booleans
 
 ## Read Rendering Rules
 

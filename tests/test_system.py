@@ -33,7 +33,6 @@ def test_init_system_creates_node(graph: Graph) -> None:
     assert state.next_rec_id == 1
     assert state.next_chat_id == 1
     assert state.theme_priority_order == []
-    assert state.log_token_budget > 0
     assert state.hot_theme_token_budget > 0
 
 

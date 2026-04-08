@@ -252,11 +252,7 @@ def build_themes_context(
 ) -> str:
     """Render the themes context block for a system prompt."""
     all_themes = list_all_themes(graph)
-    try:
-        hot_block, cold_names = render_hot_themes(all_themes, priority_order, budget)
-    except ValueError:
-        hot_block = ""
-        cold_names = [t.name for t in all_themes]
+    hot_block, cold_names = render_hot_themes(all_themes, priority_order, budget)
 
     if hot_block:
         return hot_block

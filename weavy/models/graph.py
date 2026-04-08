@@ -1,13 +1,11 @@
 from datetime import datetime
-from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, field_serializer, field_validator, model_validator
 
-from weavy.timefmt import format_agent_date_range, format_agent_timestamp
+from weavy.timefmt import format_agent_timestamp
 
 
 class LogEntry(BaseModel):
-    is_fence: Literal[False] = False
     source_id: str  # rec:N or chat:N
     timestamp: datetime
     start_offset: int  # seconds for rec, message_index for chat
@@ -17,25 +15,6 @@ class LogEntry(BaseModel):
     @field_serializer("timestamp", when_used="json")
     def serialize_timestamp(self, value: datetime) -> str:
         return format_agent_timestamp(value)
-
-
-class FenceEntry(BaseModel):
-    is_fence: Literal[True]
-    timestamp: datetime
-    note: str
-    entries_behind: int
-    date_range: tuple[datetime, datetime]
-
-    @field_serializer("timestamp", when_used="json")
-    def serialize_timestamp(self, value: datetime) -> str:
-        return format_agent_timestamp(value)
-
-    @field_serializer("date_range", when_used="json")
-    def serialize_date_range(self, value: tuple[datetime, datetime]) -> list[str]:
-        return format_agent_date_range(value[0], value[1])
-
-
-AnyLogEntry = Annotated[Union[LogEntry, FenceEntry], ...]
 
 
 class ProvenanceInput(BaseModel):
@@ -63,7 +42,7 @@ class SemanticNode(BaseModel):
     summary: str
     embedding: list[float] | None = None
     total_log_count: int = 0
-    log: list[AnyLogEntry] = []
+    log: list[LogEntry] = []
 
     @field_validator("aliases")
     @classmethod

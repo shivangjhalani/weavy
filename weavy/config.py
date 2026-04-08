@@ -49,7 +49,6 @@ class Settings:
         "gemini/gemini-embedding-001",
     )
 
-    LOG_TOKEN_BUDGET: int = int(_getenv("LOG_TOKEN_BUDGET", "2000"))
     HOT_THEME_TOKEN_BUDGET: int = int(_getenv("HOT_THEME_TOKEN_BUDGET", "250"))
 
     WHISPER_MODEL: str = _getenv("WHISPER_MODEL", "groq/whisper-large-v3-turbo")

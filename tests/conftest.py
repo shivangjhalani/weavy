@@ -10,14 +10,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from weavy.langfuse_client import get_langfuse
-
-
 @pytest.fixture(autouse=True)
 def clear_langfuse_cache():
-    get_langfuse.cache_clear()
-    yield
-    get_langfuse.cache_clear()
+    try:
+        from weavy.langfuse_client import get_langfuse
+
+        get_langfuse.cache_clear()
+        yield
+        get_langfuse.cache_clear()
+    except ImportError:
+        yield
 
 
 @pytest.fixture(autouse=True)

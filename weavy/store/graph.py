@@ -7,13 +7,11 @@ import json
 from datetime import datetime, timezone
 
 import litellm
-import tiktoken
 from falkordb import Graph
 
 from weavy.config import settings
-from weavy.models.graph import FenceEntry, LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
+from weavy.models.graph import LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
 from weavy.models.tools import (
-    GetColdLogsOutput,
     GetNodeNeighborhoodOutput,
     GetNodeResult,
     NeighborSummary,
@@ -23,15 +21,13 @@ from weavy.models.tools import (
     SearchResult,
 )
 
-_ENC = tiktoken.get_encoding("cl100k_base")
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _serialize_log_entry(entry: LogEntry | FenceEntry) -> str:
+def _serialize_log_entry(entry: LogEntry) -> str:
     return json.dumps(entry.model_dump(mode="python"), default=_json_default)
 
 
@@ -41,34 +37,9 @@ def _json_default(value: object) -> str:
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
-def _deserialize_log_entry(s: str) -> LogEntry | FenceEntry:
+def _deserialize_log_entry(s: str) -> LogEntry:
     data = json.loads(s)
-    if data.get("is_fence"):
-        return FenceEntry(**data)
     return LogEntry(**data)
-
-
-def _split_log(
-    entries: list[LogEntry | FenceEntry],
-) -> tuple[list[LogEntry | FenceEntry], FenceEntry | None, list[LogEntry | FenceEntry]]:
-    """Split log into (cold, last_fence, hot).
-
-    hot  = everything after the last FenceEntry (all entries if no fence)
-    cold = everything strictly before the last FenceEntry
-    """
-    last_fence_idx = -1
-    for i, entry in enumerate(entries):
-        if isinstance(entry, FenceEntry):
-            last_fence_idx = i
-
-    if last_fence_idx == -1:
-        return [], None, entries
-
-    cold = entries[:last_fence_idx]
-    last_fence = entries[last_fence_idx]
-    hot = entries[last_fence_idx + 1 :]
-    assert isinstance(last_fence, FenceEntry)
-    return cold, last_fence, hot
 
 
 def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
@@ -123,14 +94,11 @@ def create_node(
             "entry_json": entry_json,
         },
     )
-    try:
-        embedding = generate_embedding(aliases, summary)
-        graph.query(
-            "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
-            {"id": node_id, "embedding": embedding},
-        )
-    except Exception:
-        pass
+    embedding = generate_embedding(aliases, summary)
+    graph.query(
+        "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
+        {"id": node_id, "embedding": embedding},
+    )
     return OperationResult(ok=True, id=node_id)
 
 
@@ -182,17 +150,13 @@ def update_node(
     )
 
     if new_summary is not None or new_aliases is not None:
-        try:
-            effective_aliases = new_aliases if new_aliases is not None else props.get("aliases", [])
-            effective_summary = new_summary if new_summary is not None else current_summary
-            embedding = generate_embedding(effective_aliases, effective_summary)
-            graph.query(
-                "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
-                {"id": node_id, "embedding": embedding},
-            )
-        except Exception:
-            pass
-
+        effective_aliases = new_aliases if new_aliases is not None else props.get("aliases", [])
+        effective_summary = new_summary if new_summary is not None else current_summary
+        embedding = generate_embedding(effective_aliases, effective_summary)
+        graph.query(
+            "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
+            {"id": node_id, "embedding": embedding},
+        )
     return OperationResult(ok=True, id=node_id)
 
 
@@ -201,9 +165,6 @@ def delete_node(graph: Graph, node_id: str, reason: str) -> OperationResult:  # 
         "MATCH (n:SemanticNode {id: $id}) DETACH DELETE n RETURN count(n)",
         {"id": node_id},
     )
-    # FalkorDB returns the count of deleted nodes; 0 means node was not found
-    # We still return ok=True as a silent no-op is fine for idempotent deletes,
-    # but raise if the node simply never existed to avoid masking bugs.
     deleted = result.result_set[0][0] if result.result_set else 0
     if deleted == 0:
         raise ValueError(f"SemanticNode '{node_id}' not found.")
@@ -292,22 +253,19 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
 
     # --- Vector pass ---
     vec_hits: dict[str, tuple] = {}
-    try:
-        query_vec = generate_embedding([], params.query)
-        vec_result = graph.query(
-            """
-            CALL db.idx.vector.queryNodes('SemanticNode', 'embedding', $k, vecf32($vec))
-            YIELD node, score
-            OPTIONAL MATCH (node)-[r:RELATES]-()
-            WITH node, score, count(r) AS edge_count
-            RETURN node.id, node.aliases, node.summary, edge_count, score
-            """,
-            {"k": fetch_k, "vec": query_vec},
-        )
-        for row in vec_result.result_set:
-            vec_hits[row[0]] = (row[1], row[2], int(row[3]), float(row[4]))
-    except Exception:
-        pass  # No index or embeddings yet — degrade to keyword-only
+    query_vec = generate_embedding([], params.query)
+    vec_result = graph.query(
+        """
+        CALL db.idx.vector.queryNodes('SemanticNode', 'embedding', $k, vecf32($vec))
+        YIELD node, score
+        OPTIONAL MATCH (node)-[r:RELATES]-()
+        WITH node, score, count(r) AS edge_count
+        RETURN node.id, node.aliases, node.summary, edge_count, score
+        """,
+        {"k": fetch_k, "vec": query_vec},
+    )
+    for row in vec_result.result_set:
+        vec_hits[row[0]] = (row[1], row[2], int(row[3]), float(row[4]))
 
     # --- Fusion ---
     # Score: vec + keyword = vec_score + 0.5, vec-only = vec_score, keyword-only = 0.4
@@ -364,13 +322,6 @@ def get_node(graph: Graph, node_id: str) -> GetNodeResult:
     raw_edges = row[1] or []
 
     all_entries = [_deserialize_log_entry(s) for s in (node_props.get("log") or [])]
-    cold, last_fence, hot = _split_log(all_entries)
-
-    # Construct SemanticNode with only [last_fence] + hot in .log
-    trimmed_log: list[LogEntry | FenceEntry] = []
-    if last_fence is not None:
-        trimmed_log.append(last_fence)
-    trimmed_log.extend(hot)
 
     node = SemanticNode(
         id=node_props["id"],
@@ -378,7 +329,7 @@ def get_node(graph: Graph, node_id: str) -> GetNodeResult:
         summary=node_props["summary"],
         embedding=None,
         total_log_count=node_props.get("total_log_count", 0),
-        log=trimmed_log,
+        log=all_entries,
     )
 
     # Build edge list (skip null placeholders from COLLECT when no edges exist)
@@ -390,21 +341,7 @@ def get_node(graph: Graph, node_id: str) -> GetNodeResult:
         if edge_id is not None:
             edges.append(SemanticEdge(id=edge_id, from_node_id=node_id, to_node_id=to_id, label=label))
 
-    # Build cold hint
-    cold_hint: str | None = None
-    if cold:
-        fence_count = sum(1 for e in cold if isinstance(e, FenceEntry))
-        regular_count = sum(1 for e in cold if isinstance(e, LogEntry))
-        timestamps = [e.timestamp for e in cold]
-        earliest = min(timestamps)
-        latest = max(timestamps)
-        date_range = f" ({earliest.strftime('%b %Y')} \u2192 {latest.strftime('%b %Y')})"
-        cold_hint = (
-            f"{fence_count} fence(s) behind covering {regular_count} entries{date_range}. "
-            f"Use get_cold_logs({node_id}) to retrieve."
-        )
-
-    return GetNodeResult(node=node, edges=edges, cold_hint=cold_hint)
+    return GetNodeResult(node=node, edges=edges)
 
 
 def get_node_neighborhood(
@@ -426,10 +363,7 @@ def get_node_neighborhood(
     raw_neighbors = row[1] or []
 
     all_entries = [_deserialize_log_entry(s) for s in (node_props.get("log") or [])]
-    _, _, hot = _split_log(all_entries)
-
-    # Return last 2 hot entries for orientation
-    orientation_log: list[LogEntry | FenceEntry] = hot[-2:] if hot else []
+    orientation_log = all_entries[-2:] if all_entries else []
 
     node = SemanticNode(
         id=node_props["id"],
@@ -462,98 +396,3 @@ def get_node_neighborhood(
         )
 
     return GetNodeNeighborhoodOutput(node=node, neighbors=neighbors)
-
-
-# ---------------------------------------------------------------------------
-# Fence creation
-# ---------------------------------------------------------------------------
-
-
-def _hot_segment_token_count(hot_entries: list) -> int:
-    """Estimate token count of hot log entries using tiktoken."""
-    return sum(len(_ENC.encode(_serialize_log_entry(e))) for e in hot_entries)
-
-
-def create_fence(
-    graph: Graph, node_id: str, model: str, node_output: "GetNodeResult | None" = None
-) -> None:
-    """
-    Summarize the hot log segment of a node into a FenceEntry and append it.
-    No-op if the hot segment is empty.
-    """
-    if node_output is None:
-        node_output = get_node(graph, node_id)
-    _, _, hot = _split_log(node_output.node.log)
-    regular_hot = [e for e in hot if isinstance(e, LogEntry)]
-
-    if not regular_hot:
-        return
-
-    entries_text = "\n".join(
-        f"- [{e.source_id} {e.start_offset}-{e.end_offset}s] {e.note}"
-        for e in regular_hot
-    )
-    response = litellm.completion(
-        model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    "Summarize these memory log entries as a concise arc summary (2-4 sentences). "
-                    "Focus on how this topic evolved, key changes, emotional trajectory, and current state:\n\n"
-                    f"{entries_text}"
-                ),
-            }
-        ],
-    )
-    fence_note = response.choices[0].message.content.strip()
-
-    timestamps = [e.timestamp for e in regular_hot]
-    fence = FenceEntry(
-        is_fence=True,
-        timestamp=datetime.now(tz=timezone.utc),
-        note=fence_note,
-        entries_behind=len(regular_hot),
-        date_range=(min(timestamps), max(timestamps)),
-    )
-    fence_json = _serialize_log_entry(fence)
-    graph.query(
-        "MATCH (n:SemanticNode {id: $id}) SET n.log = n.log + [$fence_json]",
-        {"id": node_id, "fence_json": fence_json},
-    )
-
-
-def run_fence_checks(
-    graph: Graph, touched_node_ids: list[str], log_token_budget: int, model: str
-) -> None:
-    """Check each touched node; create a fence if the hot segment exceeds the budget."""
-    for node_id in touched_node_ids:
-        try:
-            node_output = get_node(graph, node_id)
-        except ValueError:
-            continue  # node was deleted during the session
-
-        _, _, hot = _split_log(node_output.node.log)
-        regular_hot = [e for e in hot if isinstance(e, LogEntry)]
-        if _hot_segment_token_count(regular_hot) > log_token_budget:
-            create_fence(graph, node_id, model, node_output=node_output)
-
-
-def get_cold_logs(graph: Graph, node_id: str) -> GetColdLogsOutput:
-    result = graph.query(
-        "MATCH (n:SemanticNode {id: $id}) RETURN n.log",
-        {"id": node_id},
-    )
-    if not result.result_set:
-        raise ValueError(f"SemanticNode '{node_id}' not found.")
-
-    raw_log = result.result_set[0][0] or []
-    all_entries = [_deserialize_log_entry(s) for s in raw_log]
-    cold, last_fence, _hot = _split_log(all_entries)
-
-    # cold = everything before the last fence; include last_fence too for full cold view
-    cold_entries: list[LogEntry | FenceEntry] = list(cold)
-    if last_fence is not None:
-        cold_entries.append(last_fence)
-
-    return GetColdLogsOutput(entries=cold_entries)

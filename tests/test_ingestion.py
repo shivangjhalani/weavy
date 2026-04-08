@@ -1,21 +1,19 @@
 """
-Phase 5 + 6 tests — Ingestion flow, theme mode, and fence creation.
+Phase 5 + 6 tests — Ingestion flow and theme mode.
 Mocks litellm.completion to avoid real LLM calls.
 Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from falkordb import Graph
 
-from weavy.config import settings
-from weavy.models.graph import FenceEntry, ProvenanceInput
+from weavy.models.graph import ProvenanceInput
 from weavy.models.traces import TouchedNode
 from weavy.store import canonical as store_canonical
 from weavy.store import graph as store_graph
 from weavy.store import themes as store_themes
-from weavy.store.rollback import rollback_ingestion
 from weavy.store.system import get_system, increment_counter
 from tests.helpers import mock_tool_response, reset_test_graph, store_test_transcript
 
@@ -293,54 +291,6 @@ def test_theme_update_empty_map_runs(graph: Graph) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fence creation
-# ---------------------------------------------------------------------------
-
-
-def test_fence_not_created_below_budget(graph: Graph) -> None:
-    """No fence when hot segment is within token budget."""
-    node_id = increment_counter(graph, "node")
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    store_graph.create_node(graph, ["topic"], "A topic.", "initial entry", prov, node_id)
-
-    store_graph.run_fence_checks(graph, [node_id], 10_000, settings.GEMINI_MODEL)
-
-    node_out = store_graph.get_node(graph, node_id)
-    assert not any(isinstance(e, FenceEntry) for e in node_out.node.log)
-
-
-def test_fence_created_when_budget_exceeded(graph: Graph) -> None:
-    """Fence is created when hot segment token count exceeds the budget."""
-    node_id = increment_counter(graph, "node")
-    prov0 = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    store_graph.create_node(
-        graph, ["career"], "Career thoughts.", "initial note about career anxiety", prov0, node_id
-    )
-    for i in range(5):
-        prov_i = ProvenanceInput(source_id="rec:1", start_offset=i * 10, end_offset=(i + 1) * 10)
-        store_graph.update_node(
-            graph, node_id,
-            f"Update {i}: additional context about evolving career thoughts and emotional state",
-            None, None, prov_i,
-        )
-
-    fence_resp = MagicMock()
-    fence_resp.choices[0].message.content = "Career anxiety evolved from vague unease to concrete fear."
-
-    with patch("litellm.completion", return_value=fence_resp):
-        store_graph.run_fence_checks(graph, [node_id], 1, settings.GEMINI_MODEL)
-
-    node_out = store_graph.get_node(graph, node_id)
-    assert any(isinstance(e, FenceEntry) for e in node_out.node.log)
-
-
-def test_fence_check_skips_deleted_node(graph: Graph) -> None:
-    """run_fence_checks silently skips node_ids that no longer exist."""
-    store_graph.run_fence_checks(graph, ["node:9999"], 1, settings.GEMINI_MODEL)
-    # No exception raised
-
-
-# ---------------------------------------------------------------------------
 # Ingestion status flag
 # ---------------------------------------------------------------------------
 
@@ -400,141 +350,10 @@ def test_reingest_blocked_when_flag_is_set(graph: Graph) -> None:
     """Second call to run_ingestion raises ValueError when flag is 1."""
     rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
     store_canonical.set_ingestion_status(graph, rec_id, 1)
-    store_canonical.save_run_manifest(graph, rec_id, [])
-
     with patch("weavy.modes.ingestion.get_graph", return_value=graph):
         from weavy.modes.ingestion import run_ingestion
         with pytest.raises(ValueError, match="already been ingested"):
             run_ingestion(rec_id)
 
 
-# ---------------------------------------------------------------------------
-# Rollback
-# ---------------------------------------------------------------------------
 
-
-def test_rollback_removes_created_node(graph: Graph) -> None:
-    """After rollback, a node created during ingestion is deleted and flag is 0."""
-    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-
-    prov = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=14)
-    create_args = {
-        "aliases": ["job change"],
-        "summary": "Contemplating leaving current job.",
-        "note": "Feels trapped.",
-        "provenance": prov.model_dump(),
-    }
-    completion_args = {"summary": "Ingested."}
-    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-
-    with (
-        patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
-        patch("litellm.completion", side_effect=[
-            mock_tool_response("create_node", create_args, "tc-1", usage=usage),
-            mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage),
-        ]),
-    ):
-        from weavy.modes.ingestion import run_ingestion
-        trace = run_ingestion(rec_id)
-
-    node_id = trace.touched_nodes[0].node_id
-
-    with patch("weavy.store.rollback.get_graph", return_value=graph):
-        rollback_ingestion(rec_id)
-
-    # Node must be gone
-    result = graph.query("MATCH (n:SemanticNode {id: $id}) RETURN n", {"id": node_id})
-    assert not result.result_set
-
-    # Flag reset, manifest cleared
-    assert store_canonical.get_ingestion_status(graph, rec_id) == 0
-    assert store_canonical.get_run_manifest(graph, rec_id) is None
-
-
-def test_rollback_restores_updated_node(graph: Graph) -> None:
-    """After rollback, an updated node reverts to its pre-ingestion state."""
-    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-
-    # Create node with known initial state
-    node_id = increment_counter(graph, "node")
-    prov0 = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=10)
-    store_graph.create_node(graph, ["career anxiety"], "Original summary.", "init", prov0, node_id)
-
-    prov2 = ProvenanceInput(source_id=rec_id, start_offset=14, end_offset=28)
-    update_args = {
-        "node_id": node_id,
-        "note": "Update during ingestion.",
-        "new_summary": "Updated summary after ingestion.",
-        "provenance": prov2.model_dump(),
-    }
-    completion_args = {"summary": "Updated node."}
-    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-
-    with (
-        patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
-        patch("litellm.completion", side_effect=[
-            mock_tool_response("update_node", update_args, "tc-1", usage=usage),
-            mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage),
-        ]),
-    ):
-        from weavy.modes.ingestion import run_ingestion
-        run_ingestion(rec_id)
-
-    # Confirm node was updated
-    node_out = store_graph.get_node(graph, node_id)
-    assert node_out.node.summary == "Updated summary after ingestion."
-
-    with patch("weavy.store.rollback.get_graph", return_value=graph):
-        rollback_ingestion(rec_id)
-
-    # Node must be back to original state
-    node_out = store_graph.get_node(graph, node_id)
-    assert node_out.node.summary == "Original summary."
-    assert node_out.node.total_log_count == 1
-
-    assert store_canonical.get_ingestion_status(graph, rec_id) == 0
-
-
-def test_reingest_allowed_after_rollback(graph: Graph) -> None:
-    """run_ingestion succeeds again after rollback resets the flag."""
-    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-
-    completion_args = {"summary": "Nothing to change."}
-    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-    done_resp = mock_tool_response("complete_ingestion", completion_args, usage=usage)
-
-    with (
-        patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        from weavy.modes.ingestion import run_ingestion
-        run_ingestion(rec_id)
-
-    with patch("weavy.store.rollback.get_graph", return_value=graph):
-        rollback_ingestion(rec_id)
-
-    assert store_canonical.get_ingestion_status(graph, rec_id) == 0
-
-    with (
-        patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        trace2 = run_ingestion(rec_id)
-
-    assert trace2.status == "completed"
-
-
-def test_rollback_no_manifest_resets_flag(graph: Graph) -> None:
-    """rollback_ingestion with no manifest (failed run) still resets the flag to 0."""
-    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-    # Simulate a stuck flag from a run that failed before saving the manifest.
-    store_canonical.set_ingestion_status(graph, rec_id, 1)
-
-    with patch("weavy.store.rollback.get_graph", return_value=graph):
-        rollback_ingestion(rec_id)  # must not raise
-
-    assert store_canonical.get_ingestion_status(graph, rec_id) == 0

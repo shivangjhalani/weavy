@@ -108,18 +108,14 @@ def test_run_post_trace_hooks_deduplicates_live_nodes() -> None:
         next_rec_id=1,
         next_chat_id=1,
         theme_priority_order=[],
-        log_token_budget=200,
         hot_theme_token_budget=100,
     )
 
     with (
-        patch("weavy.modes._common.store_graph.run_fence_checks") as mock_fence_checks,
         patch("weavy.modes.theme.run_theme_update") as mock_theme_update,
     ):
         run_post_trace_hooks(trace, MagicMock(), system_state, "done")
 
-    mock_fence_checks.assert_called_once()
-    assert mock_fence_checks.call_args.args[1] == ["node:1", "node:3"]
     mock_theme_update.assert_called_once_with("done", trace.touched_nodes, trace.touched_edges)
 
 
@@ -312,7 +308,7 @@ def test_complete_theme_update() -> None:
 
 def test_registry_contains_all_expected_tools() -> None:
     expected = {
-        "search_graph", "get_node", "get_node_neighborhood", "get_cold_logs",
+        "search_graph", "get_node", "get_node_neighborhood",
         "list_transcripts", "get_transcript_span", "list_chats", "get_chat",
         "get_theme", "create_node", "update_node", "delete_node",
         "create_edge", "update_edge", "delete_edge",

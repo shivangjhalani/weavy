@@ -4,6 +4,8 @@
 
 Implement themes as a small, derived orientation layer that is updated only from session deltas and rendered into a bounded hot set for future runs.
 
+Themes are useful but auxiliary. Query and ingestion correctness must not depend on the theme layer being perfectly fresh.
+
 ## Theme Model
 
 Each theme contains:
@@ -39,6 +41,8 @@ Do not run theme mode after:
 - read-only query runs
 - failed runs
 
+Manual `weavy update-themes` remains a valid repair/rebuild path.
+
 ## Theme Mode Input
 
 Theme mode should receive exactly:
@@ -55,6 +59,7 @@ Delta payload fields:
 Rules:
 - touched entities come from harness tracking
 - theme mode should not need to reconstruct the delta itself
+- theme mode consumes the output of the shared workflow finalizer; it should not own transcript/chat cleanup
 
 ## Theme Tool Surface
 
@@ -105,9 +110,12 @@ Retirement means:
 
 If the theme does not exist, fail.
 
+If theme maintenance fails, fail loudly, but do not reinterpret a successfully completed ingestion/query run as if its canonical and graph writes never happened.
+
 ## Acceptance Criteria
 
 - themes can be created, updated, and retired directly
 - theme mode can update the map from a delta payload
 - hot-theme rendering produces a bounded working set and cold index
 - invalid priority order or invalid anchor targets fail loudly
+- stale or missing themes do not make canonical retrieval or graph retrieval invalid

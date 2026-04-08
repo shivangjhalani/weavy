@@ -7,8 +7,6 @@ from falkordb import Graph
 from weavy.models.tools import (
     GetChatInput,
     GetChatOutput,
-    GetColdLogsInput,
-    GetColdLogsOutput,
     GetNodeInput,
     GetNodeNeighborhoodInput,
     GetNodeNeighborhoodOutput,
@@ -49,10 +47,6 @@ def get_node(graph: Graph, params: GetNodeInput) -> GetNodeOutput:
         except ValueError:
             not_found.append(nid)
     return GetNodeOutput(results=results, not_found=not_found)
-
-
-def get_cold_logs(graph: Graph, params: GetColdLogsInput) -> GetColdLogsOutput:
-    return store_graph.get_cold_logs(graph, params.node_id)
 
 
 def list_transcripts(graph: Graph, params: ListTranscriptsInput) -> ListTranscriptsOutput:

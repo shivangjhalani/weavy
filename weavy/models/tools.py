@@ -9,7 +9,7 @@ from typing import Annotated
 from pydantic import BaseModel, StringConstraints, field_serializer
 
 from weavy.models.canonical import ChatSession
-from weavy.models.graph import AnyLogEntry, ProvenanceInput, SemanticEdge, SemanticNode
+from weavy.models.graph import ProvenanceInput, SemanticEdge, SemanticNode
 from weavy.models.themes import Theme, ThemeStatus
 from weavy.timefmt import format_agent_timestamp
 
@@ -85,10 +85,6 @@ class GetNodeNeighborhoodInput(BaseModel):
 
 class GetNodeInput(BaseModel):
     node_ids: list[NodeId]  # one or more, e.g. ["node:1"] or ["node:1", "node:2"]
-
-
-class GetColdLogsInput(BaseModel):
-    node_id: NodeId
 
 
 class ListTranscriptsInput(BaseModel):
@@ -202,16 +198,11 @@ class GetNodeNeighborhoodOutput(BaseModel):
 class GetNodeResult(BaseModel):
     node: SemanticNode
     edges: list[SemanticEdge] = []
-    cold_hint: str | None = None
 
 
 class GetNodeOutput(BaseModel):
     results: list[GetNodeResult]
     not_found: list[str] = []
-
-
-class GetColdLogsOutput(BaseModel):
-    entries: list[AnyLogEntry]
 
 
 class TranscriptSummary(BaseModel):

@@ -95,12 +95,11 @@ Transcript, ChatSession, Theme, and System nodes are not part of the semantic gr
     next_rec_id,            — counter for rec:N tokens
     next_chat_id,           — counter for chat:N tokens
     theme_priority_order,   — ordered array of theme names for hot set rendering
-    log_token_budget,       — configurable threshold for log compression
     hot_theme_token_budget  — configurable threshold for hot set rendering
 })
 ```
 
-**Log serialization:** FalkorDB cannot store maps as property values. Log entries — both regular entries (`{source_id, timestamp, start_offset, end_offset, note}`) and fence entries (`{is_fence, timestamp, note, entries_behind, date_range}`) — are stored as JSON-serialized strings in an array property on the node. The harness serializes on write and deserializes on read — timestamps are stored as datetime internally but surfaced to the agent as human-readable relative time. The agent never sees the JSON or raw datetimes — tool responses present logs as structured, readable objects.
+**Log serialization:** FalkorDB cannot store maps as property values. Log entries (`{source_id, timestamp, start_offset, end_offset, note}`) are stored as JSON-serialized strings in an array property on the node. The harness serializes on write and deserializes on read — timestamps are stored as datetime internally but surfaced to the agent as human-readable relative time. The agent never sees the JSON or raw datetimes — tool responses present logs as structured, readable objects.
 
 **Vector index:** An HNSW vector index on `SemanticNode.embedding` powers the semantic half of `search_graph`. The embedding is generated from the node's summary + aliases via gemini-embeddings-001.
 
@@ -177,13 +176,12 @@ summary         — current best description, rewritten when the agent judges it
 embedding       — vector generated from summary + aliases via gemini-embeddings-001.
                    Updated lazily by a background job when summary or aliases change.
                    Powers the semantic half of search_graph via HNSW index.
-total_log_count — integer. Total number of regular (non-fence) log entries on this node.
+total_log_count — integer. Total number of log entries on this node.
                    Incremented by the harness on every write. Used by read tools to hint
                    how much history exists.
-log             — append-only list of JSON-serialized entry strings. Contains two kinds
-                   of entries: regular entries and fence entries.
+log             — append-only list of JSON-serialized entry strings.
 
-                   Regular entry:
+                   Entry format:
                      { source_id, timestamp, start_offset, end_offset, note }
                    source_id is rec:N for ingestion writes or chat:N for chat writes.
                    timestamp is stored as datetime internally, surfaced to the agent as
@@ -202,20 +200,7 @@ log             — append-only list of JSON-serialized entry strings. Contains 
                    What changed and why."). This preserves prior summary states for
                    auditability.
 
-                   Fence entry:
-                     { is_fence: true, timestamp, note, entries_behind, date_range }
-                   A fence is a summary log entry created by a background job when the
-                   hot segment exceeds the log token budget. It summarizes only the
-                   regular entries between itself and the previous fence (or the start
-                   of the log if no prior fence exists). entries_behind is the count of
-                   regular entries in that segment. date_range is [earliest, latest]
-                   timestamps of the summarized entries. Fences are never rewritten —
-                   they stack as the log grows. See Log Management below.
-
-                   The log array is always ordered chronologically:
-                     [e1, ..., e30, FENCE_A, e31, ..., e60, FENCE_B, e61, ..., e75]
-                   Everything after the last fence is the "hot" segment.
-                   Everything at or before the last fence is "cold."
+                   The log array is ordered chronologically and append-only.
 ```
 
 Aliases capture how people refer to the same thing across time — "my dad", "my father", "papa". `aliases[0]` is the canonical handle. The alias list is used by keyword search inside `search_graph` and enriches the embedding target alongside the summary.
@@ -235,49 +220,9 @@ Edges are lightweight — just an id and a label. No log, no history, no cold su
 
 `from` and `to` are implicit in the edge direction. Edges do not have aliases — the label is the relationship's name and there is no parallel ambiguity problem.
 
-#### Log Management
-
-Logs are append-only and grow unboundedly. All log entries stay on the node permanently in FalkorDB — there is no separate cold storage table or archive. (Edges have no logs — see Edge Schema above.)
-
-The hot/cold boundary is **structural, not computed at read time.** Fence entries in the log array serve as boundaries. Everything after the last fence is hot; everything at or before it is cold.
-
-A configurable token budget (`log_token_budget` on the System node, estimated via tiktoken) governs when a new fence is created. After each ingestion or chat session that modifies the semantic graph, a background job checks each affected node: if the hot segment (regular entries after the last fence) exceeds the token budget, a new fence is created.
-
-**Fence creation process:**
-
-1. The background job reads all regular entries in the hot segment.
-2. An LLM summarizes those entries into a fence note — a natural language arc summary covering the segment, noting the key trajectory of change.
-3. A fence entry is appended at the boundary position: `{ is_fence: true, timestamp, note, entries_behind, date_range }`.
-4. The entries that were hot are now behind the fence (cold). Any entries written after the fence becomes the new hot segment.
-
-Fences stack. A node with a long history will accumulate multiple fences, each summarizing only its own segment:
-
-```
-[e1..e30, FENCE_A, e31..e60, FENCE_B, e61..e75]
-          -------             -------
-          covers e1-e30       covers e31-e60
-                                               e61-e75 = hot
-```
-
-Each fence is a focused summary of a few entries which total to the log budget. This keeps summaries accurate — no single summary tries to compress hundreds of entries into one paragraph.
-
-**Read behavior:**
-
-- **`get_node`** returns: node metadata, the last fence (if one exists), all hot entries after the last fence, and a cold hint if more fences exist behind the last one:
-
-  > `"3 fences behind covering 90 entries (Mar 2024 → Nov 2024). Use get_cold_logs(node:12) to retrieve."`
-
-  The last fence gives the agent a "previously on..." orientation. The hot entries give current detail. The cold hint tells the agent there is deeper history and roughly what it covers.
-
-- **`get_cold_logs(node_id)`** returns all cold entries and fences in chronological order — everything at or before the last fence. For a node with 200 entries and 4 fences, this gives the full history with natural chapter breaks at each fence.
-
-This design keeps the common read path fast and token-efficient (the hot segment is bounded by the token budget), the boundary is structural and stable (not recomputed on every read), and full history is preserved and navigable via fences.
-
 #### Embeddings
 
-Node embeddings (generated from summary + aliases via gemini-embeddings-001) power the semantic half of `search_graph`. Embeddings are updated **lazily as a background job**: whenever `update_node` changes the summary or aliases, the node is flagged for re-embedding. A background job picks up flagged nodes and regenerates their embeddings.
-
-Updated embeddings are **not available** to subsequent `search_graph` calls in the same session. This is an accepted trade-off — the next session will have fresh embeddings. The keyword half of `search_graph` (which operates on aliases directly) reflects updates immediately.
+Node embeddings (generated from summary + aliases via gemini-embeddings-001) power the semantic half of `search_graph`. Embeddings are regenerated **synchronously** whenever `create_node` or `update_node` changes the summary or aliases. The keyword half of `search_graph` (which operates on aliases directly) also reflects updates immediately.
 
 ---
 
@@ -357,7 +302,7 @@ Themes outside the hot set are still available on demand through `get_theme(name
 
 The theme agent is the simplest of the three agent modes. It operates on the **delta from the preceding session**, not the full semantic graph. This is why it scales.
 
-**Trigger:** After every ingestion, and after every chat session that modifies the semantic graph. The theme agent runs asynchronously — the user doesn't wait for it. The next session picks up the updated themes. If multiple triggers fire in quick succession, theme agent runs are serialized (queued, not parallel) so each run sees the previous run's updates.
+**Trigger:** After every ingestion, and after every chat session that modifies the semantic graph. The theme agent runs synchronously after the main run completes. If no graph writes occurred, the theme pass is skipped.
 
 **Input:** Exactly three things:
 
@@ -422,7 +367,7 @@ The harness tracks every write tool call (create, update, delete) made during an
 complete_ingestion(summary_of_what_was_done)
 ```
 
-`summary_of_what_was_done` is a natural language summary for the theme agent's orientation — what the transcript was about, what was notable. The harness appends the automatically tracked `touched_nodes` and `touched_edges` to form the complete delta payload, then triggers an asynchronous theme agent run.
+`summary_of_what_was_done` is a natural language summary for the theme agent's orientation — what the transcript was about, what was notable. The harness appends the automatically tracked `touched_nodes` and `touched_edges` to form the complete delta payload, then triggers a synchronous theme agent run.
 
 **Query/Chat:**
 
@@ -432,7 +377,7 @@ deliver_response(answer, cited_sources, consulted_nodes)
 
 `answer` is the final response delivered to the user. `cited_sources` is a list of `{ source_id, start_offset, end_offset }` — the evidence the answer is grounded in. `source_id` is `rec:N` or `chat:N`. For transcripts, offsets are seconds into the recording. For chats, `start_offset` is the message index and `end_offset` is null. `consulted_nodes` is a list of node IDs the agent read during retrieval, providing an audit trail of graph traversal.
 
-The harness catches this call and delivers `answer` to the user. If any semantic graph writes occurred during the session, the harness constructs the delta payload from tracked modifications and triggers an asynchronous theme agent run.
+The harness catches this call and delivers `answer` to the user. If any semantic graph writes occurred during the session, the harness constructs the delta payload from tracked modifications and triggers a synchronous theme agent run.
 
 **Theme:**
 
@@ -458,7 +403,6 @@ The harness owns four things regardless of agent autonomy:
 - **Token minting** — the agent requests node/edge creation, the harness assigns the next sequential token. The agent never picks its own identifier.
 - **Provenance validation** — rules vary by mode (see below). Applies to node writes only; edges carry no provenance.
 - **Log entry creation** — the harness auto-creates a log entry from provenance on every node write. The entry contains `source_id`, `timestamp` (datetime), `start_offset`, `end_offset`, and the agent's mandatory `note`. This guarantees every node write produces a traceable, self-documenting provenance record. Edges have no logs — their provenance is implicit in the node logs on either end.
-- **Log management scheduling** — fence creation triggered as a background job after sessions that modify the semantic graph.
 
 ### Provenance Rules
 
@@ -514,14 +458,13 @@ The agent doesn't interact with "a database." It interacts with a layered memory
 
 - Temporal arithmetic is a known failure mode for LLMs. "Was `2024-11-15T14:32:00Z` before or after `2024-11-14T23:58:00Z`?" requires mental parsing that models do unreliably. "Yesterday, 2:32 PM" vs "2 days ago, 11:58 PM" is immediate.
 - The harness injects the current time into the system prompt at session start. All relative phrases are computed against this anchor. The agent reasons temporally using natural language — "this was recent," "this was months ago" — which is how humans reason about time and how LLMs reason best.
-- This extends to every surface: log entry timestamps, transcript recording times, fence date ranges, chat session timestamps. No raw datetime ever reaches the agent.
+- This extends to every surface: log entry timestamps, transcript recording times, chat session timestamps. No raw datetime ever reaches the agent.
 
 **No internal mechanics exposed.** The agent sees tool names, descriptions, and typed inputs/outputs. It does not see:
 
 - Database query language or schema details
 - Embedding vectors or similarity scores
 - JSON serialization of log entries
-- Fence creation thresholds or token budgets
 - The search fusion strategy (keyword + semantic)
 
 The harness handles all of this. `search_graph(query)` returns ranked results — the agent doesn't know or care whether it was keyword match, vector similarity, or both. `get_node(node_id)` returns structured log entries with human-readable timestamps — the agent doesn't know they were JSON-serialized strings in a FalkorDB array property.
@@ -534,10 +477,9 @@ The harness handles all of this. `search_graph(query)` returns ranked results �
 
 1. `search_graph` → one-line summaries, connectivity hints
 2. `get_node_neighborhood` → local structure, edge labels, neighbor summaries
-3. `get_node` → full detail, log history, cold-log hints
-4. `get_cold_logs` → complete chronological history
+3. `get_node` → full detail, complete log history
 
-This is deliberate. Dumping the full graph into context would be wasteful and confusing. The progressive chain mirrors how a person explores: scan, orient, zoom in, deep dive. Each step gives the agent a reason to continue or stop.
+This is deliberate. Dumping the full graph into context would be wasteful and confusing. The progressive chain mirrors how a person explores: scan, orient, zoom in. Each step gives the agent a reason to continue or stop.
 
 **Layer 3 — Canonical sources (evidence, on-demand):** Transcripts and chats are accessed through offset-based slicing. The agent doesn't retrieve full transcripts at query time — it follows provenance from node log entries (`source_id: rec:7, start_offset: 14, end_offset: 28`) directly to `get_transcript_span(rec:7, 14, 28)` to get the user's exact words. This is citation-grade retrieval: the agent can ground any claim in a specific moment of a specific recording.
 
@@ -560,8 +502,7 @@ The harness absorbs all bookkeeping that would otherwise pollute the agent's rea
 - **Provenance stamping** — the agent provides a note and provenance triple. The harness constructs the full log entry with timestamp and attaches it to the node.
 - **Summary archival** — when the agent rewrites a summary, the harness archives the old one into the log entry automatically. The agent doesn't manage versioning.
 - **Write tracking** — the harness tracks every mutation (`touched_nodes`, `touched_edges`) across the session. The agent's completion call provides a natural-language summary; the harness appends the structural delta automatically.
-- **Embedding updates** — modified nodes are flagged for re-embedding. A background job handles it. The agent never triggers or waits for embedding generation.
-- **Log compression** — when a node's hot segment exceeds the token budget, a background job creates a fence. The agent never manages log size.
+- **Embedding updates** — the harness regenerates embeddings synchronously when a node's summary or aliases change. The agent never triggers or waits for embedding generation.
 
 This split is deliberate: the agent's context budget is spent on semantic reasoning about a person's life, not on infrastructure bookkeeping. Every token the agent spends tracking IDs, managing versions, or formatting entries is a token not spent understanding what the user said and what it means.
 
@@ -601,19 +542,7 @@ Returns the target node with: all aliases, full summary, last 2-3 log entries. P
 get_node(node_id)
 ```
 
-Returns: all aliases, full summary, `total_log_count`, edge list with ids and labels, the last fence entry (if one exists), and all hot log entries (regular entries after the last fence). If cold history exists behind the last fence, a hint is appended:
-
-> `"3 fences behind covering 90 entries (Mar 2024 → Nov 2024). Use get_cold_logs(node:12) to retrieve."`
-
-The last fence gives the agent a "previously on..." summary of the most recent cold segment. The hot entries give current detail. The hint tells the agent whether deeper history exists and roughly what it covers — giving it a reason to call `get_cold_logs` if relevant to the current query.
-
-### Cold logs
-
-```
-get_cold_logs(node_id)
-```
-
-Returns all cold log entries and fences in chronological order — everything at or before the last fence. For a node with multiple fences, this gives the full history with natural chapter breaks at each fence. The tool is in the agent's tool surface, but the agent has no practical reason to call it until it reads a node via `get_node` and sees the cold hint.
+Returns: all aliases, full summary, `total_log_count`, edge list with ids and labels, and all log entries in chronological order.
 
 ### Transcript & Chat Tools
 

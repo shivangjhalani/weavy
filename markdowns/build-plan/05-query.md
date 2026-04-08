@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add user-facing retrieval and grounded answers after the ingestion and theme layers are stable, while preserving the same minimal, explicit execution model.
+Add user-facing retrieval and grounded answers while preserving the same minimal, explicit execution model.
 
 ## Query Principles
 
@@ -10,6 +10,7 @@ Add user-facing retrieval and grounded answers after the ingestion and theme lay
 - the semantic graph and themes are navigation aids, not final evidence
 - query runs may mutate the graph when the user adds or corrects context
 - all query behavior runs through the same harness used by ingestion and theme modes
+- all workflow side effects run through the same shared finalizer used by ingestion
 
 ## Read Tool Sequence
 
@@ -18,12 +19,11 @@ Implement read tools in this order:
 1. `search_graph`
 2. `get_node_neighborhood`
 3. `get_node`
-4. `get_cold_logs`
-5. `list_transcripts`
-6. `get_transcript_span`
-7. `list_chats`
-8. `get_chat`
-9. `get_theme`
+4. `list_transcripts`
+5. `get_transcript_span`
+6. `list_chats`
+7. `get_chat`
+8. `get_theme`
 
 Reason:
 - this matches the progressive disclosure model in `Memory-v5`
@@ -61,8 +61,8 @@ Validation:
 Chat sessions are canonical from day one.
 
 Implementation plan:
-- create a `ChatSession` record at the start of a query/chat run
-- append user and assistant messages to the canonical session log
+- mint the `chat:N` id at workflow start so provenance is stable during the run
+- persist the canonical chat session from the recorded conversation in the workflow finalizer
 - when the model writes to the graph due to user-provided context, provenance must reference the current `chat:N`
 
 Keep this behavior explicit. Do not treat conversational writes as an unlogged side effect.
@@ -74,7 +74,7 @@ Allow the same graph CRUD tools as ingestion.
 Rules:
 - graph writes during query/chat must use chat provenance
 - if no graph writes occur, no theme pass should run
-- post-run processing after graph writes is synchronous and identical to ingestion
+- post-run processing after graph writes is synchronous and identical to ingestion because both go through the shared finalizer
 
 ## Search Implementation
 
@@ -116,14 +116,7 @@ Returns:
 - full summary
 - total log count
 - edge list
-- last fence if any
-- hot logs
-- cold-history hint if applicable
-
-### get_cold_logs
-
-Returns:
-- all cold regular entries and fences in chronological order
+- all log entries
 
 ## Acceptance Criteria
 
@@ -131,3 +124,4 @@ Returns:
 - final answers cite transcript or chat spans
 - chat-driven corrections can update graph state
 - post-run theme maintenance happens only when graph mutation occurs
+- chat persistence and theme triggering are not reimplemented separately inside query mode

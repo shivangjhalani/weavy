@@ -53,9 +53,10 @@ Implement explicit checks for:
 - required completion tool usage
 - required citations for query answers
 - touched entity tracking integrity
+- shared workflow-finalizer behavior
+- explicit transcript run-state transitions
 - theme priority order integrity
 - anchor validity
-- fence structure validity once fences are enabled
 
 These checks should fail the eval immediately and clearly.
 

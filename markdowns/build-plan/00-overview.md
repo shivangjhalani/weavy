@@ -6,11 +6,18 @@ Build the system described in [Memory-v5](/home/shivang/shivang/projs/arakne/mar
 
 1. Canonical source storage for transcripts and chat sessions
 2. Provenance-backed semantic graph writes in FalkorDB
-3. Theme maintenance after each memory-changing run
+3. Manual theme maintenance via `weavy update-themes`
 4. Grounded query/chat retrieval with source citations
 5. Agent eval infrastructure for measuring memory quality and answer quality
 
 The system should be direct, explicit, and easy to reason about. Avoid silent fallbacks, hidden retries, speculative abstractions, and compatibility layers.
+
+This document now describes the target state after the planned architectural simplification:
+- keep FalkorDB
+- keep the three workflows
+- keep the reusable harness
+- remove pass-through wrapper layers where they do not enforce invariants
+- centralize workflow side effects in one shared finalizer
 
 ## Design Rules
 
@@ -18,7 +25,9 @@ The system should be direct, explicit, and easy to reason about. Avoid silent fa
 - Synchronous execution only in v1
 - Strict Pydantic validation for every tool input and output
 - Explicit failures instead of degraded behavior
-- Primitive graph CRUD tools only; no merge helper or repair helper
+- Prefer composability over indirection
+- Keep invariants at the mutation boundary, not in pass-through wrappers
+- Workflow lifecycle must be explicit and shared across ingestion/query/theme
 - No API layer in v1; use library modules plus CLI commands
 - Rebuildability is a data-boundary guarantee, not an implemented workflow yet
 - Eval infrastructure is first-class and should use real harness runs
@@ -78,7 +87,7 @@ Build one loop engine used by ingestion, query, and theme modes.
 
 Deliverables:
 - Mode configuration
-- Tool registry
+- Static action surface
 - Run trace capture
 - Completion handling
 - Touched node/edge tracking
@@ -96,7 +105,7 @@ Deliverables:
 - Ingestion runner
 - Transcript read path
 - Graph update path
-- Post-run theme pass
+- Shared post-run finalization
 - Optional synchronous embedding update if implemented in the same phase
 
 Success criteria:
@@ -116,6 +125,7 @@ Deliverables:
 Success criteria:
 - Theme updates happen from deltas, not full-graph sweeps
 - Hot-theme rendering respects token budgets and priority order
+- Query and ingestion remain correct even if themes are stale or absent
 
 ### Phase 7: Query and Chat
 
@@ -131,20 +141,7 @@ Success criteria:
 - Answers cite transcripts or chats, not only graph summaries
 - Query runs can mutate memory when the user adds or corrects context
 
-### Phase 8: Log Fences
-
-Implement hot/cold log segmentation after base graph behavior is stable.
-
-Deliverables:
-- Fence creation logic
-- `get_node` hot log behavior
-- `get_cold_logs`
-
-Success criteria:
-- Long node histories remain readable without changing the storage model
-- Fence failures fail loudly
-
-### Phase 9: Eval Infrastructure
+### Phase 8: Eval Infrastructure
 
 Build an agent-focused eval system using real harness runs and trace inspection.
 
@@ -159,10 +156,27 @@ Success criteria:
 - Prompt/model/tool changes can be compared against a stable suite
 - Memory quality and answer quality are both measurable
 
+### Phase 9: Architectural Simplification
+
+Refactor the implementation toward a thinner service-oriented shape without changing the product boundary.
+
+Deliverables:
+- Shared workflow finalizer
+- Consolidated memory service for graph mutation and retrieval
+- Removal of pass-through wrapper layers that do not enforce invariants
+- Explicit transcript run-state model
+- Narrowed `System` responsibilities
+
+Success criteria:
+- The hot path is easier to trace end-to-end
+- Ingestion and query cannot drift on lifecycle behavior
+- Provenance and touched-entity tracking live next to the write path
+- Docs, tests, and code agree on the workflow semantics
+
 ## Suggested Repo Shape
 
 ```text
-arakne/
+weavy/
   config.py
   cli.py
   models/
@@ -177,14 +191,12 @@ arakne/
     graph.py
     themes.py
     system.py
-  tools/
-    read_tools.py
-    write_tools.py
-    theme_tools.py
-    completion_tools.py
+  services/
+    memory.py
+    workflow.py
   harness/
     runner.py
-    registry.py
+    actions.py
     tracing.py
   modes/
     ingestion.py
@@ -215,3 +227,7 @@ Chat session updates graph state and themes correctly.
 ### Milestone 4
 
 Eval suite can compare harness behavior across runs.
+
+### Milestone 5
+
+Architecture is simplified without changing the product surface or the FalkorDB-backed data model.
