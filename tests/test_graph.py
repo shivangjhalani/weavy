@@ -24,10 +24,10 @@ from weavy.models.tools import (
     UpdateNodeInput,
 )
 from weavy.models.traces import RunTrace
+from weavy.services import memory
 from weavy.store import graph as store_graph
 from weavy.store.client import get_graph
-from weavy.store.system import increment_counter, init_system
-from weavy.tools import write_tools
+from weavy.store.system import init_system
 
 TEST_GRAPH = "weavy_test"
 
@@ -78,7 +78,7 @@ def test_create_node_ingestion(graph: Graph) -> None:
         note="First mention in rec:1",
         provenance=prov,
     )
-    result = write_tools.create_node(graph, params, _ingestion_trace())
+    result = memory.create_node(graph, params, _ingestion_trace())
     assert result.ok
     assert result.id is not None
     assert result.id.startswith("node:")
@@ -105,7 +105,7 @@ def test_create_node_chat_provenance(graph: Graph) -> None:
         note="User mentioned during chat at message 3",
         provenance=prov,
     )
-    result = write_tools.create_node(graph, params, _query_trace())
+    result = memory.create_node(graph, params, _query_trace())
     assert result.ok
     assert result.id.startswith("node:")
 
@@ -118,7 +118,7 @@ def test_create_node_no_provenance_rejected(graph: Graph) -> None:
         provenance=None,
     )
     with pytest.raises(ValueError, match="require provenance"):
-        write_tools.create_node(graph, params, _ingestion_trace())
+        memory.create_node(graph, params, _ingestion_trace())
 
 
 def test_create_node_wrong_source_rejected(graph: Graph) -> None:
@@ -130,7 +130,7 @@ def test_create_node_wrong_source_rejected(graph: Graph) -> None:
         provenance=prov,
     )
     with pytest.raises(ValueError, match="rec:"):
-        write_tools.create_node(graph, params, _ingestion_trace())
+        memory.create_node(graph, params, _ingestion_trace())
 
 
 def test_create_node_theme_mode_rejected(graph: Graph) -> None:
@@ -142,7 +142,7 @@ def test_create_node_theme_mode_rejected(graph: Graph) -> None:
         provenance=prov,
     )
     with pytest.raises(ValueError, match="Theme mode"):
-        write_tools.create_node(graph, params, _theme_trace())
+        memory.create_node(graph, params, _theme_trace())
 
 
 def test_create_node_recorded_in_trace(graph: Graph) -> None:
@@ -154,7 +154,7 @@ def test_create_node_recorded_in_trace(graph: Graph) -> None:
         provenance=prov,
     )
     trace = _ingestion_trace()
-    result = write_tools.create_node(graph, params, trace)
+    result = memory.create_node(graph, params, trace)
     assert len(trace.touched_nodes) == 1
     assert trace.touched_nodes[0].node_id == result.id
     assert trace.touched_nodes[0].action == "created"
@@ -167,14 +167,14 @@ def test_create_node_recorded_in_trace(graph: Graph) -> None:
 
 def test_update_node_archives_summary(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = write_tools.create_node(
+    node_id = memory.create_node(
         graph,
         CreateNodeInput(aliases=["anxiety"], summary="Original summary.", note="created", provenance=prov),
         _ingestion_trace(),
     ).id
 
     update_prov = ProvenanceInput(source_id="rec:2", start_offset=5, end_offset=15)
-    write_tools.update_node(
+    memory.update_node(
         graph,
         UpdateNodeInput(
             node_id=node_id,
@@ -197,14 +197,14 @@ def test_update_node_archives_summary(graph: Graph) -> None:
 
 def test_update_node_aliases_only(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = write_tools.create_node(
+    node_id = memory.create_node(
         graph,
         CreateNodeInput(aliases=["dad"], summary="Relationship with father.", note="created", provenance=prov),
         _ingestion_trace(),
     ).id
 
     update_prov = ProvenanceInput(source_id="rec:2", start_offset=0, end_offset=5)
-    write_tools.update_node(
+    memory.update_node(
         graph,
         UpdateNodeInput(
             node_id=node_id,
@@ -223,14 +223,14 @@ def test_update_node_aliases_only(graph: Graph) -> None:
 
 def test_update_node_increments_log_count(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = write_tools.create_node(
+    node_id = memory.create_node(
         graph,
         CreateNodeInput(aliases=["x"], summary="x", note="x", provenance=prov),
         _ingestion_trace(),
     ).id
     for i in range(3):
         p = ProvenanceInput(source_id=f"rec:{i + 2}", start_offset=0, end_offset=5)
-        write_tools.update_node(
+        memory.update_node(
             graph,
             UpdateNodeInput(node_id=node_id, note=f"update {i}", provenance=p),
             _ingestion_trace(),
@@ -261,20 +261,20 @@ def test_node_and_edge_ids_reject_trailing_punctuation() -> None:
 
 def test_delete_node_removes_node_and_edges(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    a = write_tools.create_node(
+    a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="Node A", note="a", provenance=prov),
         _ingestion_trace(),
     ).id
-    b = write_tools.create_node(
+    b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="Node B", note="b", provenance=prov),
         _ingestion_trace(),
     ).id
-    write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="related"), _ingestion_trace())
+    memory.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="related"), _ingestion_trace())
 
     trace = _ingestion_trace()
-    write_tools.delete_node(graph, DeleteNodeInput(node_id=a, reason="test cleanup"), trace)
+    memory.delete_node(graph, DeleteNodeInput(node_id=a, reason="test cleanup"), trace)
     assert trace.touched_nodes[-1].action == "deleted"
 
     # Node A gone
@@ -288,7 +288,7 @@ def test_delete_node_removes_node_and_edges(graph: Graph) -> None:
 
 def test_delete_node_not_found_raises(graph: Graph) -> None:
     with pytest.raises(ValueError):
-        write_tools.delete_node(graph, DeleteNodeInput(node_id="node:9999", reason="missing"), _ingestion_trace())
+        memory.delete_node(graph, DeleteNodeInput(node_id="node:9999", reason="missing"), _ingestion_trace())
 
 
 # ---------------------------------------------------------------------------
@@ -298,15 +298,15 @@ def test_delete_node_not_found_raises(graph: Graph) -> None:
 
 def test_create_edge(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    a = write_tools.create_node(
+    a = memory.create_node(
         graph, CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov), _ingestion_trace()
     ).id
-    b = write_tools.create_node(
+    b = memory.create_node(
         graph, CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov), _ingestion_trace()
     ).id
 
     trace = _ingestion_trace()
-    result = write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), trace)
+    result = memory.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), trace)
     assert result.ok
     assert result.id.startswith("edge:")
     assert trace.touched_edges[0].action == "created"
@@ -318,17 +318,17 @@ def test_create_edge(graph: Graph) -> None:
 
 def test_update_edge_label(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    a = write_tools.create_node(
+    a = memory.create_node(
         graph, CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov), _ingestion_trace()
     ).id
-    b = write_tools.create_node(
+    b = memory.create_node(
         graph, CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov), _ingestion_trace()
     ).id
-    edge_id = write_tools.create_edge(
+    edge_id = memory.create_edge(
         graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="old label"), _ingestion_trace()
     ).id
 
-    write_tools.update_edge(graph, UpdateEdgeInput(edge_id=edge_id, new_label="new label"), _ingestion_trace())
+    memory.update_edge(graph, UpdateEdgeInput(edge_id=edge_id, new_label="new label"), _ingestion_trace())
 
     out = store_graph.get_node(graph, a)
     assert out.edges[0].label == "new label"
@@ -336,18 +336,18 @@ def test_update_edge_label(graph: Graph) -> None:
 
 def test_delete_edge(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    a = write_tools.create_node(
+    a = memory.create_node(
         graph, CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov), _ingestion_trace()
     ).id
-    b = write_tools.create_node(
+    b = memory.create_node(
         graph, CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov), _ingestion_trace()
     ).id
-    edge_id = write_tools.create_edge(
+    edge_id = memory.create_edge(
         graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="linked"), _ingestion_trace()
     ).id
 
     trace = _ingestion_trace()
-    write_tools.delete_edge(graph, DeleteEdgeInput(edge_id=edge_id, reason="test"), trace)
+    memory.delete_edge(graph, DeleteEdgeInput(edge_id=edge_id, reason="test"), trace)
     assert trace.touched_edges[-1].action == "deleted"
 
     # Both nodes remain, edge gone
@@ -362,32 +362,29 @@ def test_delete_edge(graph: Graph) -> None:
 
 def test_search_graph_alias_match(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    write_tools.create_node(
+    memory.create_node(
         graph,
         CreateNodeInput(aliases=["career anxiety", "work stress"], summary="Anxiety about career.", note="x", provenance=prov),
         _ingestion_trace(),
     )
-    from weavy.tools.read_tools import search_graph as read_search
-    out = read_search(graph, SearchGraphInput(query="career"))
+    out = memory.search_graph(graph, SearchGraphInput(query="career"))
     assert len(out.results) >= 1
     assert any("career" in r.canonical_alias.lower() for r in out.results)
 
 
 def test_search_graph_summary_match(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    write_tools.create_node(
+    memory.create_node(
         graph,
         CreateNodeInput(aliases=["meditation"], summary="Daily mindfulness practice helping anxiety.", note="x", provenance=prov),
         _ingestion_trace(),
     )
-    from weavy.tools.read_tools import search_graph as read_search
-    out = read_search(graph, SearchGraphInput(query="mindfulness"))
+    out = memory.search_graph(graph, SearchGraphInput(query="mindfulness"))
     assert len(out.results) >= 1
 
 
 def test_search_graph_no_match(graph: Graph) -> None:
-    from weavy.tools.read_tools import search_graph as read_search
-    out = read_search(graph, SearchGraphInput(query="xyzzy_impossible_query_12345"))
+    out = memory.search_graph(graph, SearchGraphInput(query="xyzzy_impossible_query_12345"))
     assert out.results == []
 
 
@@ -398,29 +395,26 @@ def test_search_graph_no_match(graph: Graph) -> None:
 
 def test_get_node_returns_edges(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    a = write_tools.create_node(
+    a = memory.create_node(
         graph, CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov), _ingestion_trace()
     ).id
-    b = write_tools.create_node(
+    b = memory.create_node(
         graph, CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov), _ingestion_trace()
     ).id
-    write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="test edge"), _ingestion_trace())
+    memory.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="test edge"), _ingestion_trace())
 
-    from weavy.tools.read_tools import get_node as read_get_node
-    out = read_get_node(graph, GetNodeInput(node_ids=[a]))
+    out = memory.get_node(graph, GetNodeInput(node_ids=[a]))
     assert len(out.results[0].edges) == 1
     assert out.results[0].edges[0].label == "test edge"
 
 
 def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = write_tools.create_node(
+    node_id = memory.create_node(
         graph, CreateNodeInput(aliases=["test node"], summary="Test.", note="initial", provenance=prov), _ingestion_trace()
     ).id
 
-    from weavy.tools.read_tools import get_node as read_get_node
-
-    out = read_get_node(graph, GetNodeInput(node_ids=[node_id]))
+    out = memory.get_node(graph, GetNodeInput(node_ids=[node_id]))
     payload = json.loads(out.model_dump_json())
     assert "UTC" in payload["results"][0]["node"]["log"][0]["timestamp"]
 
@@ -432,25 +426,22 @@ def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
 
 def test_get_node_neighborhood(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    a = write_tools.create_node(
+    a = memory.create_node(
         graph, CreateNodeInput(aliases=["career"], summary="Career direction concerns.", note="a", provenance=prov), _ingestion_trace()
     ).id
-    b = write_tools.create_node(
+    b = memory.create_node(
         graph, CreateNodeInput(aliases=["anxiety"], summary="Persistent anxiety.", note="b", provenance=prov), _ingestion_trace()
     ).id
-    c = write_tools.create_node(
+    c = memory.create_node(
         graph, CreateNodeInput(aliases=["mentor"], summary="Senior mentor at work.", note="c", provenance=prov), _ingestion_trace()
     ).id
-    write_tools.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), _ingestion_trace())
-    write_tools.create_edge(graph, CreateEdgeInput(from_node_id=c, to_node_id=a, label="influences"), _ingestion_trace())
+    memory.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), _ingestion_trace())
+    memory.create_edge(graph, CreateEdgeInput(from_node_id=c, to_node_id=a, label="influences"), _ingestion_trace())
 
-    from weavy.tools.read_tools import get_node_neighborhood as read_neighborhood
-    out = read_neighborhood(graph, GetNodeNeighborhoodInput(node_id=a))
+    out = memory.get_node_neighborhood(graph, GetNodeNeighborhoodInput(node_id=a))
     assert out.node.id == a
     assert out.node.summary == "Career direction concerns."
     neighbor_ids = {n.node_id for n in out.neighbors}
     assert b in neighbor_ids
     assert c in neighbor_ids
-
-
 

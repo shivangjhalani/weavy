@@ -3,10 +3,10 @@ Theme mode — delta-driven theme map maintenance.
 """
 
 from weavy.config import settings
-from weavy.harness import registry as reg
+from weavy.harness.actions import THEME_ACTIONS
 from weavy.harness.runner import run
 from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode
-from weavy.modes._common import fetch_prompt
+from weavy.services.workflow import fetch_prompt, finalize_theme
 from weavy.store import system as store_system
 from weavy.store import themes as store_themes
 from weavy.store.client import get_graph
@@ -60,14 +60,8 @@ def run_theme_update(
         mode="theme",
         system_prompt=system_prompt,
         initial_messages=[{"role": "user", "content": delta_content}],
-        allowed_tools=reg.THEME_MODE_TOOLS,
+        allowed_actions=THEME_ACTIONS,
         run_context={"input_summary": f"Theme update after: {summary[:80]}"},
         graph=graph,
     )
-
-    if trace.status == "completed" and trace.completion_payload:
-        priority_order = trace.completion_payload.get("priority_order", [])
-        if priority_order is not None:
-            store_system.update_theme_priority_order(graph, priority_order)
-
-    return trace
+    return finalize_theme(graph, trace)

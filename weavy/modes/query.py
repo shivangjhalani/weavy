@@ -2,38 +2,14 @@
 Query/chat mode — grounded retrieval and conversational graph mutation.
 """
 
-from datetime import datetime, timezone
-
 from weavy.config import settings
-from weavy.harness import registry as reg
+from weavy.harness.actions import QUERY_ACTIONS
 from weavy.harness.runner import run
 from weavy.harness.tracing import ChatSessionTracer
-from weavy.models.canonical import ChatSession
 from weavy.models.traces import RunTrace
-from weavy.modes._common import (
-    build_themed_system_prompt,
-    conversation_to_chat_messages,
-    run_post_trace_hooks,
-)
-from weavy.store import canonical as store_canonical
+from weavy.services.workflow import build_themed_system_prompt, finalize_query
 from weavy.store import system as store_system
 from weavy.store.client import get_graph
-
-
-def _persist_chat_session(
-    graph,
-    chat_id: str,
-    conversation: list[dict],
-    timestamp: datetime,
-) -> None:
-    messages = conversation_to_chat_messages(conversation)
-    if not messages:
-        return
-
-    store_canonical.create_chat_session(
-        graph,
-        ChatSession(id=chat_id, timestamp=timestamp, messages=messages),
-    )
 
 
 def run_query(
@@ -65,23 +41,14 @@ def run_query(
             *(prior_messages or []),
             {"role": "user", "content": question},
         ],
-        allowed_tools=reg.QUERY_TOOLS,
+        allowed_actions=QUERY_ACTIONS,
         run_context={"input_summary": f"Query: {question[:80]}"},
         graph=graph,
         session_id=chat_id,
         parent_observation=parent_observation,
     )
 
-    if persist_chat and trace.conversation:
-        _persist_chat_session(graph, chat_id, trace.conversation, trace.started_at)
-
-    run_post_trace_hooks(
-        trace,
-        graph,
-        system_state,
-        completion_text=(trace.completion_payload or {}).get("answer", ""),
-    )
-    return trace
+    return finalize_query(graph, chat_id, trace, persist_chat=persist_chat)
 
 
 def run_chat_repl() -> None:
@@ -125,11 +92,3 @@ def run_chat_repl() -> None:
             conversation = trace.conversation
 
     session_tracer.finalize(message_count)
-
-    if conversation:
-        _persist_chat_session(
-            graph,
-            chat_id,
-            conversation,
-            datetime.now(tz=timezone.utc),
-        )

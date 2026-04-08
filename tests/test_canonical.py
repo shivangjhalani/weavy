@@ -11,7 +11,7 @@ import pytest
 from falkordb import Graph
 
 from weavy.models.canonical import ChatMessage, ChatSession, Transcript
-from weavy.models.tools import GetChatInput, GetTranscriptSpanInput, ListChatsInput, ListTranscriptsInput
+from weavy.models.tools import ListChatsInput, ListTranscriptsInput
 from weavy.store.canonical import (
     create_chat_session,
     create_transcript,

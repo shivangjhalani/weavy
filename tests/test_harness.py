@@ -1,5 +1,5 @@
 """
-Phase 4 tests — Agent harness: tracing, completion tools, registry, and runner loop.
+Phase 4 tests — Agent harness, completion actions, and runner loop.
 Runner tests mock litellm.completion to avoid real LLM calls.
 Integration tests that touch FalkorDB use the "weavy_test" graph.
 """
@@ -10,9 +10,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 from falkordb import Graph
 
-from weavy.harness import registry as reg
+from weavy.harness import actions as reg
 from weavy.harness import runner as harness_runner
-from weavy.harness.registry import get_tool_definitions
+from weavy.harness.actions import (
+    ActionContext,
+    complete_ingestion,
+    complete_theme_update,
+    deliver_response,
+    get_action_definitions,
+)
 from weavy.harness.runner import run
 from weavy.harness.tracing import (
     RunTracer,
@@ -20,20 +26,15 @@ from weavy.harness.tracing import (
     new_trace,
     record_turn,
 )
-from weavy.modes._common import run_post_trace_hooks
 from weavy.models.tools import (
     CompleteIngestionInput,
     CompleteThemeUpdateInput,
     DeliverResponseInput,
 )
 from weavy.models.traces import RunTrace, ToolCall, TouchedEdge, TouchedNode, Turn, TurnUsage
+from weavy.services.workflow import run_theme_update_if_needed
 from weavy.store.client import get_graph
-from weavy.store.system import SystemState, init_system
-from weavy.tools.completion_tools import (
-    complete_ingestion,
-    complete_theme_update,
-    deliver_response,
-)
+from weavy.store.system import init_system
 from tests.helpers import mock_tool_response
 
 TEST_GRAPH = "weavy_test"
@@ -92,7 +93,7 @@ def test_finalize_trace_failed() -> None:
     assert trace.error == "something went wrong"
 
 
-def test_run_post_trace_hooks_deduplicates_live_nodes() -> None:
+def test_run_theme_update_if_needed_calls_theme_mode() -> None:
     trace = _running_trace("query")
     trace.status = "completed"
     trace.touched_nodes = [
@@ -102,19 +103,10 @@ def test_run_post_trace_hooks_deduplicates_live_nodes() -> None:
         TouchedNode(node_id="node:3", action="created"),
     ]
     trace.completion_payload = {"answer": "done"}
-    system_state = SystemState(
-        next_node_id=1,
-        next_edge_id=1,
-        next_rec_id=1,
-        next_chat_id=1,
-        theme_priority_order=[],
-        hot_theme_token_budget=100,
-    )
-
     with (
         patch("weavy.modes.theme.run_theme_update") as mock_theme_update,
     ):
-        run_post_trace_hooks(trace, MagicMock(), system_state, "done")
+        run_theme_update_if_needed(MagicMock(), trace, "done")
 
     mock_theme_update.assert_called_once_with("done", trace.touched_nodes, trace.touched_edges)
 
@@ -265,14 +257,14 @@ def test_run_tracer_finalize_flushes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# completion_tools.py
+# completion actions
 # ---------------------------------------------------------------------------
 
 
 def test_complete_ingestion() -> None:
     trace = _running_trace("ingestion")
     params = CompleteIngestionInput(summary="ingested 3 nodes from rec:1")
-    result = complete_ingestion(params, trace)
+    result = complete_ingestion(params, ActionContext(graph=MagicMock(), trace=trace))
     assert result.ok is True
     assert trace.completion_payload == {"summary": "ingested 3 nodes from rec:1"}
 
@@ -284,7 +276,7 @@ def test_deliver_response() -> None:
         cited_sources=[],
         consulted_nodes=["node:1"],
     )
-    result = deliver_response(params, trace)
+    result = deliver_response(params, ActionContext(graph=MagicMock(), trace=trace))
     assert result.ok is True
     assert trace.completion_payload["answer"] == "The answer is 42."
     assert trace.completion_payload["consulted_nodes"] == ["node:1"]
@@ -296,17 +288,17 @@ def test_complete_theme_update() -> None:
         updated_themes=["career"],
         priority_order=["career", "health"],
     )
-    result = complete_theme_update(params, trace)
+    result = complete_theme_update(params, ActionContext(graph=MagicMock(), trace=trace))
     assert result.ok is True
     assert trace.completion_payload["priority_order"] == ["career", "health"]
 
 
 # ---------------------------------------------------------------------------
-# registry.py
+# actions.py
 # ---------------------------------------------------------------------------
 
 
-def test_registry_contains_all_expected_tools() -> None:
+def test_actions_contains_all_expected_entries() -> None:
     expected = {
         "search_graph", "get_node", "get_node_neighborhood",
         "list_transcripts", "get_transcript_span", "list_chats", "get_chat",
@@ -315,11 +307,11 @@ def test_registry_contains_all_expected_tools() -> None:
         "create_theme", "update_theme", "retire_theme",
         "complete_ingestion", "deliver_response", "complete_theme_update",
     }
-    assert expected == set(reg.REGISTRY.keys())
+    assert expected == set(reg.ACTIONS.keys())
 
 
-def test_get_tool_definitions_format() -> None:
-    defs = get_tool_definitions(["search_graph", "complete_ingestion"])
+def test_get_action_definitions_format() -> None:
+    defs = get_action_definitions(["search_graph", "complete_ingestion"])
     assert len(defs) == 2
     for d in defs:
         assert d["type"] == "function"
@@ -328,23 +320,16 @@ def test_get_tool_definitions_format() -> None:
         assert "parameters" in d["function"]
 
 
-def test_ingestion_tools_include_completion() -> None:
-    assert "complete_ingestion" in reg.INGESTION_TOOLS
-    assert "deliver_response" not in reg.INGESTION_TOOLS
+def test_ingestion_actions_include_completion() -> None:
+    assert "complete_ingestion" in reg.INGESTION_ACTIONS
+    assert "deliver_response" not in reg.INGESTION_ACTIONS
 
 
 def test_completion_entries_marked() -> None:
-    assert reg.REGISTRY["complete_ingestion"].is_completion is True
-    assert reg.REGISTRY["deliver_response"].is_completion is True
-    assert reg.REGISTRY["complete_theme_update"].is_completion is True
-    assert reg.REGISTRY["create_node"].is_completion is False
-
-
-def test_write_entries_marked_as_mutation() -> None:
-    for name in ["create_node", "update_node", "delete_node", "create_edge"]:
-        assert reg.REGISTRY[name].is_mutation is True
-    for name in ["search_graph", "get_node"]:
-        assert reg.REGISTRY[name].is_mutation is False
+    assert reg.ACTIONS["complete_ingestion"].is_completion is True
+    assert reg.ACTIONS["deliver_response"].is_completion is True
+    assert reg.ACTIONS["complete_theme_update"].is_completion is True
+    assert reg.ACTIONS["create_node"].is_completion is False
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +367,7 @@ def test_run_fails_without_tool_call() -> None:
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
             initial_messages=[{"role": "user", "content": "ingest rec:1"}],
-            allowed_tools=reg.INGESTION_TOOLS,
+            allowed_actions=reg.INGESTION_ACTIONS,
             run_context={"input_summary": "rec:1"},
             graph=MagicMock(),
         )
@@ -400,7 +385,7 @@ def test_run_fails_on_unknown_tool() -> None:
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
             initial_messages=[],
-            allowed_tools=reg.INGESTION_TOOLS,
+            allowed_actions=reg.INGESTION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -419,7 +404,7 @@ def test_run_fails_on_bad_args() -> None:
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
             initial_messages=[],
-            allowed_tools=reg.INGESTION_TOOLS,
+            allowed_actions=reg.INGESTION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -436,14 +421,14 @@ def test_run_records_tool_calls() -> None:
 
     with (
         patch("litellm.completion", side_effect=[search_resp, completion_resp]),
-        patch("weavy.tools.read_tools.search_graph", return_value=search_output),
+        patch("weavy.services.memory.search_graph", return_value=search_output),
         patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
             initial_messages=[],
-            allowed_tools=reg.INGESTION_TOOLS,
+            allowed_actions=reg.INGESTION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -464,7 +449,7 @@ def test_run_completes_on_completion_tool() -> None:
             mode="ingestion",
             system_prompt="system",
             initial_messages=[],
-            allowed_tools=reg.INGESTION_TOOLS,
+            allowed_actions=reg.INGESTION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -482,7 +467,7 @@ def test_run_fails_on_model_exception() -> None:
             mode="query",
             system_prompt="system",
             initial_messages=[],
-            allowed_tools=reg.QUERY_TOOLS,
+            allowed_actions=reg.QUERY_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -504,7 +489,7 @@ def test_run_caches_context_limit_lookup() -> None:
                 mode="ingestion",
                 system_prompt="system",
                 initial_messages=[],
-                allowed_tools=reg.INGESTION_TOOLS,
+                allowed_actions=reg.INGESTION_ACTIONS,
                 run_context={"input_summary": "test"},
                 graph=MagicMock(),
             )
@@ -543,7 +528,7 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
             mode="ingestion",
             system_prompt="You are an ingestion agent.",
             initial_messages=[{"role": "user", "content": "ingest"}],
-            allowed_tools=reg.INGESTION_TOOLS,
+            allowed_actions=reg.INGESTION_ACTIONS,
             run_context={"input_summary": "rec:1"},
             graph=graph,
         )

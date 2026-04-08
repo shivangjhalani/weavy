@@ -11,7 +11,7 @@ import litellm
 from falkordb import Graph
 
 from weavy.config import settings
-from weavy.harness import registry as reg
+from weavy.harness import actions
 from weavy.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
 from weavy.models.traces import RunTrace, ToolCall, Turn, TurnUsage
 
@@ -90,7 +90,7 @@ def run(
     mode: Literal["ingestion", "query", "theme"],
     system_prompt: str,
     initial_messages: list[dict[str, Any]],
-    allowed_tools: list[str],
+    allowed_actions: list[str],
     run_context: dict[str, Any],
     graph: Graph,
     session_id: str | None = None,
@@ -106,13 +106,13 @@ def run(
         trace.run_id, mode, input_summary,
         session_id=session_id, parent_observation=parent_observation,
     )
-    ctx = reg.ToolContext(graph=graph, trace=trace)
+    ctx = actions.ActionContext(graph=graph, trace=trace)
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         *initial_messages,
     ]
-    tool_definitions = reg.get_tool_definitions(allowed_tools)
+    tool_definitions = actions.get_action_definitions(allowed_actions)
     turn_number = 0
     completion_nudges = 0
 
@@ -217,7 +217,7 @@ def run(
             called_at = datetime.now(tz=timezone.utc)
 
             # Resolve tool
-            entry = reg.REGISTRY.get(tool_name)
+            entry = actions.ACTIONS.get(tool_name)
             if entry is None:
                 err = f"Unknown tool '{tool_name}'."
                 tracer.record_tool_error(turn_number, tool_call_id, tool_name, {}, err)

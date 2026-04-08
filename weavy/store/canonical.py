@@ -58,7 +58,7 @@ def create_transcript(graph: Graph, transcript: Transcript) -> None:
             audio_path: $audio_path,
             timestamp: $timestamp,
             text: $text,
-            ingestion_status: 0
+            ingestion_state: 'pending'
         })
         """,
         {
@@ -218,26 +218,26 @@ def get_chat(
 
 
 # ---------------------------------------------------------------------------
-# Ingestion status and run manifest (Transcript nodes)
+# Ingestion state (Transcript nodes)
 # ---------------------------------------------------------------------------
 
 
-def get_ingestion_status(graph: Graph, transcript_id: str) -> int:
-    """Return 0 (not ingested) or 1 (ingested / in-progress). Raises if transcript not found."""
+def get_ingestion_state(graph: Graph, transcript_id: str) -> str:
     result = graph.query(
-        "MATCH (t:Transcript {id: $id}) RETURN coalesce(t.ingestion_status, 0)",
+        "MATCH (t:Transcript {id: $id}) RETURN t.ingestion_state",
         {"id": transcript_id},
     )
     if not result.result_set:
         raise ValueError(f"Transcript '{transcript_id}' not found.")
-    return int(result.result_set[0][0])
+    return str(result.result_set[0][0])
 
 
-def set_ingestion_status(graph: Graph, transcript_id: str, status: int) -> None:
+def set_ingestion_state(
+    graph: Graph,
+    transcript_id: str,
+    state: str,
+) -> None:
     graph.query(
-        "MATCH (t:Transcript {id: $id}) SET t.ingestion_status = $status",
-        {"id": transcript_id, "status": status},
+        "MATCH (t:Transcript {id: $id}) SET t.ingestion_state = $state",
+        {"id": transcript_id, "state": state},
     )
-
-
-

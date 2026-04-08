@@ -6,10 +6,8 @@ Implemented in Phase 3.
 import json
 from datetime import datetime, timezone
 
-import litellm
 from falkordb import Graph
 
-from weavy.config import settings
 from weavy.models.graph import LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
 from weavy.models.tools import (
     GetNodeNeighborhoodOutput,
@@ -54,17 +52,6 @@ def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
     )
 
 
-def generate_embedding(aliases: list[str], summary: str) -> list[float]:
-    text = summary + " " + " ".join(aliases)
-    response = litellm.embedding(model=settings.GEMINI_EMBEDDING_MODEL, input=[text])
-    return response.data[0]["embedding"]
-
-
-# ---------------------------------------------------------------------------
-# Node CRUD
-# ---------------------------------------------------------------------------
-
-
 def create_node(
     graph: Graph,
     aliases: list[str],
@@ -93,11 +80,6 @@ def create_node(
             "summary": summary,
             "entry_json": entry_json,
         },
-    )
-    embedding = generate_embedding(aliases, summary)
-    graph.query(
-        "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
-        {"id": node_id, "embedding": embedding},
     )
     return OperationResult(ok=True, id=node_id)
 
@@ -149,14 +131,6 @@ def update_node(
         params,
     )
 
-    if new_summary is not None or new_aliases is not None:
-        effective_aliases = new_aliases if new_aliases is not None else props.get("aliases", [])
-        effective_summary = new_summary if new_summary is not None else current_summary
-        embedding = generate_embedding(effective_aliases, effective_summary)
-        graph.query(
-            "MATCH (n:SemanticNode {id: $id}) SET n.embedding = vecf32($embedding)",
-            {"id": node_id, "embedding": embedding},
-        )
     return OperationResult(ok=True, id=node_id)
 
 
@@ -231,10 +205,7 @@ def delete_edge(graph: Graph, edge_id: str, reason: str) -> OperationResult:  # 
 
 
 def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
-    fetch_k = params.limit * 2
-
-    # --- Keyword pass ---
-    kw_result = graph.query(
+    result = graph.query(
         """
         MATCH (n:SemanticNode)
         WHERE ANY(a IN n.aliases WHERE toLower(a) CONTAINS toLower($query))
@@ -245,60 +216,17 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
         ORDER BY edge_count DESC
         LIMIT $limit
         """,
-        {"query": params.query, "limit": fetch_k},
+        {"query": params.query, "limit": params.limit},
     )
-    keyword_hits: dict[str, tuple] = {}
-    for row in kw_result.result_set:
-        keyword_hits[row[0]] = (row[1], row[2], int(row[3]))
-
-    # --- Vector pass ---
-    vec_hits: dict[str, tuple] = {}
-    query_vec = generate_embedding([], params.query)
-    vec_result = graph.query(
-        """
-        CALL db.idx.vector.queryNodes('SemanticNode', 'embedding', $k, vecf32($vec))
-        YIELD node, score
-        OPTIONAL MATCH (node)-[r:RELATES]-()
-        WITH node, score, count(r) AS edge_count
-        RETURN node.id, node.aliases, node.summary, edge_count, score
-        """,
-        {"k": fetch_k, "vec": query_vec},
-    )
-    for row in vec_result.result_set:
-        vec_hits[row[0]] = (row[1], row[2], int(row[3]), float(row[4]))
-
-    # --- Fusion ---
-    # Score: vec + keyword = vec_score + 0.5, vec-only = vec_score, keyword-only = 0.4
-    candidates: dict[str, dict] = {}
-    for nid, (aliases, summary, edge_count, vec_score) in vec_hits.items():
-        combined = vec_score + (0.5 if nid in keyword_hits else 0.0)
-        candidates[nid] = {
-            "aliases": aliases,
-            "summary": summary,
-            "edge_count": edge_count,
-            "score": combined,
-        }
-    for nid, (aliases, summary, edge_count) in keyword_hits.items():
-        if nid not in candidates:
-            candidates[nid] = {
-                "aliases": aliases,
-                "summary": summary,
-                "edge_count": edge_count,
-                "score": 0.4,
-            }
-
-    ranked = sorted(candidates.items(), key=lambda x: x[1]["score"], reverse=True)
-
     results = []
-    for nid, item in ranked[: params.limit]:
-        aliases = item["aliases"]
-        summary = item["summary"]
+    for row in result.result_set:
+        node_id, aliases, summary, edge_count = row
         results.append(
             SearchResult(
-                id=nid,
-                canonical_alias=aliases[0] if aliases else nid,
+                id=node_id,
+                canonical_alias=aliases[0] if aliases else node_id,
                 summary_line=summary.splitlines()[0] if summary else "",
-                edge_count=item["edge_count"],
+                edge_count=int(edge_count),
             )
         )
     return SearchGraphOutput(results=results)

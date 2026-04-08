@@ -9,8 +9,6 @@ from typing import Literal
 from falkordb import Graph
 from pydantic import BaseModel
 
-from weavy.config import settings
-
 CounterName = Literal["node", "edge", "rec", "chat"]
 
 _COUNTER_FIELD: dict[CounterName, str] = {
@@ -44,19 +42,6 @@ def _row_to_state(props: dict) -> SystemState:
         hot_theme_token_budget=props["hot_theme_token_budget"],
     )
 
-
-def _ensure_vector_index(graph: Graph) -> None:
-    try:
-        graph.query(
-            "CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
-            "OPTIONS {dimension:3072, similarityFunction:'cosine'}"
-        )
-    except Exception as e:
-        if "already" in str(e).lower() or "exists" in str(e).lower():
-            return
-        raise
-
-
 def init_system(graph: Graph) -> SystemState:
     """Create the System node if it does not exist; return current state."""
     result = graph.query(
@@ -69,14 +54,10 @@ def init_system(graph: Graph) -> SystemState:
             s.next_rec_id  = 1,
             s.next_chat_id = 1,
             s.theme_priority_order  = [],
-            s.hot_theme_token_budget = $hot_budget
+            s.hot_theme_token_budget = 250
         RETURN s
-        """,
-        {
-            "hot_budget": settings.HOT_THEME_TOKEN_BUDGET,
-        },
+        """
     )
-    _ensure_vector_index(graph)
     node = result.result_set[0][0]
     return _row_to_state(node.properties)
 

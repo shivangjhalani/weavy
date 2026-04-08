@@ -8,7 +8,7 @@ Build one reusable agent harness that runs ingestion, query, and theme modes wit
 
 - render mode-specific context
 - expose a static validated action surface
-- execute tool calls in a loop
+- execute action calls in a loop
 - capture a run trace
 - terminate only on the mode's completion tool
 - delegate workflow side effects to a shared finalizer
@@ -64,11 +64,11 @@ Rules:
 - no retry wrapper in v1
 - if the model returns invalid tool arguments, fail the run
 
-### Step 3: Validate Tool Call
+### Step 3: Validate Action Call
 
-When the model invokes a tool:
-- resolve the registered tool
-- parse its arguments through the tool's Pydantic request model
+When the model invokes an action:
+- resolve the registered action
+- parse its arguments through the action's Pydantic request model
 - reject the call if parsing fails
 
 ### Step 4: Execute Action

@@ -321,7 +321,7 @@ def test_ingestion_sets_flag(graph: Graph) -> None:
         trace = run_ingestion(rec_id)
 
     assert trace.status == "completed"
-    assert store_canonical.get_ingestion_status(graph, rec_id) == 1
+    assert store_canonical.get_ingestion_state(graph, rec_id) == "completed"
 
 
 def test_failed_ingestion_resets_flag(graph: Graph) -> None:
@@ -343,17 +343,16 @@ def test_failed_ingestion_resets_flag(graph: Graph) -> None:
         trace = run_ingestion(rec_id)
 
     assert trace.status == "failed"
-    assert store_canonical.get_ingestion_status(graph, rec_id) == 0
+    assert store_canonical.get_ingestion_state(graph, rec_id) == "failed"
 
 
 def test_reingest_blocked_when_flag_is_set(graph: Graph) -> None:
     """Second call to run_ingestion raises ValueError when flag is 1."""
     rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-    store_canonical.set_ingestion_status(graph, rec_id, 1)
+    store_canonical.set_ingestion_state(graph, rec_id, "completed")
     with patch("weavy.modes.ingestion.get_graph", return_value=graph):
         from weavy.modes.ingestion import run_ingestion
-        with pytest.raises(ValueError, match="already been ingested"):
+        with pytest.raises(ValueError, match="already completed"):
             run_ingestion(rec_id)
-
 
 

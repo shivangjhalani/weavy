@@ -1,12 +1,12 @@
-# Arakne Build Plan Overview
+# Weavy Build Plan Overview
 
 ## Objective
 
-Build the system described in [Memory-v5](/home/shivang/shivang/projs/arakne/markdowns/Memory-v5.md) as a minimal happy-path Python backend that supports:
+Build the system described in [Memory-v5](/home/shivang/shivang/projs/weavy/markdowns/Memory-v5.md) as a minimal happy-path Python backend that supports:
 
 1. Canonical source storage for transcripts and chat sessions
 2. Provenance-backed semantic graph writes in FalkorDB
-3. Manual theme maintenance via `weavy update-themes`
+3. Theme maintenance as an explicit derived workflow, with `weavy update-themes` available as a manual repair/rebuild path
 4. Grounded query/chat retrieval with source citations
 5. Agent eval infrastructure for measuring memory quality and answer quality
 
@@ -39,17 +39,16 @@ This document now describes the target state after the planned architectural sim
 Create the core package layout and typed contracts.
 
 Deliverables:
-- `arakne/config.py`
-- `arakne/models/`
-- `arakne/store/`
-- `arakne/tools/`
-- `arakne/harness/`
-- `arakne/modes/`
-- `arakne/cli.py`
-- `arakne/evals/`
+- `weavy/config.py`
+- `weavy/models/`
+- `weavy/store/`
+- `weavy/harness/`
+- `weavy/modes/`
+- `weavy/cli.py`
+- `weavy/evals/`
 
 Success criteria:
-- Project has a clear module boundary for config, store, tools, harness, and evals
+- Project has a clear module boundary for config, store, harness, and evals
 - All tool contracts are encoded as Pydantic models
 - `System` node initialization is implemented and testable
 

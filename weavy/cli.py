@@ -138,7 +138,7 @@ def cmd_update_themes(args: argparse.Namespace) -> None:
     if trace.error:
         print(f"Error: {trace.error}", file=sys.stderr)
     else:
-        print(f"Theme update complete.")
+        print("Theme update complete.")
 
 
 def cmd_query(args: argparse.Namespace) -> None:

@@ -41,10 +41,10 @@ def mock_run_tracer():
 def mock_fetch_prompt():
     """Prevent real Langfuse prompt fetches in all tests."""
     try:
-        from weavy.modes import _common
+        from weavy.services import workflow
     except ImportError:
         yield None
         return
 
-    with patch.object(_common, "fetch_prompt", return_value="(mocked system prompt)") as mock:
+    with patch.object(workflow, "fetch_prompt", return_value="(mocked system prompt)") as mock:
         yield mock
