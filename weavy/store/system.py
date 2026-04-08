@@ -4,14 +4,14 @@ This is the only store module fully implemented in Phase 1.
 """
 
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from falkordb import Graph
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 CounterName = Literal["node", "edge", "rec", "chat"]
 
-_COUNTER_FIELD: dict[CounterName, str] = {
+_COUNTER_FIELD: dict[str, str] = {
     "node": "next_node_id",
     "edge": "next_edge_id",
     "rec": "next_rec_id",
@@ -27,20 +27,13 @@ class SystemState(BaseModel):
     theme_priority_order: list[str]
     hot_theme_token_budget: int
 
+    @field_validator("theme_priority_order", mode="before")
+    @classmethod
+    def parse_json_string(cls, v: Any) -> list:
+        if isinstance(v, str):
+            return json.loads(v)
+        return list(v) if v else []
 
-def _row_to_state(props: dict) -> SystemState:
-    # theme_priority_order may be stored as JSON string if FalkorDB serialised it
-    priority = props.get("theme_priority_order", [])
-    if isinstance(priority, str):
-        priority = json.loads(priority)
-    return SystemState(
-        next_node_id=props["next_node_id"],
-        next_edge_id=props["next_edge_id"],
-        next_rec_id=props["next_rec_id"],
-        next_chat_id=props["next_chat_id"],
-        theme_priority_order=priority,
-        hot_theme_token_budget=props["hot_theme_token_budget"],
-    )
 
 def init_system(graph: Graph) -> SystemState:
     """Create the System node if it does not exist; return current state."""
@@ -58,8 +51,7 @@ def init_system(graph: Graph) -> SystemState:
         RETURN s
         """
     )
-    node = result.result_set[0][0]
-    return _row_to_state(node.properties)
+    return SystemState(**result.result_set[0][0].properties)
 
 
 def get_system(graph: Graph) -> SystemState:
@@ -69,8 +61,7 @@ def get_system(graph: Graph) -> SystemState:
         raise RuntimeError(
             "System node not found. Run init_system() or `python -m weavy.cli init-system` first."
         )
-    node = result.result_set[0][0]
-    return _row_to_state(node.properties)
+    return SystemState(**result.result_set[0][0].properties)
 
 
 def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None:
@@ -93,7 +84,6 @@ def increment_counter(graph: Graph, counter: CounterName) -> str:
     The counter field is left pointing at the next available value.
     """
     field = _COUNTER_FIELD[counter]
-    prefix = counter
     result = graph.query(
         f"""
         MATCH (s:System)
@@ -106,4 +96,4 @@ def increment_counter(graph: Graph, counter: CounterName) -> str:
             "System node not found. Cannot mint token — run init_system() first."
         )
     minted_id: int = result.result_set[0][0]
-    return f"{prefix}:{minted_id}"
+    return f"{counter}:{minted_id}"

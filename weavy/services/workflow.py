@@ -44,7 +44,7 @@ def build_themed_system_prompt(
 
 def conversation_to_chat_messages(conversation: list[dict]) -> list[ChatMessage]:
     return [
-        ChatMessage(role=message["role"], content=message.get("content") or "")
+        ChatMessage(role=message["role"], content=message["content"])
         for message in conversation
         if message["role"] in ("user", "assistant") and message.get("content")
     ]

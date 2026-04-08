@@ -15,7 +15,6 @@ class TouchedEdge(BaseModel):
     action: Literal["created", "updated", "deleted"]
 
 
-
 class ToolCall(BaseModel):
     tool_name: str
     args: dict[str, Any]

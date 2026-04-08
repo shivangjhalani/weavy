@@ -29,10 +29,6 @@ def _extract_span(text: str, start_offset: int, end_offset: int) -> str:
     If the text contains no inline timestamps, return the full text unchanged.
     """
     lines = text.splitlines()
-    has_timestamps = any(_INLINE_TS.match(line) for line in lines)
-    if not has_timestamps:
-        return text
-
     current_seconds: int | None = None
     result: list[str] = []
     for line in lines:
@@ -41,7 +37,7 @@ def _extract_span(text: str, start_offset: int, end_offset: int) -> str:
             current_seconds = int(match.group(1)) * 60 + int(match.group(2))
         if current_seconds is not None and start_offset <= current_seconds <= end_offset:
             result.append(line)
-    return "\n".join(result)
+    return "\n".join(result) if result else text
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +89,7 @@ def list_transcripts(graph: Graph, params: ListTranscriptsInput) -> ListTranscri
             """
             MATCH (t:Transcript)
             WHERE t.timestamp >= $start AND t.timestamp <= $end
-            RETURN t
+            RETURN t.id, t.audio_path, t.timestamp
             ORDER BY t.timestamp DESC
             LIMIT $limit
             """,
@@ -105,19 +101,17 @@ def list_transcripts(graph: Graph, params: ListTranscriptsInput) -> ListTranscri
         )
     else:
         result = graph.query(
-            "MATCH (t:Transcript) RETURN t ORDER BY t.timestamp DESC LIMIT $limit",
+            "MATCH (t:Transcript) RETURN t.id, t.audio_path, t.timestamp ORDER BY t.timestamp DESC LIMIT $limit",
             {"limit": params.limit},
         )
-    transcripts = []
-    for row in result.result_set:
-        props = row[0].properties
-        transcripts.append(
-            TranscriptSummary(
-                id=props["id"],
-                timestamp=datetime.fromisoformat(props["timestamp"]),
-                audio_path=props["audio_path"],
-            )
+    transcripts = [
+        TranscriptSummary(
+            id=row[0],
+            audio_path=row[1],
+            timestamp=datetime.fromisoformat(row[2]),
         )
+        for row in result.result_set
+    ]
     return ListTranscriptsOutput(transcripts=transcripts)
 
 
@@ -176,7 +170,7 @@ def list_chats(graph: Graph, params: ListChatsInput) -> ListChatsOutput:
             """
             MATCH (c:ChatSession)
             WHERE c.timestamp >= $start AND c.timestamp <= $end
-            RETURN c
+            RETURN c.id, c.timestamp
             ORDER BY c.timestamp DESC
             LIMIT $limit
             """,
@@ -188,18 +182,16 @@ def list_chats(graph: Graph, params: ListChatsInput) -> ListChatsOutput:
         )
     else:
         result = graph.query(
-            "MATCH (c:ChatSession) RETURN c ORDER BY c.timestamp DESC LIMIT $limit",
+            "MATCH (c:ChatSession) RETURN c.id, c.timestamp ORDER BY c.timestamp DESC LIMIT $limit",
             {"limit": params.limit},
         )
-    chats = []
-    for row in result.result_set:
-        props = row[0].properties
-        chats.append(
-            ChatSummary(
-                id=props["id"],
-                timestamp=datetime.fromisoformat(props["timestamp"]),
-            )
+    chats = [
+        ChatSummary(
+            id=row[0],
+            timestamp=datetime.fromisoformat(row[1]),
         )
+        for row in result.result_set
+    ]
     return ListChatsOutput(chats=chats)
 
 

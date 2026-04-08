@@ -5,7 +5,7 @@ RunTracer: wraps Langfuse observations for a single agent run when Langfuse is
 configured. Creates a root span with nested turn spans and generation/tool child
 observations. When Langfuse is not configured, only console output is produced.
 
-Hierarchy (standalone run, when Langfuse is enabled):
+Langfuse observation hierarchy (standalone run):
     root-span (ingestion-run / query-run / theme-run)
     └── turn-1 span
         ├── llm generation  (created BEFORE litellm call for accurate timing)
@@ -15,7 +15,7 @@ Hierarchy (standalone run, when Langfuse is enabled):
         ├── llm generation
         └── tool:complete_ingestion span
 
-Hierarchy (interactive chat session via ChatSessionTracer):
+Langfuse observation hierarchy (interactive chat session via ChatSessionTracer):
     chat-session root-span
     └── query-run (message 1)
         └── turn-1 span ...
@@ -35,7 +35,7 @@ from typing import Any, Literal
 import litellm
 
 from weavy.config import settings
-from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode, TurnUsage, graph_delta
+from weavy.models.traces import RunTrace, TurnUsage, graph_delta
 
 
 @lru_cache(maxsize=64)
@@ -68,8 +68,6 @@ def _coerce_langfuse_trace_id(trace_id: str) -> str | None:
 
 
 def _langfuse_enabled() -> bool:
-    from weavy.config import settings
-
     return bool(settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY)
 
 
@@ -132,7 +130,7 @@ class RunTracer:
         tracer.record_tool_call(...)      # per tool
         tracer.end_turn(text_content)
         # ... repeat for each turn ...
-        tracer.finalize(status, ...)
+        tracer.finalize(trace)
     """
 
     def __init__(
@@ -189,6 +187,15 @@ class RunTracer:
             self._current_generation = None
         if self._current_turn_span is not None:
             self._current_turn_span.update(output=text_content)
+            self._current_turn_span.end()
+            self._current_turn_span = None
+
+    def _close_open_spans(self) -> None:
+        """Safety net: close any spans left open on error paths."""
+        if self._current_generation is not None:
+            self._current_generation.end()
+            self._current_generation = None
+        if self._current_turn_span is not None:
             self._current_turn_span.end()
             self._current_turn_span = None
 
@@ -304,34 +311,19 @@ class RunTracer:
 
     # ---- Run completion ----
 
-    def finalize(
-        self,
-        status: str,
-        total_turns: int,
-        total_usage: TurnUsage,
-        completion_payload: dict[str, Any] | None,
-        touched_nodes: list[TouchedNode],
-        touched_edges: list[TouchedEdge],
-        error: str | None = None,
-        context_limit: int | None = None,
-    ) -> None:
-        # Ensure any open spans are closed
-        if self._current_generation is not None:
-            self._current_generation.end()
-            self._current_generation = None
-        if self._current_turn_span is not None:
-            self._current_turn_span.end()
-            self._current_turn_span = None
+    def finalize(self, trace: RunTrace, *, context_limit: int | None = None) -> None:
+        self._close_open_spans()
 
-        delta = graph_delta(touched_nodes, touched_edges)
+        delta = graph_delta(trace.touched_nodes, trace.touched_edges)
+        total_turns = len(trace.turns)
 
         if self._root is not None:
-            self._root.set_trace_io(output=completion_payload)
+            self._root.set_trace_io(output=trace.completion_payload)
             self._root.update(
                 metadata={
-                    "status": status,
+                    "status": trace.status,
                     "total_turns": total_turns,
-                    "error": error,
+                    "error": trace.error,
                     **delta,
                 },
             )
@@ -340,23 +332,23 @@ class RunTracer:
             self._lf.flush()
 
         # Console summary
-        status_icon = "✓" if status == "completed" else "✗"
-        prompt = total_usage.prompt_tokens
+        status_icon = "✓" if trace.status == "completed" else "✗"
+        prompt = trace.total_usage.prompt_tokens
         if context_limit:
             pct = prompt / context_limit * 100
             ctx_str = f"{prompt:,} / {context_limit:,} ({pct:.1f}%)"
         else:
             ctx_str = f"{prompt:,}"
         print(
-            f"\n[{status_icon}] {status} | {total_turns} turn(s)"
-            f"\n    context: {ctx_str} | output: {total_usage.completion_tokens:,}"
-            f" | reasoning: {total_usage.reasoning_tokens:,}"
+            f"\n[{status_icon}] {trace.status} | {total_turns} turn(s)"
+            f"\n    context: {ctx_str} | output: {trace.total_usage.completion_tokens:,}"
+            f" | reasoning: {trace.total_usage.reasoning_tokens:,}"
         )
         if delta:
             pairs = "  ".join(f"{k}={v}" for k, v in delta.items())
             print(f"    graph: {pairs}")
-        if error:
-            print(f"    error: {error}")
+        if trace.error:
+            print(f"    error: {trace.error}")
 
 
 # ---------------------------------------------------------------------------

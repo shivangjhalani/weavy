@@ -18,7 +18,6 @@ from weavy.models.tools import (
     DeleteEdgeInput,
     DeleteNodeInput,
     GetNodeInput,
-    GetNodeNeighborhoodInput,
     SearchGraphInput,
     UpdateEdgeInput,
     UpdateNodeInput,
@@ -367,7 +366,7 @@ def test_search_graph_alias_match(graph: Graph) -> None:
         CreateNodeInput(aliases=["career anxiety", "work stress"], summary="Anxiety about career.", note="x", provenance=prov),
         _ingestion_trace(),
     )
-    out = memory.search_graph(graph, SearchGraphInput(query="career"))
+    out = store_graph.search_graph(graph, SearchGraphInput(query="career"))
     assert len(out.results) >= 1
     assert any("career" in r.canonical_alias.lower() for r in out.results)
 
@@ -379,12 +378,12 @@ def test_search_graph_summary_match(graph: Graph) -> None:
         CreateNodeInput(aliases=["meditation"], summary="Daily mindfulness practice helping anxiety.", note="x", provenance=prov),
         _ingestion_trace(),
     )
-    out = memory.search_graph(graph, SearchGraphInput(query="mindfulness"))
+    out = store_graph.search_graph(graph, SearchGraphInput(query="mindfulness"))
     assert len(out.results) >= 1
 
 
 def test_search_graph_no_match(graph: Graph) -> None:
-    out = memory.search_graph(graph, SearchGraphInput(query="xyzzy_impossible_query_12345"))
+    out = store_graph.search_graph(graph, SearchGraphInput(query="xyzzy_impossible_query_12345"))
     assert out.results == []
 
 
@@ -438,7 +437,7 @@ def test_get_node_neighborhood(graph: Graph) -> None:
     memory.create_edge(graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), _ingestion_trace())
     memory.create_edge(graph, CreateEdgeInput(from_node_id=c, to_node_id=a, label="influences"), _ingestion_trace())
 
-    out = memory.get_node_neighborhood(graph, GetNodeNeighborhoodInput(node_id=a))
+    out = store_graph.get_node_neighborhood(graph, a)
     assert out.node.id == a
     assert out.node.summary == "Career direction concerns."
     neighbor_ids = {n.node_id for n in out.neighbors}

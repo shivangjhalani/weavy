@@ -31,6 +31,9 @@ from weavy.models.tools import (
 )
 from weavy.models.traces import RunTrace, graph_delta
 from weavy.services import memory
+from weavy.store import canonical as store_canonical
+from weavy.store import graph as store_graph
+from weavy.store import themes as store_themes
 
 
 @dataclass
@@ -74,7 +77,7 @@ ACTIONS: dict[str, Action] = {
         "search_graph",
         "Search semantic nodes by keyword.",
         SearchGraphInput,
-        lambda p, ctx: memory.search_graph(ctx.graph, p),
+        lambda p, ctx: store_graph.search_graph(ctx.graph, p),
     ),
     "get_node": Action(
         "get_node",
@@ -86,13 +89,13 @@ ACTIONS: dict[str, Action] = {
         "get_node_neighborhood",
         "Get a node with its neighbors.",
         GetNodeNeighborhoodInput,
-        lambda p, ctx: memory.get_node_neighborhood(ctx.graph, p),
+        lambda p, ctx: store_graph.get_node_neighborhood(ctx.graph, p.node_id),
     ),
     "list_transcripts": Action(
         "list_transcripts",
         "List transcript records.",
         ListTranscriptsInput,
-        lambda p, ctx: memory.list_transcripts(ctx.graph, p),
+        lambda p, ctx: store_canonical.list_transcripts(ctx.graph, p),
     ),
     "get_transcript_span": Action(
         "get_transcript_span",
@@ -104,19 +107,19 @@ ACTIONS: dict[str, Action] = {
         "list_chats",
         "List chat sessions.",
         ListChatsInput,
-        lambda p, ctx: memory.list_chats(ctx.graph, p),
+        lambda p, ctx: store_canonical.list_chats(ctx.graph, p),
     ),
     "get_chat": Action(
         "get_chat",
         "Get a chat session or slice.",
         GetChatInput,
-        lambda p, ctx: memory.get_chat(ctx.graph, p),
+        lambda p, ctx: store_canonical.get_chat(ctx.graph, p.chat_id, p.start_index, p.end_index),
     ),
     "get_theme": Action(
         "get_theme",
         "Get a theme by name.",
         GetThemeInput,
-        lambda p, ctx: memory.get_theme(ctx.graph, p),
+        lambda p, ctx: store_themes.get_theme(ctx.graph, p.name),
     ),
     "create_node": Action(
         "create_node",
@@ -158,19 +161,19 @@ ACTIONS: dict[str, Action] = {
         "create_theme",
         "Create a theme.",
         CreateThemeInput,
-        lambda p, ctx: memory.create_theme(ctx.graph, p),
+        lambda p, ctx: store_themes.create_theme(ctx.graph, p.name, p.state, p.anchors, p.status),
     ),
     "update_theme": Action(
         "update_theme",
         "Update a theme.",
         UpdateThemeInput,
-        lambda p, ctx: memory.update_theme(ctx.graph, p),
+        lambda p, ctx: store_themes.update_theme(ctx.graph, p.name, p.new_state, p.new_anchors, p.new_status),
     ),
     "retire_theme": Action(
         "retire_theme",
         "Retire a theme.",
         RetireThemeInput,
-        lambda p, ctx: memory.retire_theme(ctx.graph, p),
+        lambda p, ctx: store_themes.retire_theme(ctx.graph, p.name),
     ),
     "complete_ingestion": Action(
         "complete_ingestion",
@@ -215,6 +218,7 @@ GRAPH_WRITE_ACTIONS = [
 ]
 
 INGESTION_ACTIONS = GRAPH_READ_ACTIONS + GRAPH_WRITE_ACTIONS + ["complete_ingestion"]
+# Query mode includes reads, writes (conversational graph mutation), and theme lookup
 QUERY_ACTIONS = GRAPH_READ_ACTIONS + GRAPH_WRITE_ACTIONS + ["get_theme", "deliver_response"]
 THEME_ACTIONS = [
     "search_graph",

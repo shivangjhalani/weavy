@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Annotated
 
 import humanize
+from pydantic import PlainSerializer
 
 
 def _ensure_aware(dt: datetime) -> datetime:
@@ -27,6 +29,12 @@ def format_agent_timestamp(
     if not include_relative:
         return absolute
     return f"{_relative_phrase(dt, now)}, {absolute}"
+
+
+AgentTimestamp = Annotated[
+    datetime,
+    PlainSerializer(format_agent_timestamp, when_used="json"),
+]
 
 
 def format_agent_date_range(

@@ -31,13 +31,13 @@ def _print_system_state(header: str, state: SystemState) -> None:
     print(f"  theme_priority_order  = {state.theme_priority_order}")
 
 
-def cmd_init_system(args: argparse.Namespace) -> None:
+def cmd_init_system(_args: argparse.Namespace) -> None:
     graph = get_graph()
     state = init_system(graph)
     _print_system_state("System node initialised", state)
 
 
-def cmd_status(args: argparse.Namespace) -> None:
+def cmd_status(_args: argparse.Namespace) -> None:
     graph = get_graph()
     state = get_system(graph)
     _print_system_state("System state", state)

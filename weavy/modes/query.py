@@ -2,7 +2,6 @@
 Query/chat mode — grounded retrieval and conversational graph mutation.
 """
 
-from weavy.config import settings
 from weavy.harness.actions import QUERY_ACTIONS
 from weavy.harness.runner import run
 from weavy.harness.tracing import ChatSessionTracer
@@ -20,7 +19,7 @@ def run_query(
     parent_observation: object | None = None,
 ) -> RunTrace:
     """Run a query/chat session. Returns the completed RunTrace."""
-    graph = get_graph(settings.GRAPH_NAME)
+    graph = get_graph()
     system_state = store_system.get_system(graph)
 
     if chat_id is None:
@@ -54,7 +53,7 @@ def run_query(
 def run_chat_repl() -> None:
     """Interactive REPL: prompts user, runs query turns with full history.
     Persists a single ChatSession on exit."""
-    graph = get_graph(settings.GRAPH_NAME)
+    graph = get_graph()
     chat_id = store_system.increment_counter(graph, "chat")
     conversation: list[dict] = []
     session_tracer = ChatSessionTracer(chat_id)

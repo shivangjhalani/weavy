@@ -1,4 +1,5 @@
-from typing import Literal
+import json
+from typing import Any, Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -10,6 +11,13 @@ class Theme(BaseModel):
     state: str
     status: list[ThemeStatus]  # 1-2 items
     anchors: list[str]  # node ids
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def parse_status(cls, v: Any) -> list:
+        if isinstance(v, str):
+            return json.loads(v)
+        return list(v) if v else []
 
     @field_validator("status")
     @classmethod

@@ -1,20 +1,16 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
-from weavy.timefmt import format_agent_timestamp
+from weavy.timefmt import AgentTimestamp
 
 
 class LogEntry(BaseModel):
     source_id: str  # rec:N or chat:N
-    timestamp: datetime
+    timestamp: AgentTimestamp  # isoformat on storage, humanized on JSON output
     start_offset: int  # seconds for rec, message_index for chat
     end_offset: int | None  # seconds for rec, null for chat
     note: str
-
-    @field_serializer("timestamp", when_used="json")
-    def serialize_timestamp(self, value: datetime) -> str:
-        return format_agent_timestamp(value)
 
 
 class ProvenanceInput(BaseModel):

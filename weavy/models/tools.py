@@ -6,12 +6,12 @@ and returns one *Output model. Pydantic validates both boundaries.
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints, field_serializer
+from pydantic import BaseModel, StringConstraints
 
 from weavy.models.canonical import ChatSession
 from weavy.models.graph import ProvenanceInput, SemanticEdge, SemanticNode
 from weavy.models.themes import Theme, ThemeStatus
-from weavy.timefmt import format_agent_timestamp
+from weavy.timefmt import AgentTimestamp
 
 # ---------------------------------------------------------------------------
 # Shared
@@ -207,12 +207,8 @@ class GetNodeOutput(BaseModel):
 
 class TranscriptSummary(BaseModel):
     id: str
-    timestamp: datetime
+    timestamp: AgentTimestamp
     audio_path: str
-
-    @field_serializer("timestamp", when_used="json")
-    def serialize_timestamp(self, value: datetime) -> str:
-        return format_agent_timestamp(value)
 
 
 class ListTranscriptsOutput(BaseModel):
@@ -230,11 +226,7 @@ class GetTranscriptSpanOutput(BaseModel):
 
 class ChatSummary(BaseModel):
     id: str
-    timestamp: datetime
-
-    @field_serializer("timestamp", when_used="json")
-    def serialize_timestamp(self, value: datetime) -> str:
-        return format_agent_timestamp(value)
+    timestamp: AgentTimestamp
 
 
 class ListChatsOutput(BaseModel):

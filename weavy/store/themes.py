@@ -2,8 +2,6 @@
 Theme persistence — Theme node CRUD and anchor edge management in FalkorDB.
 """
 
-import json
-
 import tiktoken
 from falkordb import Graph
 
@@ -11,13 +9,6 @@ from weavy.models.themes import Theme, ThemeStatus
 from weavy.models.tools import GetThemeOutput, OperationResult
 
 _ENC = tiktoken.get_encoding("cl100k_base")
-
-
-def _parse_status(raw: list | str | None) -> list[ThemeStatus]:
-    """Parse status from DB (may be list or JSON string)."""
-    if isinstance(raw, str):
-        return json.loads(raw)
-    return list(raw) if raw else []
 
 
 def _validate_anchors(graph: Graph, anchor_ids: list[str]) -> None:
@@ -48,13 +39,15 @@ def create_theme(
         {"name": name, "state": state, "status": list(status)},
     )
 
-    for anchor_id in anchors:
+    if anchors:
         graph.query(
             """
-            MATCH (t:Theme {name: $name}), (n:SemanticNode {id: $anchor_id})
+            MATCH (t:Theme {name: $name})
+            UNWIND $anchor_ids AS aid
+            MATCH (n:SemanticNode {id: aid})
             CREATE (t)-[:ANCHORS]->(n)
             """,
-            {"name": name, "anchor_id": anchor_id},
+            {"name": name, "anchor_ids": anchors},
         )
 
     return OperationResult(ok=True, id=name)
@@ -79,7 +72,7 @@ def get_theme(graph: Graph, name: str) -> GetThemeOutput:
     theme = Theme(
         name=t_props["name"],
         state=t_props["state"],
-        status=_parse_status(t_props.get("status", [])),
+        status=t_props.get("status", []),
         anchors=anchor_ids,
     )
     return GetThemeOutput(theme=theme)
@@ -92,13 +85,6 @@ def update_theme(
     new_anchors: list[str] | None,
     new_status: list[ThemeStatus] | None,
 ) -> OperationResult:
-    result = graph.query(
-        "MATCH (t:Theme {name: $name}) RETURN t",
-        {"name": name},
-    )
-    if not result.result_set:
-        raise ValueError(f"Theme '{name}' not found.")
-
     set_parts = []
     params: dict = {"name": name}
     if new_state is not None:
@@ -109,15 +95,20 @@ def update_theme(
         params["new_status"] = list(new_status)
 
     if set_parts:
-        graph.query(
-            f"MATCH (t:Theme {{name: $name}}) SET {', '.join(set_parts)}",
+        result = graph.query(
+            f"MATCH (t:Theme {{name: $name}}) SET {', '.join(set_parts)} RETURN t",
             params,
         )
+        if not result.result_set:
+            raise ValueError(f"Theme '{name}' not found.")
+    else:
+        result = graph.query("MATCH (t:Theme {name: $name}) RETURN t", {"name": name})
+        if not result.result_set:
+            raise ValueError(f"Theme '{name}' not found.")
 
     if new_anchors is not None:
         _validate_anchors(graph, new_anchors)
 
-        # Get current anchors
         result = graph.query(
             "MATCH (t:Theme {name: $name})-[:ANCHORS]->(n:SemanticNode) RETURN n.id",
             {"name": name},
@@ -125,22 +116,27 @@ def update_theme(
         current_set = {row[0] for row in result.result_set}
         new_set = set(new_anchors)
 
-        for anchor_id in new_set - current_set:
+        to_add = list(new_set - current_set)
+        if to_add:
             graph.query(
                 """
-                MATCH (t:Theme {name: $name}), (n:SemanticNode {id: $anchor_id})
+                MATCH (t:Theme {name: $name})
+                UNWIND $ids AS aid
+                MATCH (n:SemanticNode {id: aid})
                 CREATE (t)-[:ANCHORS]->(n)
                 """,
-                {"name": name, "anchor_id": anchor_id},
+                {"name": name, "ids": to_add},
             )
 
-        for anchor_id in current_set - new_set:
+        to_remove = list(current_set - new_set)
+        if to_remove:
             graph.query(
                 """
-                MATCH (t:Theme {name: $name})-[r:ANCHORS]->(n:SemanticNode {id: $anchor_id})
+                MATCH (t:Theme {name: $name})-[r:ANCHORS]->(n:SemanticNode)
+                WHERE n.id IN $ids
                 DELETE r
                 """,
-                {"name": name, "anchor_id": anchor_id},
+                {"name": name, "ids": to_remove},
             )
 
     return OperationResult(ok=True, id=name)
@@ -148,16 +144,12 @@ def update_theme(
 
 def retire_theme(graph: Graph, name: str) -> OperationResult:
     result = graph.query(
-        "MATCH (t:Theme {name: $name}) RETURN t",
+        "MATCH (t:Theme {name: $name}) DETACH DELETE t RETURN count(t)",
         {"name": name},
     )
-    if not result.result_set:
+    deleted = result.result_set[0][0] if result.result_set else 0
+    if deleted == 0:
         raise ValueError(f"Theme '{name}' not found.")
-
-    graph.query(
-        "MATCH (t:Theme {name: $name}) DETACH DELETE t",
-        {"name": name},
-    )
     return OperationResult(ok=True, id=name)
 
 
@@ -166,23 +158,19 @@ def list_all_themes(graph: Graph) -> list[Theme]:
         """
         MATCH (t:Theme)
         OPTIONAL MATCH (t)-[:ANCHORS]->(n:SemanticNode)
-        RETURN t, collect(n.id) AS anchor_ids
+        WITH t, collect(DISTINCT n.id) AS anchor_ids
+        RETURN t, anchor_ids
         """
     )
     themes = []
-    seen: set[str] = set()
     for row in result.result_set:
         t_props = row[0].properties
-        name = t_props["name"]
-        if name in seen:
-            continue
-        seen.add(name)
         anchor_ids = [a for a in (row[1] or []) if a is not None]
         themes.append(
             Theme(
-                name=name,
+                name=t_props["name"],
                 state=t_props["state"],
-                status=_parse_status(t_props.get("status", [])),
+                status=t_props.get("status", []),
                 anchors=anchor_ids,
             )
         )

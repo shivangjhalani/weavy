@@ -2,7 +2,6 @@
 Theme mode — delta-driven theme map maintenance.
 """
 
-from weavy.config import settings
 from weavy.harness.actions import THEME_ACTIONS
 from weavy.harness.runner import run
 from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode
@@ -33,7 +32,7 @@ def run_theme_update(
         touched_nodes = []
     if touched_edges is None:
         touched_edges = []
-    graph = get_graph(settings.GRAPH_NAME)
+    graph = get_graph()
     all_themes = store_themes.list_all_themes(graph)
     system_state = store_system.get_system(graph)
 

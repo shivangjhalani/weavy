@@ -2,7 +2,6 @@
 Ingestion mode — transcript-first memory construction.
 """
 
-from weavy.config import settings
 from weavy.harness.actions import INGESTION_ACTIONS
 from weavy.harness.runner import run
 from weavy.models.traces import RunTrace
@@ -15,7 +14,7 @@ from weavy.timefmt import format_agent_timestamp
 
 def run_ingestion(transcript_id: str) -> RunTrace:
     """Load transcript and run ingestion harness."""
-    graph = get_graph(settings.GRAPH_NAME)
+    graph = get_graph()
 
     state = store_canonical.get_ingestion_state(graph, transcript_id)
     if state in {"running", "completed"}:

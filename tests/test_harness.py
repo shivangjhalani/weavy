@@ -244,9 +244,12 @@ def test_run_tracer_record_tool_error() -> None:
 
 def test_run_tracer_finalize_flushes() -> None:
     tracer, mock_lf = _make_tracer()
-    usage = TurnUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+    trace = _running_trace()
+    trace.total_usage = TurnUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+    trace.status = "completed"
+    trace.completion_payload = {"summary": "done"}
 
-    tracer.finalize("completed", 2, usage, {"summary": "done"}, [], [])
+    tracer.finalize(trace)
 
     tracer._root.set_trace_io.assert_called_once_with(output={"summary": "done"})
     tracer._root.update.assert_called_once()
@@ -421,7 +424,7 @@ def test_run_records_tool_calls() -> None:
 
     with (
         patch("litellm.completion", side_effect=[search_resp, completion_resp]),
-        patch("weavy.services.memory.search_graph", return_value=search_output),
+        patch("weavy.store.graph.search_graph", return_value=search_output),
         patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(

@@ -5,6 +5,7 @@ Implemented in Phase 3.
 
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 from falkordb import Graph
 
@@ -52,6 +53,20 @@ def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
     )
 
 
+def _node_from_props(props: dict[str, Any], log_tail: int | None = None) -> SemanticNode:
+    """Construct a SemanticNode from raw FalkorDB properties."""
+    all_entries = [_deserialize_log_entry(s) for s in (props.get("log") or [])]
+    log = all_entries[-log_tail:] if log_tail is not None else all_entries
+    return SemanticNode(
+        id=props["id"],
+        aliases=props.get("aliases") or [],
+        summary=props["summary"],
+        embedding=None,
+        total_log_count=props.get("total_log_count", 0),
+        log=log,
+    )
+
+
 def create_node(
     graph: Graph,
     aliases: list[str],
@@ -92,19 +107,16 @@ def update_node(
     new_aliases: list[str] | None,
     provenance: ProvenanceInput | None,
 ) -> OperationResult:
-    result = graph.query(
-        "MATCH (n:SemanticNode {id: $id}) RETURN n",
-        {"id": node_id},
-    )
-    if not result.result_set:
-        raise ValueError(f"SemanticNode '{node_id}' not found.")
-
-    props = result.result_set[0][0].properties
-    current_summary = props["summary"]
-
-    # Archive old summary into note if a new summary is being written
+    # Only fetch current summary when archiving it (new_summary is being replaced)
     effective_note = note
     if new_summary is not None:
+        result = graph.query(
+            "MATCH (n:SemanticNode {id: $id}) RETURN n.summary",
+            {"id": node_id},
+        )
+        if not result.result_set:
+            raise ValueError(f"SemanticNode '{node_id}' not found.")
+        current_summary = result.result_set[0][0]
         effective_note = f"[archived summary] {current_summary} | Agent note: {note}"
 
     entry = _make_log_entry(provenance, effective_note)
@@ -115,7 +127,7 @@ def update_node(
         "n.log = n.log + [$entry_json]",
         "n.total_log_count = n.total_log_count + 1",
     ]
-    params: dict = {"id": node_id, "entry_json": entry_json}
+    params: dict[str, Any] = {"id": node_id, "entry_json": entry_json}
 
     if new_summary is not None:
         set_parts.append("n.summary = $new_summary")
@@ -126,15 +138,17 @@ def update_node(
         params["new_aliases"] = new_aliases
         params["new_name"] = new_aliases[0]
 
-    graph.query(
-        f"MATCH (n:SemanticNode {{id: $id}}) SET {', '.join(set_parts)}",
+    result = graph.query(
+        f"MATCH (n:SemanticNode {{id: $id}}) SET {', '.join(set_parts)} RETURN n",
         params,
     )
+    if not result.result_set:
+        raise ValueError(f"SemanticNode '{node_id}' not found.")
 
     return OperationResult(ok=True, id=node_id)
 
 
-def delete_node(graph: Graph, node_id: str, reason: str) -> OperationResult:  # noqa: ARG001
+def delete_node(graph: Graph, node_id: str, _reason: str) -> OperationResult:
     result = graph.query(
         "MATCH (n:SemanticNode {id: $id}) DETACH DELETE n RETURN count(n)",
         {"id": node_id},
@@ -188,7 +202,7 @@ def update_edge(graph: Graph, edge_id: str, new_label: str) -> OperationResult:
     return OperationResult(ok=True, id=edge_id)
 
 
-def delete_edge(graph: Graph, edge_id: str, reason: str) -> OperationResult:  # noqa: ARG001
+def delete_edge(graph: Graph, edge_id: str, _reason: str) -> OperationResult:
     result = graph.query(
         "MATCH ()-[r:RELATES {id: $id}]->() DELETE r RETURN count(r)",
         {"id": edge_id},
@@ -249,16 +263,7 @@ def get_node(graph: Graph, node_id: str) -> GetNodeResult:
     node_props = row[0].properties
     raw_edges = row[1] or []
 
-    all_entries = [_deserialize_log_entry(s) for s in (node_props.get("log") or [])]
-
-    node = SemanticNode(
-        id=node_props["id"],
-        aliases=node_props.get("aliases") or [],
-        summary=node_props["summary"],
-        embedding=None,
-        total_log_count=node_props.get("total_log_count", 0),
-        log=all_entries,
-    )
+    node = _node_from_props(node_props)
 
     # Build edge list (skip null placeholders from COLLECT when no edges exist)
     edges = []
@@ -290,17 +295,7 @@ def get_node_neighborhood(
     node_props = row[0].properties
     raw_neighbors = row[1] or []
 
-    all_entries = [_deserialize_log_entry(s) for s in (node_props.get("log") or [])]
-    orientation_log = all_entries[-2:] if all_entries else []
-
-    node = SemanticNode(
-        id=node_props["id"],
-        aliases=node_props.get("aliases") or [],
-        summary=node_props["summary"],
-        embedding=None,
-        total_log_count=node_props.get("total_log_count", 0),
-        log=orientation_log,
-    )
+    node = _node_from_props(node_props, log_tail=2)
 
     neighbors = []
     seen_edge_ids = set()

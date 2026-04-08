@@ -30,7 +30,6 @@ def _get_context_limit(model: str) -> int | None:
 def _finalize_failed_run(
     trace: RunTrace,
     tracer: RunTracer,
-    turn_number: int,
     error: str,
     context_limit: int | None,
     turn: Turn | None = None,
@@ -39,16 +38,7 @@ def _finalize_failed_run(
         record_turn(trace, turn)
     tracer.end_turn(None)
     finalize_trace(trace, "failed", error=error)
-    tracer.finalize(
-        "failed",
-        turn_number,
-        trace.total_usage,
-        None,
-        trace.touched_nodes,
-        trace.touched_edges,
-        error=error,
-        context_limit=context_limit,
-    )
+    tracer.finalize(trace, context_limit=context_limit)
     return trace
 
 
@@ -137,9 +127,7 @@ def run(
             )
         except Exception as e:
             err = f"Model call failed: {e}"
-            return _finalize_failed_run(
-                trace, tracer, turn_number, err, context_limit
-            )
+            return _finalize_failed_run(trace, tracer, err, context_limit)
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None) or []
 
@@ -187,9 +175,7 @@ def run(
                 continue
 
             err = "Model stopped without calling a completion tool."
-            return _finalize_failed_run(
-                trace, tracer, turn_number, err, context_limit
-            )
+            return _finalize_failed_run(trace, tracer, err, context_limit)
 
         # Append assistant message with tool_calls to conversation history
         messages.append(
@@ -222,9 +208,7 @@ def run(
                 err = f"Unknown tool '{tool_name}'."
                 tracer.record_tool_error(turn_number, tool_call_id, tool_name, {}, err)
                 _append_tool_call_error(turn, tool_name, {}, err, called_at)
-                return _finalize_failed_run(
-                    trace, tracer, turn_number, err, context_limit, turn=turn
-                )
+                return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
 
             # Parse args
             args_dict: dict[str, Any] = {}
@@ -235,9 +219,7 @@ def run(
                 err = f"Invalid arguments for '{tool_name}': {e}"
                 tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                return _finalize_failed_run(
-                    trace, tracer, turn_number, err, context_limit, turn=turn
-                )
+                return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
 
             # Execute tool
             t0 = datetime.now(tz=timezone.utc).timestamp()
@@ -247,9 +229,7 @@ def run(
                 err = f"Tool '{tool_name}' raised: {e}"
                 tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                return _finalize_failed_run(
-                    trace, tracer, turn_number, err, context_limit, turn=turn
-                )
+                return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
 
             duration_ms = (datetime.now(tz=timezone.utc).timestamp() - t0) * 1000
             result_str = (
@@ -278,11 +258,7 @@ def run(
                 trace.conversation = [m for m in messages if m["role"] != "system"]
                 finalize_trace(trace, "completed")
                 tracer.end_turn(message.content)
-                tracer.finalize(
-                    "completed", turn_number, trace.total_usage,
-                    trace.completion_payload, trace.touched_nodes, trace.touched_edges,
-                    context_limit=context_limit,
-                )
+                tracer.finalize(trace, context_limit=context_limit)
                 return trace
 
         # Turn complete — record and loop
