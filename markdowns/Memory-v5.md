@@ -488,6 +488,85 @@ One operation per call. Keeps each write inspectable and the log clean.
 
 ---
 
+## Memory Interface Design
+
+The tool interface is the LLM's only view of the memory system. Every design decision here answers one question: what is the most natural representation of a 3-layer personal memory for an LLM to reason over, navigate, and modify through tool calls?
+
+### Design Principles
+
+**The memory has three layers. The interface has three corresponding tiers of interaction.**
+
+| Layer | What it is | How the agent sees it |
+|-------|-----------|----------------------|
+| Canonical sources (transcripts, chats) | Ground truth — the user's actual words | Source retrieval tools with offset-based slicing |
+| Semantic graph (nodes, edges) | Derived cache — LLM-built meaning structure | Graph CRUD tools with progressive disclosure |
+| Themes | Derived orientation — editorial map of the territory | Injected into system prompt + on-demand read tools |
+
+The agent doesn't interact with "a database." It interacts with a layered memory that presents itself the way a person's memory works: orientation first (themes → "what do I know about this person?"), then structure (graph → "how does this connect to that?"), then evidence (sources → "what did they actually say?").
+
+**No UUIDs.** All identifiers are short sequential tokens: `node:4`, `edge:12`, `rec:7`, `chat:3`. This is not cosmetic.
+
+- LLMs hallucinate high-entropy identifiers. A UUID like `550e8400-e29b-41d4-a716-446655440000` is noise in a context window — the model has to carry 36 characters of opaque hex through every reasoning step. Sequential tokens are short, memorable, and pattern-recognizable. An LLM that has seen `node:4` and `node:17` in search results can reference them accurately in a write call three turns later. It cannot do this reliably with UUIDs.
+- The harness mints all tokens — the agent never picks its own identifier. This eliminates collision, hallucination of non-existent IDs, and the need for existence checks in the agent's reasoning.
+- Token format also encodes entity type. `node:N` vs `edge:N` vs `rec:N` is self-documenting in tool arguments, log entries, and provenance chains. The agent can parse entity type from the identifier without a separate field.
+
+**No timestamps.** The agent never sees raw datetimes or ISO strings. Every temporal value is serialized into human-readable relative time before it enters the context window: `"3 weeks ago, Tuesday 24 Jun 2025, 11:42 PM"`.
+
+- Temporal arithmetic is a known failure mode for LLMs. "Was `2024-11-15T14:32:00Z` before or after `2024-11-14T23:58:00Z`?" requires mental parsing that models do unreliably. "Yesterday, 2:32 PM" vs "2 days ago, 11:58 PM" is immediate.
+- The harness injects the current time into the system prompt at session start. All relative phrases are computed against this anchor. The agent reasons temporally using natural language — "this was recent," "this was months ago" — which is how humans reason about time and how LLMs reason best.
+- This extends to every surface: log entry timestamps, transcript recording times, fence date ranges, chat session timestamps. No raw datetime ever reaches the agent.
+
+**No internal mechanics exposed.** The agent sees tool names, descriptions, and typed inputs/outputs. It does not see:
+
+- Database query language or schema details
+- Embedding vectors or similarity scores
+- JSON serialization of log entries
+- Fence creation thresholds or token budgets
+- The search fusion strategy (keyword + semantic)
+
+The harness handles all of this. `search_graph(query)` returns ranked results — the agent doesn't know or care whether it was keyword match, vector similarity, or both. `get_node(node_id)` returns structured log entries with human-readable timestamps — the agent doesn't know they were JSON-serialized strings in a FalkorDB array property.
+
+### The Three-Layer View
+
+**Layer 1 — Themes (orientation, zero-cost):** The agent starts every session with a terrain map injected into the system prompt. The hot themes block gives the 3-5 most important themes rendered in full — name, state line, status labels, anchor node IDs. The cold index lists every other theme by name. This is the LLM's equivalent of a doctor reading a patient summary before entering the room. No tool call required. The agent knows the major territories and has direct entry points (anchor node IDs) into the semantic graph.
+
+**Layer 2 — Semantic graph (structure, on-demand):** The graph is accessed through a progressive disclosure chain. Each tool reveals just enough to decide whether to go deeper:
+
+1. `search_graph` → one-line summaries, connectivity hints
+2. `get_node_neighborhood` → local structure, edge labels, neighbor summaries
+3. `get_node` → full detail, log history, cold-log hints
+4. `get_cold_logs` → complete chronological history
+
+This is deliberate. Dumping the full graph into context would be wasteful and confusing. The progressive chain mirrors how a person explores: scan, orient, zoom in, deep dive. Each step gives the agent a reason to continue or stop.
+
+**Layer 3 — Canonical sources (evidence, on-demand):** Transcripts and chats are accessed through offset-based slicing. The agent doesn't retrieve full transcripts at query time — it follows provenance from node log entries (`source_id: rec:7, start_offset: 14, end_offset: 28`) directly to `get_transcript_span(rec:7, 14, 28)` to get the user's exact words. This is citation-grade retrieval: the agent can ground any claim in a specific moment of a specific recording.
+
+### Tool Surface Design
+
+The tool set is flat — no namespaces, no nesting, no hierarchy. Every tool is a top-level function with a natural-language name. This matters because LLM tool calling works best with:
+
+- **Verb-noun names** that describe exactly one action: `search_graph`, `get_node`, `create_edge`, `deliver_response`
+- **Minimal required parameters** — most tools take 1-2 arguments. The most complex (`create_node`) takes 4. No tool requires the agent to construct nested objects beyond a provenance triple.
+- **Typed, validated inputs** — Pydantic models enforce identifier format (`node:N`, `edge:N`), required fields, and valid enum values. Invalid tool calls fail fast with clear error messages rather than silently producing wrong results.
+- **Structured, predictable outputs** — every read tool returns a typed model, serialized to JSON. The agent can reliably extract fields from responses because the shape is consistent across calls.
+
+The tool set is also **mode-gated** — each agent mode receives only the tools it's allowed to use. Ingestion gets graph read + write + `complete_ingestion`. Query gets the same plus `get_theme` and `deliver_response`. Theme mode gets a narrow set: graph reads, theme CRUD, and `complete_theme_update`. The agent never sees tools it can't use, which prevents wasted reasoning about unavailable actions.
+
+### What the Agent Doesn't Do
+
+The harness absorbs all bookkeeping that would otherwise pollute the agent's reasoning:
+
+- **Token minting** — the agent says "create a node with these aliases and summary." The harness assigns `node:47`. The agent never counts, never checks for collisions.
+- **Provenance stamping** — the agent provides a note and provenance triple. The harness constructs the full log entry with timestamp and attaches it to the node.
+- **Summary archival** — when the agent rewrites a summary, the harness archives the old one into the log entry automatically. The agent doesn't manage versioning.
+- **Write tracking** — the harness tracks every mutation (`touched_nodes`, `touched_edges`) across the session. The agent's completion call provides a natural-language summary; the harness appends the structural delta automatically.
+- **Embedding updates** — modified nodes are flagged for re-embedding. A background job handles it. The agent never triggers or waits for embedding generation.
+- **Log compression** — when a node's hot segment exceeds the token budget, a background job creates a fence. The agent never manages log size.
+
+This split is deliberate: the agent's context budget is spent on semantic reasoning about a person's life, not on infrastructure bookkeeping. Every token the agent spends tracking IDs, managing versions, or formatting entries is a token not spent understanding what the user said and what it means.
+
+---
+
 ## Read Architecture
 
 **The governing principle: progressive disclosure.** Each tier reveals enough to decide whether to go deeper. The agent never gets more than it asked for.
