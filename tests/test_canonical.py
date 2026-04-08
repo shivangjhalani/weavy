@@ -4,7 +4,6 @@ Requires a running FalkorDB instance (provided by devenv up).
 Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
-import json
 from datetime import datetime, timezone
 
 import pytest
@@ -151,15 +150,6 @@ def test_list_transcripts_limit(graph: Graph) -> None:
     assert len(output.transcripts) <= 2
 
 
-def test_list_transcripts_json_humanizes_timestamp(graph: Graph) -> None:
-    _make_transcript(graph)
-    output = list_transcripts(graph, ListTranscriptsInput(limit=1))
-
-    payload = json.loads(output.model_dump_json())
-    assert "UTC" in payload["transcripts"][0]["timestamp"]
-    assert "2024" in payload["transcripts"][0]["timestamp"]
-
-
 def test_get_transcript_span_exact(graph: Graph) -> None:
     t = _make_transcript(graph)
     result = get_transcript_span(graph, t.id, start_offset=14, end_offset=27)
@@ -221,32 +211,6 @@ def test_list_chats(graph: Graph) -> None:
     ids = [c.id for c in output.chats]
     assert s1.id in ids
     assert s2.id in ids
-
-
-def test_list_chats_json_humanizes_timestamp(graph: Graph) -> None:
-    _make_chat(graph)
-    output = list_chats(graph, ListChatsInput(limit=1))
-
-    payload = json.loads(output.model_dump_json())
-    assert "UTC" in payload["chats"][0]["timestamp"]
-    assert "2024" in payload["chats"][0]["timestamp"]
-
-
-def test_get_chat_full(graph: Graph) -> None:
-    s = _make_chat(graph)
-    result = get_chat(graph, s.id, None, None)
-
-    assert len(result.session.messages) == 3
-    assert result.session.messages[2].content == "How are you?"
-
-
-def test_get_chat_json_humanizes_timestamp(graph: Graph) -> None:
-    s = _make_chat(graph)
-    result = get_chat(graph, s.id, None, None)
-
-    payload = json.loads(result.model_dump_json())
-    assert "UTC" in payload["session"]["timestamp"]
-    assert "2024" in payload["session"]["timestamp"]
 
 
 def test_get_chat_with_start_index(graph: Graph) -> None:

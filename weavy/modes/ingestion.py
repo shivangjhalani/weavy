@@ -9,7 +9,6 @@ from weavy.services.workflow import build_themed_system_prompt, finalize_ingesti
 from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
 from weavy.store.client import get_graph
-from weavy.timefmt import format_agent_timestamp
 
 
 def run_ingestion(transcript_id: str) -> RunTrace:
@@ -35,7 +34,7 @@ def run_ingestion(transcript_id: str) -> RunTrace:
     transcript_message = (
         f"Ingest this transcript.\n\n"
         f"ID: {transcript.id}\n"
-        f"Recorded: {format_agent_timestamp(transcript.timestamp)}\n\n"
+        f"Recorded: {transcript.timestamp.isoformat()}\n\n"
         f"{transcript.text}"
     )
 

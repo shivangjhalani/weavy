@@ -55,7 +55,6 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
 
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update") as mock_theme,
         patch("litellm.completion", side_effect=[create_resp, done_resp]),
     ):
         from weavy.modes.ingestion import run_ingestion
@@ -72,11 +71,6 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
         "MATCH (n:SemanticNode {id: $id}) RETURN n.id", {"id": node_id}
     )
     assert result.result_set
-
-    # Theme pass should have been triggered with the completion summary
-    mock_theme.assert_called_once()
-    assert mock_theme.call_args[0][0] == "Ingested a transcript about career anxiety."
-
 
 def test_ingest_updates_existing_node(graph: Graph) -> None:
     """Agent calls update_node; log count increments."""
@@ -105,7 +99,6 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
 
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", side_effect=[update_resp, done_resp]),
     ):
         from weavy.modes.ingestion import run_ingestion
@@ -139,7 +132,6 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
 
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
     ):
         from weavy.modes.ingestion import run_ingestion
@@ -169,7 +161,6 @@ def test_ingest_invalid_node_id_format_fails_at_argument_validation(
 
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
         patch("litellm.completion", return_value=bad_resp),
     ):
         from weavy.modes.ingestion import run_ingestion
@@ -180,32 +171,6 @@ def test_ingest_invalid_node_id_format_fails_at_argument_validation(
     assert trace.touched_nodes == []
     assert trace.error is not None
     assert "Invalid arguments for 'update_node'" in trace.error
-
-
-def test_ingest_no_writes_skips_theme(graph: Graph) -> None:
-    """Agent calls complete_ingestion without any writes; theme mode is not triggered."""
-    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-
-    done_resp = mock_tool_response(
-        "complete_ingestion",
-        {"summary": "Nothing to change."},
-        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
-    )
-
-    with (
-        patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update") as mock_theme,
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        from weavy.modes.ingestion import run_ingestion
-
-        trace = run_ingestion(rec_id)
-
-    assert trace.status == "completed"
-    assert trace.touched_nodes == []
-    mock_theme.assert_not_called()
-
-
 def test_ingest_missing_transcript_raises(graph: Graph) -> None:
     """run_ingestion raises ValueError for a non-existent transcript id."""
     with patch("weavy.modes.ingestion.get_graph", return_value=graph):
@@ -213,29 +178,6 @@ def test_ingest_missing_transcript_raises(graph: Graph) -> None:
 
         with pytest.raises(ValueError, match="not found"):
             run_ingestion("rec:999")
-
-
-def test_ingest_prompt_humanizes_recorded_timestamp(graph: Graph) -> None:
-    rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
-    done_resp = mock_tool_response(
-        "complete_ingestion",
-        {"summary": "Nothing to change."},
-        usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
-    )
-
-    with (
-        patch("weavy.modes.ingestion.get_graph", return_value=graph),
-        patch("weavy.modes.theme.run_theme_update"),
-        patch("litellm.completion", return_value=done_resp) as mock_completion,
-    ):
-        from weavy.modes.ingestion import run_ingestion
-
-        run_ingestion(rec_id)
-
-    sent_messages = mock_completion.call_args.kwargs["messages"]
-    user_message = sent_messages[1]["content"]
-    assert "Recorded: " in user_message
-    assert "UTC" in user_message
 
 
 # ---------------------------------------------------------------------------

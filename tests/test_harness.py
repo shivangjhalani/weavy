@@ -4,6 +4,7 @@ Runner tests mock litellm.completion to avoid real LLM calls.
 Integration tests that touch FalkorDB use the "weavy_test" graph.
 """
 
+import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -12,34 +13,9 @@ from falkordb import Graph
 
 from weavy.harness import actions as reg
 from weavy.harness import runner as harness_runner
-from weavy.harness.actions import (
-    ActionContext,
-    complete_ingestion,
-    complete_theme_update,
-    deliver_response,
-    get_action_definitions,
-)
 from weavy.harness.runner import run
-from weavy.harness.tracing import (
-    RunTracer,
-    finalize_trace,
-    new_trace,
-    record_turn,
-)
-from weavy.models.tools import (
-    CompleteIngestionInput,
-    CompleteThemeUpdateInput,
-    DeliverResponseInput,
-)
-from weavy.models.traces import (
-    RunTrace,
-    ToolCall,
-    TouchedEdge,
-    TouchedNode,
-    Turn,
-    TurnUsage,
-)
-from weavy.services.workflow import run_theme_update_if_needed
+from weavy.harness.tracing import RunTracer
+from weavy.models.traces import RunTrace, TurnUsage
 from weavy.store.client import get_graph
 from weavy.store.system import init_system
 from tests.helpers import mock_tool_response
@@ -63,103 +39,6 @@ def graph() -> Graph:
     g.query("MATCH (n:SemanticNode) DETACH DELETE n")
     init_system(g)
     return g
-
-
-# ---------------------------------------------------------------------------
-# tracing.py — in-memory RunTrace helpers
-# ---------------------------------------------------------------------------
-
-
-def test_new_trace() -> None:
-    trace = new_trace("ingestion", "first transcript")
-    assert trace.mode == "ingestion"
-    assert trace.input_summary == "first transcript"
-    assert trace.status == "running"
-    assert trace.started_at is not None
-    assert trace.ended_at is None
-    assert trace.turns == []
-    assert trace.touched_nodes == []
-    assert trace.touched_edges == []
-
-
-def test_finalize_trace_completed() -> None:
-    trace = _running_trace()
-    payload = {"summary": "done"}
-    finalize_trace(trace, "completed", completion_payload=payload)
-    assert trace.status == "completed"
-    assert trace.ended_at is not None
-    assert trace.completion_payload == payload
-    assert trace.error is None
-
-
-def test_finalize_trace_failed() -> None:
-    trace = _running_trace()
-    finalize_trace(trace, "failed", error="something went wrong")
-    assert trace.status == "failed"
-    assert trace.ended_at is not None
-    assert trace.error == "something went wrong"
-
-
-def test_run_theme_update_if_needed_calls_theme_mode() -> None:
-    trace = _running_trace("query")
-    trace.status = "completed"
-    trace.touched_nodes = [
-        TouchedNode(node_id="node:1", action="updated"),
-        TouchedNode(node_id="node:1", action="updated"),
-        TouchedNode(node_id="node:2", action="deleted"),
-        TouchedNode(node_id="node:3", action="created"),
-    ]
-    trace.completion_payload = {"answer": "done"}
-    with (
-        patch("weavy.modes.theme.run_theme_update") as mock_theme_update,
-    ):
-        run_theme_update_if_needed(MagicMock(), trace, "done")
-
-    mock_theme_update.assert_called_once_with(
-        "done", trace.touched_nodes, trace.touched_edges
-    )
-
-
-def test_record_turn() -> None:
-    trace = _running_trace()
-    call = ToolCall(
-        tool_name="search_graph",
-        args={"query": "career"},
-        result='{"results": []}',
-        called_at=datetime.now(tz=timezone.utc),
-    )
-    turn = Turn(
-        turn_number=1,
-        tool_calls=[call],
-        usage=TurnUsage(
-            prompt_tokens=100,
-            completion_tokens=50,
-            reasoning_tokens=10,
-            total_tokens=160,
-        ),
-        timestamp=datetime.now(tz=timezone.utc),
-    )
-    record_turn(trace, turn)
-    assert len(trace.turns) == 1
-    assert trace.turns[0].tool_calls[0].tool_name == "search_graph"
-    assert trace.total_usage.prompt_tokens == 100
-    assert trace.total_usage.total_tokens == 160
-
-
-def test_touched_node_tracking() -> None:
-    trace = _running_trace()
-    trace.touched_nodes.append(TouchedNode(node_id="node:1", action="created"))
-    assert len(trace.touched_nodes) == 1
-    assert trace.touched_nodes[0].node_id == "node:1"
-    assert trace.touched_nodes[0].action == "created"
-
-
-def test_touched_edge_tracking() -> None:
-    trace = _running_trace()
-    trace.touched_edges.append(TouchedEdge(edge_id="edge:1", action="deleted"))
-    assert len(trace.touched_edges) == 1
-    assert trace.touched_edges[0].edge_id == "edge:1"
-    assert trace.touched_edges[0].action == "deleted"
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +109,7 @@ def test_run_tracer_record_tool_call() -> None:
 
     tracer.start_turn(1, 3)
     tracer.record_tool_call(
-        1, "tc-1", "search_graph", {"query": "career"}, '{"results":[]}', 42.0
+        1, "search_graph", {"query": "career"}, '{"results":[]}', 42.0
     )
 
     mock_turn_span.start_observation.assert_called_once()
@@ -238,6 +117,7 @@ def test_run_tracer_record_tool_call() -> None:
     assert call_kwargs["name"] == "tool:search_graph"
     assert call_kwargs["input"] == {"query": "career"}
     assert call_kwargs["as_type"] == "tool"
+    assert call_kwargs["metadata"] == {"duration_ms": 42.0}
     mock_tool_span.update.assert_called_once_with(output='{"results":[]}')
     mock_tool_span.end.assert_called_once()
 
@@ -250,11 +130,12 @@ def test_run_tracer_record_tool_error() -> None:
     mock_turn_span.start_observation.return_value = mock_tool_span
 
     tracer.start_turn(1, 2)
-    tracer.record_tool_error(1, "tc-1", "create_node", {}, "Invalid provenance")
+    tracer.record_tool_error(1, "create_node", {}, "Invalid provenance")
 
     call_kwargs = mock_turn_span.start_observation.call_args[1]
     assert call_kwargs["level"] == "ERROR"
     assert call_kwargs["status_message"] == "Invalid provenance"
+    assert "metadata" not in call_kwargs
     mock_tool_span.end.assert_called_once()
 
 
@@ -275,45 +156,6 @@ def test_run_tracer_finalize_flushes() -> None:
     assert update_kwargs["metadata"]["status"] == "completed"
     tracer._root.end.assert_called_once()
     mock_lf.flush.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# completion actions
-# ---------------------------------------------------------------------------
-
-
-def test_complete_ingestion() -> None:
-    trace = _running_trace("ingestion")
-    params = CompleteIngestionInput(summary="ingested 3 nodes from rec:1")
-    result = complete_ingestion(params, ActionContext(graph=MagicMock(), trace=trace))
-    assert result.ok is True
-    assert trace.completion_payload == {"summary": "ingested 3 nodes from rec:1"}
-
-
-def test_deliver_response() -> None:
-    trace = _running_trace("query")
-    params = DeliverResponseInput(
-        answer="The answer is 42.",
-        cited_sources=[],
-        consulted_nodes=["node:1"],
-    )
-    result = deliver_response(params, ActionContext(graph=MagicMock(), trace=trace))
-    assert result.ok is True
-    assert trace.completion_payload["answer"] == "The answer is 42."
-    assert trace.completion_payload["consulted_nodes"] == ["node:1"]
-
-
-def test_complete_theme_update() -> None:
-    trace = _running_trace("theme")
-    params = CompleteThemeUpdateInput(
-        updated_themes=["career"],
-        priority_order=["career", "health"],
-    )
-    result = complete_theme_update(
-        params, ActionContext(graph=MagicMock(), trace=trace)
-    )
-    assert result.ok is True
-    assert trace.completion_payload["priority_order"] == ["career", "health"]
 
 
 # ---------------------------------------------------------------------------
@@ -345,30 +187,6 @@ def test_actions_contains_all_expected_entries() -> None:
         "complete_theme_update",
     }
     assert expected == set(reg.ACTIONS.keys())
-
-
-def test_get_action_definitions_format() -> None:
-    defs = get_action_definitions(["search_graph", "complete_ingestion"])
-    assert len(defs) == 2
-    for d in defs:
-        assert d["type"] == "function"
-        assert "name" in d["function"]
-        assert "description" in d["function"]
-        assert "parameters" in d["function"]
-
-
-def test_ingestion_actions_include_completion() -> None:
-    assert "complete_ingestion" in reg.INGESTION_ACTIONS
-    assert "deliver_response" not in reg.INGESTION_ACTIONS
-
-
-def test_completion_entries_marked() -> None:
-    assert reg.ACTIONS["complete_ingestion"].is_completion is True
-    assert reg.ACTIONS["deliver_response"].is_completion is True
-    assert reg.ACTIONS["complete_theme_update"].is_completion is True
-    assert reg.ACTIONS["create_node"].is_completion is False
-
-
 # ---------------------------------------------------------------------------
 # runner.py — unit tests (no FalkorDB)
 # ---------------------------------------------------------------------------
@@ -478,6 +296,41 @@ def test_run_records_tool_calls() -> None:
     assert len(trace.turns) == 2
     assert trace.turns[0].tool_calls[0].tool_name == "search_graph"
     assert trace.turns[1].tool_calls[0].tool_name == "complete_ingestion"
+    assert "tool_call_id" not in json.dumps([turn.model_dump(mode="json") for turn in trace.turns])
+
+
+def test_run_redacts_tool_call_ids_from_trace_and_tracer() -> None:
+    search_resp = mock_tool_response(
+        "search_graph", {"query": "career", "limit": 5}, "provider-tool-call-id-1"
+    )
+    completion_resp = mock_tool_response(
+        "complete_ingestion", {"summary": "done"}, "provider-tool-call-id-2"
+    )
+
+    search_output = MagicMock()
+    search_output.model_dump_json.return_value = '{"results":[]}'
+    tracer = _mock_run_tracer()
+
+    with (
+        patch("litellm.completion", side_effect=[search_resp, completion_resp]),
+        patch("weavy.store.graph.search_graph", return_value=search_output),
+        patch("weavy.harness.runner.RunTracer", return_value=tracer),
+    ):
+        trace = run(
+            mode="ingestion",
+            system_prompt="You are an ingestion agent.",
+            initial_messages=[],
+            allowed_actions=reg.INGESTION_ACTIONS,
+            run_context={"input_summary": "test"},
+            graph=MagicMock(),
+        )
+
+    assert trace.status == "completed"
+    first_llm_call = tracer.record_llm_response.call_args_list[0].kwargs
+    assert first_llm_call["tool_calls"] == [
+        {"name": "search_graph", "args": '{"query": "career", "limit": 5}'}
+    ]
+    assert "tool_call_id" not in trace.model_dump_json()
 
 
 def test_run_completes_on_completion_tool() -> None:

@@ -1,10 +1,9 @@
 import re
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
-
-from weavy.timefmt import AgentTimestamp
 
 _INLINE_TS = re.compile(r"^\[(\d+):(\d{2})\]\s*(.+)")
 
@@ -78,7 +77,7 @@ def extract_transcript_span(
 class Transcript(BaseModel):
     id: str  # rec:N
     audio_path: str
-    timestamp: AgentTimestamp
+    timestamp: datetime
     segments: list[TranscriptSegment]
 
     @property
@@ -89,5 +88,5 @@ class Transcript(BaseModel):
 
 class ChatSession(BaseModel):
     id: str  # chat:N
-    timestamp: AgentTimestamp
+    timestamp: datetime
     messages: list[ChatMessage]

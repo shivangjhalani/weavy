@@ -78,7 +78,7 @@ def list_transcripts(
             """
             MATCH (t:Transcript)
             WHERE t.timestamp >= $start AND t.timestamp <= $end
-            RETURN t.id, t.audio_path, t.timestamp
+            RETURN t.id, t.timestamp
             ORDER BY t.timestamp DESC
             LIMIT $limit
             """,
@@ -90,14 +90,13 @@ def list_transcripts(
         )
     else:
         result = graph.query(
-            "MATCH (t:Transcript) RETURN t.id, t.audio_path, t.timestamp ORDER BY t.timestamp DESC LIMIT $limit",
+            "MATCH (t:Transcript) RETURN t.id, t.timestamp ORDER BY t.timestamp DESC LIMIT $limit",
             {"limit": params.limit},
         )
     transcripts = [
         TranscriptSummary(
             id=row[0],
-            audio_path=row[1],
-            timestamp=datetime.fromisoformat(row[2]),
+            timestamp=datetime.fromisoformat(row[1]),
         )
         for row in result.result_set
     ]

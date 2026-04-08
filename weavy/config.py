@@ -44,10 +44,6 @@ class Settings:
 
     GEMINI_MODEL: str = _getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
     REASONING_EFFORT: str = _getenv("REASONING_EFFORT", "medium")
-    GEMINI_EMBEDDING_MODEL: str = _getenv(
-        "GEMINI_EMBEDDING_MODEL",
-        "gemini/gemini-embedding-001",
-    )
 
     HOT_THEME_TOKEN_BUDGET: int = int(_getenv("HOT_THEME_TOKEN_BUDGET", "250"))
 

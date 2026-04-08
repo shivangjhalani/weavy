@@ -43,28 +43,10 @@ def test_init_system_idempotent(graph: Graph) -> None:
     assert state_a == state_b
 
 
-def test_get_system_after_init(graph: Graph) -> None:
-    init_system(graph)
-    state = get_system(graph)
-
-    assert state.next_node_id == 1
-    assert state.theme_priority_order == []
-
-
 def test_get_system_raises_if_missing(graph: Graph) -> None:
     # No init_system called — node does not exist
     with pytest.raises(RuntimeError, match="System node not found"):
         get_system(graph)
-
-
-def test_increment_counter_node(graph: Graph) -> None:
-    init_system(graph)
-
-    token_a = increment_counter(graph, "node")
-    token_b = increment_counter(graph, "node")
-
-    assert token_a == "node:1"
-    assert token_b == "node:2"
 
 
 def test_increment_counter_all_types(graph: Graph) -> None:

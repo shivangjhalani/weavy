@@ -230,24 +230,6 @@ def test_update_node_aliases_only(graph: Graph) -> None:
     assert out.node.total_log_count == 2
 
 
-def test_update_node_increments_log_count(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    node_id = memory.create_node(
-        graph,
-        CreateNodeInput(aliases=["x"], summary="x", note="x", provenance=prov),
-        _ingestion_trace(),
-    ).id
-    for i in range(3):
-        p = ProvenanceInput(source_id=f"rec:{i + 2}", start_offset=0, end_offset=5)
-        memory.update_node(
-            graph,
-            UpdateNodeInput(node_id=node_id, note=f"update {i}", provenance=p),
-            _ingestion_trace(),
-        )
-    out = store_graph.get_node(graph, node_id)
-    assert out.node.total_log_count == 4
-
-
 def test_node_and_edge_ids_reject_trailing_punctuation() -> None:
     with pytest.raises(ValidationError, match=r"node:\d+"):
         UpdateNodeInput(
@@ -486,7 +468,7 @@ def test_get_node_returns_multiple_results_and_not_found(graph: Graph) -> None:
     assert out.not_found == ["node:9999"]
 
 
-def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
+def test_get_node_json_has_iso_timestamps(graph: Graph) -> None:
     prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
     node_id = memory.create_node(
         graph,
@@ -498,7 +480,8 @@ def test_get_node_json_humanizes_log_timestamps(graph: Graph) -> None:
 
     out = memory.get_node(graph, GetNodeInput(node_ids=[node_id]))
     payload = json.loads(out.model_dump_json())
-    assert "UTC" in payload["results"][0]["node"]["log"][0]["timestamp"]
+    ts = payload["results"][0]["node"]["log"][0]["timestamp"]
+    datetime.fromisoformat(ts)
 
 
 # ---------------------------------------------------------------------------

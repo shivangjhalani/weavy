@@ -113,7 +113,7 @@ def update_node(
 def delete_node(
     graph: Graph, params: DeleteNodeInput, trace: RunTrace
 ) -> OperationResult:
-    result = store_graph.delete_node(graph, params.node_id, params.reason)
+    result = store_graph.delete_node(graph, params.node_id)
     trace.touched_nodes.append(TouchedNode(node_id=params.node_id, action="deleted"))
     return result
 
@@ -144,6 +144,6 @@ def update_edge(
 def delete_edge(
     graph: Graph, params: DeleteEdgeInput, trace: RunTrace
 ) -> OperationResult:
-    result = store_graph.delete_edge(graph, params.edge_id, params.reason)
+    result = store_graph.delete_edge(graph, params.edge_id)
     trace.touched_edges.append(TouchedEdge(edge_id=params.edge_id, action="deleted"))
     return result

@@ -1,11 +1,11 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
+from datetime import datetime
 
-from weavy.timefmt import AgentTimestamp
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class LogEntry(BaseModel):
     source_id: str  # rec:N or chat:N
-    timestamp: AgentTimestamp  # isoformat on storage, humanized on JSON output
+    timestamp: datetime
     start_offset: int  # seconds for rec, message_index for chat
     end_offset: int | None  # seconds for rec, null for chat
     note: str
@@ -34,7 +34,6 @@ class SemanticNode(BaseModel):
     id: str  # node:N
     aliases: list[str]  # aliases[0] is canonical name; min 1
     summary: str
-    embedding: list[float] | None = None
     total_log_count: int = 0
     log: list[LogEntry] = Field(default_factory=list)
 

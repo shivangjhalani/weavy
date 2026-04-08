@@ -235,27 +235,36 @@ class RunTracer:
             input_cost = input_cpt * usage.prompt_tokens
             output_cost = output_cpt * usage.completion_tokens
 
+            usage_info: dict[str, int] = {
+                "input": usage.prompt_tokens,
+                "output": usage.completion_tokens,
+                "total": usage.total_tokens,
+            }
+            if usage.cached_tokens:
+                usage_info["cache_read_input_tokens"] = usage.cached_tokens
+
             self._current_generation.update(
                 input=input_messages,
                 output=output,
-                usage_details={
-                    "input": usage.prompt_tokens,
-                    "output": usage.completion_tokens,
-                    "total": usage.total_tokens,
-                },
+                usage_details=usage_info,
                 cost_details={
                     "input": input_cost,
                     "output": output_cost,
                     "total": input_cost + output_cost,
                 },
-                metadata={"reasoning_tokens": usage.reasoning_tokens},
+                metadata={
+                    "reasoning_tokens": usage.reasoning_tokens,
+                    "cached_tokens": usage.cached_tokens,
+                },
             )
             self._current_generation.end()
             self._current_generation = None
 
         # Console output
+        cache_str = f" cached={usage.cached_tokens}" if usage.cached_tokens else ""
         token_info = (
-            f"prompt={usage.prompt_tokens} completion={usage.completion_tokens}"
+            f"prompt={usage.prompt_tokens}{cache_str}"
+            f" completion={usage.completion_tokens}"
             f" reasoning={usage.reasoning_tokens} total={usage.total_tokens}"
         )
         if reasoning_content:
@@ -271,7 +280,6 @@ class RunTracer:
     def record_tool_call(
         self,
         turn_number: int,
-        tool_call_id: str,
         name: str,
         args: dict[str, Any],
         result: str,
@@ -282,10 +290,7 @@ class RunTracer:
                 name=f"tool:{name}",
                 as_type="tool",
                 input=args,
-                metadata={
-                    "tool_call_id": tool_call_id,
-                    "duration_ms": round(duration_ms, 1),
-                },
+                metadata={"duration_ms": round(duration_ms, 1)},
             )
             span.update(output=result)
             span.end()
@@ -294,7 +299,6 @@ class RunTracer:
     def record_tool_error(
         self,
         turn_number: int,
-        tool_call_id: str | None,
         name: str,
         args: dict[str, Any],
         error: str,
@@ -306,7 +310,6 @@ class RunTracer:
                 input=args,
                 level="ERROR",
                 status_message=error,
-                metadata={"tool_call_id": tool_call_id},
             )
             span.end()
         print(f"[T{turn_number}] ✗ {name}: {error}")
@@ -336,14 +339,17 @@ class RunTracer:
         # Console summary
         status_icon = "✓" if trace.status == "completed" else "✗"
         prompt = trace.total_usage.prompt_tokens
+        cached = trace.total_usage.cached_tokens
         if context_limit:
             pct = prompt / context_limit * 100
             ctx_str = f"{prompt:,} / {context_limit:,} ({pct:.1f}%)"
         else:
             ctx_str = f"{prompt:,}"
+        cache_str = f" | cached: {cached:,}" if cached else ""
         print(
             f"\n[{status_icon}] {trace.status} | {total_turns} turn(s)"
-            f"\n    context: {ctx_str} | output: {trace.total_usage.completion_tokens:,}"
+            f"\n    context: {ctx_str}{cache_str}"
+            f" | output: {trace.total_usage.completion_tokens:,}"
             f" | reasoning: {trace.total_usage.reasoning_tokens:,}"
         )
         if delta:
@@ -375,6 +381,7 @@ def record_turn(trace: RunTrace, turn: Any) -> None:
     trace.total_usage.prompt_tokens += turn.usage.prompt_tokens
     trace.total_usage.completion_tokens += turn.usage.completion_tokens
     trace.total_usage.reasoning_tokens += turn.usage.reasoning_tokens
+    trace.total_usage.cached_tokens += turn.usage.cached_tokens
     trace.total_usage.total_tokens += turn.usage.total_tokens
 
 

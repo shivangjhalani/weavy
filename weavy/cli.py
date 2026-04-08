@@ -9,8 +9,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from weavy.models.canonical import (ChatMessage, ChatSession, Transcript,
-                                    TranscriptSegment, parse_transcript_text)
+from weavy.models.canonical import ChatMessage, ChatSession, Transcript, TranscriptSegment
 from weavy.models.tools import ListChatsInput, ListTranscriptsInput
 from weavy.store.canonical import (create_chat_session, create_transcript,
                                    list_chats, list_transcripts)
@@ -55,13 +54,6 @@ def _store_transcript(audio_path: str, segments: list[TranscriptSegment]) -> Tra
     return transcript
 
 
-def cmd_create_transcript(args: argparse.Namespace) -> None:
-    text_path = Path(args.text_file)
-    text = text_path.read_text()
-    transcript = _store_transcript(args.audio_path, parse_transcript_text(text))
-    print(f"Created transcript {transcript.id}")
-
-
 def cmd_list_transcripts(args: argparse.Namespace) -> None:
     graph = get_graph()
     output = list_transcripts(graph, ListTranscriptsInput(limit=args.limit))
@@ -69,7 +61,7 @@ def cmd_list_transcripts(args: argparse.Namespace) -> None:
         print("No transcripts found.")
         return
     for t in output.transcripts:
-        print(f"  {t.id}  {t.timestamp.isoformat()}  {t.audio_path}")
+        print(f"  {t.id}  {t.timestamp.isoformat()}")
 
 
 def cmd_create_chat(args: argparse.Namespace) -> None:
@@ -115,10 +107,8 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 def cmd_transcribe(args: argparse.Namespace) -> None:
     from weavy.transcribe import transcribe_audio
 
-    print(f"Transcribing {args.audio_path} ...")
     transcript = _store_transcript(args.audio_path, transcribe_audio(args.audio_path))
-    print(f"Stored as {transcript.id}\n")
-    print(transcript.text)
+    print(f"Created transcript {transcript.id}")
 
 
 def cmd_update_themes(args: argparse.Namespace) -> None:
@@ -156,16 +146,6 @@ def main() -> None:
 
     subparsers.add_parser("init-system", help="Initialise the System node in FalkorDB")
     subparsers.add_parser("status", help="Print current System node state")
-
-    p = subparsers.add_parser(
-        "create-transcript", help="Store a transcript from a text file"
-    )
-    p.add_argument(
-        "--audio-path", required=True, help="Path to the audio file artifact"
-    )
-    p.add_argument(
-        "--text-file", required=True, help="Path to the transcript text file"
-    )
 
     p = subparsers.add_parser("list-transcripts", help="List stored transcripts")
     p.add_argument("--limit", type=int, default=20)
@@ -206,7 +186,6 @@ def main() -> None:
     dispatch = {
         "init-system": cmd_init_system,
         "status": cmd_status,
-        "create-transcript": cmd_create_transcript,
         "list-transcripts": cmd_list_transcripts,
         "create-chat": cmd_create_chat,
         "list-chats": cmd_list_chats,

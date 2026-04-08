@@ -63,7 +63,6 @@ def _node_from_props(
         id=props["id"],
         aliases=props.get("aliases") or [],
         summary=props["summary"],
-        embedding=None,
         total_log_count=props.get("total_log_count", 0),
         log=log,
     )
@@ -169,7 +168,7 @@ def update_node(
     return OperationResult(ok=True, id=node_id)
 
 
-def delete_node(graph: Graph, node_id: str, _reason: str) -> OperationResult:
+def delete_node(graph: Graph, node_id: str) -> OperationResult:
     result = graph.query(
         "MATCH (n:SemanticNode {id: $id}) DETACH DELETE n RETURN count(n)",
         {"id": node_id},
@@ -223,7 +222,7 @@ def update_edge(graph: Graph, edge_id: str, new_label: str) -> OperationResult:
     return OperationResult(ok=True, id=edge_id)
 
 
-def delete_edge(graph: Graph, edge_id: str, _reason: str) -> OperationResult:
+def delete_edge(graph: Graph, edge_id: str) -> OperationResult:
     result = graph.query(
         "MATCH ()-[r:RELATES {id: $id}]->() DELETE r RETURN count(r)",
         {"id": edge_id},

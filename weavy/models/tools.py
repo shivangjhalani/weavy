@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field, StringConstraints
 from weavy.models.canonical import ChatSession
 from weavy.models.graph import ProvenanceInput, SemanticEdge, SemanticNode
 from weavy.models.themes import Theme, ThemeStatus
-from weavy.timefmt import AgentTimestamp
 
 # ---------------------------------------------------------------------------
 # Shared
@@ -212,8 +211,7 @@ class GetNodeOutput(BaseModel):
 
 class TranscriptSummary(BaseModel):
     id: str
-    timestamp: AgentTimestamp
-    audio_path: str
+    timestamp: datetime
 
 
 class ListTranscriptsOutput(BaseModel):
@@ -231,7 +229,7 @@ class GetTranscriptSpanOutput(BaseModel):
 
 class ChatSummary(BaseModel):
     id: str
-    timestamp: AgentTimestamp
+    timestamp: datetime
 
 
 class ListChatsOutput(BaseModel):

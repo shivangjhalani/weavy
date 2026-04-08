@@ -22,7 +22,7 @@ There is no web app or API layer in this repo right now. The main way to use the
 - Ingest a transcript into the semantic graph with provenance-aware node writes
 - Ask grounded questions against the graph
 - Persist chat sessions as canonical `ChatSession` records
-- Automatically run theme maintenance after ingestion and graph-mutating query sessions
+- Run theme maintenance manually when you want to refresh the theme map
 - Track agent runs and prompt versions in Langfuse
 - Run eval scenarios through Langfuse-backed datasets
 
@@ -31,10 +31,9 @@ There is no web app or API layer in this repo right now. The main way to use the
 - Weavy is synchronous and explicit. If a dependency is missing, it tends to fail loudly rather than silently degrading.
 - The graph is a derived memory layer, not the source of truth. Canonical transcripts and chats remain the primary records.
 - Query runs may mutate the graph if the agent decides your new statement should update memory.
-- Theme updates are automatic after completed runs that touched graph nodes.
+- Theme updates are manual via `uv run python -m weavy.cli update-themes`.
 - Long node histories are compacted by fence checks using the configured token budget.
 - Run traces are not written to disk. Langfuse is the trace store.
-- Prompt loading is Langfuse-backed. If Langfuse is not running or prompts are not seeded, ingestion/query/theme runs will fail.
 
 ## Prerequisites
 
@@ -115,20 +114,7 @@ The UI is available at:
 http://localhost:3100
 ```
 
-After Langfuse is up, create or copy your API keys into `.env`, then seed the prompts:
-
-```bash
-uv run python scripts/seed_prompts.py
-```
-
-What this does:
-
-- creates or updates the `weavy-ingestion` prompt
-- creates or updates the `weavy-query` prompt
-- creates or updates the `weavy-theme` prompt
-- tags them with the `production` label
-
-If prompts are missing, ingestion and query runs will fail when `fetch_prompt()` tries to load them.
+After Langfuse is up, create or copy your API keys into `.env`.
 
 ## Initialize The System Node
 
@@ -170,7 +156,7 @@ What happens:
 - the file is sent to Groq Whisper through LiteLLM
 - the response is normalized into transcript lines with inline `[M:SS]` markers
 - a canonical `Transcript` is created in FalkorDB
-- the CLI prints the new `rec:N` id and the transcript text
+- the CLI prints `Created transcript rec:N`
 
 Supported audio extensions:
 
@@ -193,12 +179,7 @@ Important behavior:
 Example output:
 
 ```text
-Transcribing /path/to/recording.m4a ...
-Stored as rec:1
-
-[0:00] I've been thinking about changing jobs a lot lately.
-[0:14] The mortgage scares me but I'm feeling trapped.
-[0:28] Had a great talk with my mentor yesterday about risk.
+Created transcript rec:1
 ```
 
 Whisper-related env vars:
@@ -209,22 +190,6 @@ WHISPER_LANGUAGE=
 WHISPER_PROMPT=
 WHISPER_TEMPERATURE=0
 ```
-
-### Option 2: Create A Transcript From Existing Text
-
-If you already have transcript text:
-
-```bash
-uv run python -m weavy.cli create-transcript \
-  --audio-path /path/to/original-audio.m4a \
-  --text-file /path/to/transcript.txt
-```
-
-Notes:
-
-- `--audio-path` is stored as metadata only
-- the text file must exist
-- the CLI creates a new `rec:N`
 
 ### List Stored Transcripts
 
@@ -255,9 +220,7 @@ What ingestion does:
 4. Lets the agent search, inspect, create, and update semantic graph entities
 5. Requires provenance on every node write
 6. Finalizes with `complete_ingestion`
-7. Runs post-trace hooks:
-   - fence checks on touched live nodes
-   - theme update pass
+7. Ends after `complete_ingestion`; theme maintenance is manual
 
 What the CLI prints:
 
@@ -287,7 +250,7 @@ What query mode does:
 3. Lets the agent search the graph, inspect neighborhoods, and retrieve transcript evidence
 4. Finishes via `deliver_response`
 5. Persists the conversation as a canonical `ChatSession`
-6. If graph nodes were touched, runs fence checks and a theme update
+6. Theme maintenance remains manual; run it separately if needed
 
 What the CLI prints:
 
@@ -342,12 +305,13 @@ uv run python -m weavy.cli list-chats
 uv run python -m weavy.cli list-chats --limit 10
 ```
 
-## Themes And Automatic Post-Run Behavior
+## Themes
 
-Theme maintenance is not a top-level CLI command. It runs automatically after:
+Theme maintenance is a top-level CLI command you run manually:
 
-- a completed ingestion that touched nodes
-- a completed query/chat run that touched nodes
+```bash
+uv run python -m weavy.cli update-themes
+```
 
 What the theme pass receives:
 
@@ -461,7 +425,6 @@ Commands:
 init-system
 status
 
-create-transcript --audio-path PATH --text-file PATH
 list-transcripts [--limit N]
 
 create-chat --messages-file PATH
@@ -489,7 +452,6 @@ Check:
 - Langfuse is running
 - `LANGFUSE_HOST` is correct
 - `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set
-- prompts were seeded with `uv run python scripts/seed_prompts.py`
 
 ### Transcription failures
 
@@ -530,7 +492,6 @@ devenv up
 docker compose -f docker-compose.langfuse.yml up -d
 
 devenv shell
-uv run python scripts/seed_prompts.py
 uv run python -m weavy.cli init-system
 uv run python -m weavy.cli transcribe /path/to/recording.m4a
 uv run python -m weavy.cli ingest rec:1

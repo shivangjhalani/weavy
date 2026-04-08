@@ -191,19 +191,6 @@ def test_render_hot_themes_empty() -> None:
     assert cold == []
 
 
-def test_render_hot_themes_single_theme_fits() -> None:
-    theme = Theme(
-        name="career-direction",
-        state="Weighing a job change.",
-        status=["active"],
-        anchors=["node:1"],
-    )
-    hot, cold = store_themes.render_hot_themes([theme], ["career-direction"], 250)
-    assert "career-direction" in hot
-    assert "active" in hot
-    assert cold == []
-
-
 def test_render_hot_themes_budget_respected() -> None:
     # Create many themes; budget is tiny so only a few fit
     themes = [

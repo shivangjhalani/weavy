@@ -244,6 +244,43 @@ THEME_ACTIONS = [
 ]
 
 
+def _slim_schema(schema: dict) -> dict:
+    """Compact a Pydantic JSON schema for LLM tool definitions.
+
+    Resolves $ref pointers inline, strips title fields, and simplifies
+    Optional (anyOf-with-null) wrappers so the schema is shorter in tokens.
+    """
+    defs = schema.get("$defs", {})
+
+    def _resolve(node: object) -> object:
+        if isinstance(node, list):
+            return [_resolve(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+
+        if "$ref" in node:
+            ref = node["$ref"].rsplit("/", 1)[-1]
+            return _resolve(dict(defs[ref])) if ref in defs else node
+
+        if "anyOf" in node:
+            non_null = [v for v in node["anyOf"] if v != {"type": "null"}]
+            if len(non_null) == 1 and len(non_null) < len(node["anyOf"]):
+                merged = _resolve(non_null[0])
+                if isinstance(merged, dict):
+                    for k, v in node.items():
+                        if k not in ("anyOf", "title"):
+                            merged.setdefault(k, v)
+                return merged
+
+        return {
+            k: _resolve(v)
+            for k, v in node.items()
+            if k not in ("title", "$defs")
+        }
+
+    return _resolve(schema)  # type: ignore[return-value]
+
+
 def get_action_definitions(names: list[str]) -> list[dict]:
     return [
         {
@@ -251,7 +288,9 @@ def get_action_definitions(names: list[str]) -> list[dict]:
             "function": {
                 "name": ACTIONS[name].name,
                 "description": ACTIONS[name].description,
-                "parameters": ACTIONS[name].input_model.model_json_schema(),
+                "parameters": _slim_schema(
+                    ACTIONS[name].input_model.model_json_schema()
+                ),
             },
         }
         for name in names

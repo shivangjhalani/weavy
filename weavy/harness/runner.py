@@ -2,6 +2,7 @@
 Agent harness runner — one loop engine shared by ingestion, query, and theme modes.
 """
 
+from copy import deepcopy
 import json
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -16,6 +17,57 @@ from weavy.harness.tracing import RunTracer, finalize_trace, new_trace, record_t
 from weavy.models.traces import RunTrace, ToolCall, Turn, TurnUsage
 
 _MAX_COMPLETION_NUDGES = 1
+
+
+def _with_cache_control(message: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a message with cache_control on the last content block.
+
+    Converts string content to the block-array format required by LiteLLM's
+    provider-agnostic cache_control support. LiteLLM translates this to each
+    provider's native caching API (Anthropic ephemeral blocks, Gemini context
+    caching, etc.) automatically.
+    """
+    msg = deepcopy(message)
+    content = msg.get("content")
+    if isinstance(content, str):
+        msg["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(content, list) and content:
+        last = dict(content[-1])
+        last["cache_control"] = {"type": "ephemeral"}
+        msg["content"] = list(content[:-1]) + [last]
+    return msg
+
+
+def _sanitize_message_for_trace(message: dict[str, Any]) -> dict[str, Any]:
+    sanitized = deepcopy(message)
+    sanitized.pop("tool_call_id", None)
+    tool_calls = sanitized.get("tool_calls")
+    if isinstance(tool_calls, list):
+        sanitized["tool_calls"] = [
+            {
+                **{k: v for k, v in tc.items() if k != "id"},
+                "function": {
+                    k: v
+                    for k, v in tc.get("function", {}).items()
+                    if k != "id"
+                },
+            }
+            for tc in tool_calls
+            if isinstance(tc, dict)
+        ]
+    return sanitized
+
+
+def _sanitize_messages_for_trace(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_sanitize_message_for_trace(m) for m in messages]
+
+
+def _conversation_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {"role": m["role"], "content": m["content"]}
+        for m in messages
+        if m["role"] in ("user", "assistant") and m.get("content")
+    ]
 
 
 @lru_cache(maxsize=None)
@@ -68,11 +120,18 @@ def _build_turn_usage(usage_raw: Any) -> TurnUsage:
     usage.prompt_tokens = getattr(usage_raw, "prompt_tokens", 0) or 0
     usage.completion_tokens = getattr(usage_raw, "completion_tokens", 0) or 0
     usage.total_tokens = getattr(usage_raw, "total_tokens", 0) or 0
-    details = getattr(usage_raw, "completion_tokens_details", None)
-    if isinstance(details, dict):
-        usage.reasoning_tokens = details.get("reasoning_tokens", 0) or 0
-    elif details is not None:
-        usage.reasoning_tokens = getattr(details, "reasoning_tokens", 0) or 0
+
+    prompt_details = getattr(usage_raw, "prompt_tokens_details", None)
+    if isinstance(prompt_details, dict):
+        usage.cached_tokens = prompt_details.get("cached_tokens", 0) or 0
+    elif prompt_details is not None:
+        usage.cached_tokens = getattr(prompt_details, "cached_tokens", 0) or 0
+
+    completion_details = getattr(usage_raw, "completion_tokens_details", None)
+    if isinstance(completion_details, dict):
+        usage.reasoning_tokens = completion_details.get("reasoning_tokens", 0) or 0
+    elif completion_details is not None:
+        usage.reasoning_tokens = getattr(completion_details, "reasoning_tokens", 0) or 0
     return usage
 
 
@@ -101,10 +160,18 @@ def run(
     )
     ctx = actions.ActionContext(graph=graph, trace=trace)
 
-    messages: list[dict[str, Any]] = [
+    # Build static prefix. Mark the last message for prompt caching on
+    # providers that support it alongside tool use (e.g. Anthropic).
+    # Gemini's CachedContent cannot coexist with system_instruction/tools
+    # in the same request, so we skip the annotation for Gemini models.
+    static_messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         *initial_messages,
     ]
+    _model = settings.GEMINI_MODEL
+    if not _model.startswith("gemini/"):
+        static_messages[-1] = _with_cache_control(static_messages[-1])
+    messages: list[dict[str, Any]] = static_messages
     tool_definitions = actions.get_action_definitions(allowed_actions)
     turn_number = 0
     completion_nudges = 0
@@ -114,7 +181,7 @@ def run(
     while True:
         turn_number += 1
         turn_ts = datetime.now(tz=timezone.utc)
-        input_messages_snapshot = [dict(m) for m in messages]
+        input_messages_snapshot = _sanitize_messages_for_trace(messages)
 
         tracer.start_turn(turn_number, len(messages))
 
@@ -139,7 +206,7 @@ def run(
 
         reasoning = getattr(message, "reasoning_content", None)
         serialized_tool_calls = [
-            {"id": tc.id, "name": tc.function.name, "args": tc.function.arguments}
+            {"name": tc.function.name, "args": tc.function.arguments}
             for tc in tool_calls
         ]
 
@@ -182,7 +249,7 @@ def run(
             err = "Model stopped without calling a completion tool."
             return _finalize_failed_run(trace, tracer, err, context_limit)
 
-        # Append assistant message with tool_calls to conversation history
+        # Append assistant message with tool_calls to conversation history.
         messages.append(
             {
                 "role": "assistant",
@@ -211,7 +278,7 @@ def run(
             entry = actions.ACTIONS.get(tool_name)
             if entry is None:
                 err = f"Unknown tool '{tool_name}'."
-                tracer.record_tool_error(turn_number, tool_call_id, tool_name, {}, err)
+                tracer.record_tool_error(turn_number, tool_name, {}, err)
                 _append_tool_call_error(turn, tool_name, {}, err, called_at)
                 return _finalize_failed_run(
                     trace, tracer, err, context_limit, turn=turn
@@ -224,9 +291,7 @@ def run(
                 params = entry.input_model(**args_dict)
             except Exception as e:
                 err = f"Invalid arguments for '{tool_name}': {e}"
-                tracer.record_tool_error(
-                    turn_number, tool_call_id, tool_name, args_dict, err
-                )
+                tracer.record_tool_error(turn_number, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
                 return _finalize_failed_run(
                     trace, tracer, err, context_limit, turn=turn
@@ -238,9 +303,7 @@ def run(
                 result = entry.fn(params, ctx)
             except Exception as e:
                 err = f"Tool '{tool_name}' raised: {e}"
-                tracer.record_tool_error(
-                    turn_number, tool_call_id, tool_name, args_dict, err
-                )
+                tracer.record_tool_error(turn_number, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
                 return _finalize_failed_run(
                     trace, tracer, err, context_limit, turn=turn
@@ -254,7 +317,7 @@ def run(
             )
 
             tracer.record_tool_call(
-                turn_number, tool_call_id, tool_name, args_dict, result_str, duration_ms
+                turn_number, tool_name, args_dict, result_str, duration_ms
             )
             messages.append(
                 {"role": "tool", "tool_call_id": tool_call_id, "content": result_str}
@@ -270,7 +333,7 @@ def run(
 
             if entry.is_completion:
                 record_turn(trace, turn)
-                trace.conversation = [m for m in messages if m["role"] != "system"]
+                trace.conversation = _conversation_messages(messages)
                 finalize_trace(trace, "completed")
                 tracer.end_turn(message.content)
                 tracer.finalize(trace, context_limit=context_limit)
