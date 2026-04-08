@@ -289,9 +289,7 @@ class RunTracer:
             )
             span.update(output=result)
             span.end()
-        print(
-            f"[T{turn_number}] ← {name}#{tool_call_id} ({duration_ms:.0f}ms): {_truncate(result, 80)}"
-        )
+        print(f"[T{turn_number}] ← {name} ({duration_ms:.0f}ms): {_truncate(result, 80)}")
 
     def record_tool_error(
         self,
@@ -311,8 +309,7 @@ class RunTracer:
                 metadata={"tool_call_id": tool_call_id},
             )
             span.end()
-        suffix = f"#{tool_call_id}" if tool_call_id else ""
-        print(f"[T{turn_number}] ✗ {name}{suffix}: {error}")
+        print(f"[T{turn_number}] ✗ {name}: {error}")
 
     # ---- Run completion ----
 

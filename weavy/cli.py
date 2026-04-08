@@ -9,22 +9,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from weavy.models.canonical import (
-    ChatMessage,
-    ChatSession,
-    Transcript,
-    TranscriptSegment,
-    parse_transcript_text,
-)
+from weavy.models.canonical import (ChatMessage, ChatSession, Transcript,
+                                    TranscriptSegment, parse_transcript_text)
 from weavy.models.tools import ListChatsInput, ListTranscriptsInput
-from weavy.store.canonical import (
-    create_chat_session,
-    create_transcript,
-    list_chats,
-    list_transcripts,
-)
+from weavy.store.canonical import (create_chat_session, create_transcript,
+                                   list_chats, list_transcripts)
 from weavy.store.client import get_graph
-from weavy.store.system import SystemState, get_system, increment_counter, init_system
+from weavy.store.system import (SystemState, get_system, increment_counter,
+                                init_system)
 
 
 def _print_system_state(header: str, state: SystemState) -> None:
