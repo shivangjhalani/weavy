@@ -93,8 +93,11 @@ def run(
     input_summary = run_context.get("input_summary", "")
     trace = new_trace(mode, input_summary)
     tracer = RunTracer(
-        trace.run_id, mode, input_summary,
-        session_id=session_id, parent_observation=parent_observation,
+        trace.run_id,
+        mode,
+        input_summary,
+        session_id=session_id,
+        parent_observation=parent_observation,
     )
     ctx = actions.ActionContext(graph=graph, trace=trace)
 
@@ -164,14 +167,16 @@ def run(
                 completion_nudges += 1
                 tracer.end_turn(message.content)
                 messages.append({"role": "assistant", "content": message.content})
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "You must call the completion tool to finish. "
-                        "Do not respond with plain text — call deliver_response "
-                        "(or the appropriate completion tool for this mode) now."
-                    ),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "You must call the completion tool to finish. "
+                            "Do not respond with plain text — call deliver_response "
+                            "(or the appropriate completion tool for this mode) now."
+                        ),
+                    }
+                )
                 continue
 
             err = "Model stopped without calling a completion tool."
@@ -208,7 +213,9 @@ def run(
                 err = f"Unknown tool '{tool_name}'."
                 tracer.record_tool_error(turn_number, tool_call_id, tool_name, {}, err)
                 _append_tool_call_error(turn, tool_name, {}, err, called_at)
-                return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
+                return _finalize_failed_run(
+                    trace, tracer, err, context_limit, turn=turn
+                )
 
             # Parse args
             args_dict: dict[str, Any] = {}
@@ -217,9 +224,13 @@ def run(
                 params = entry.input_model(**args_dict)
             except Exception as e:
                 err = f"Invalid arguments for '{tool_name}': {e}"
-                tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
+                tracer.record_tool_error(
+                    turn_number, tool_call_id, tool_name, args_dict, err
+                )
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
+                return _finalize_failed_run(
+                    trace, tracer, err, context_limit, turn=turn
+                )
 
             # Execute tool
             t0 = datetime.now(tz=timezone.utc).timestamp()
@@ -227,9 +238,13 @@ def run(
                 result = entry.fn(params, ctx)
             except Exception as e:
                 err = f"Tool '{tool_name}' raised: {e}"
-                tracer.record_tool_error(turn_number, tool_call_id, tool_name, args_dict, err)
+                tracer.record_tool_error(
+                    turn_number, tool_call_id, tool_name, args_dict, err
+                )
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
+                return _finalize_failed_run(
+                    trace, tracer, err, context_limit, turn=turn
+                )
 
             duration_ms = (datetime.now(tz=timezone.utc).timestamp() - t0) * 1000
             result_str = (

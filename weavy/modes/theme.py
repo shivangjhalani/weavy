@@ -36,7 +36,9 @@ def run_theme_update(
     all_themes = store_themes.list_all_themes(graph)
     system_state = store_system.get_system(graph)
 
-    theme_map_text = _render_full_theme_map(all_themes, system_state.theme_priority_order)
+    theme_map_text = _render_full_theme_map(
+        all_themes, system_state.theme_priority_order
+    )
     system_prompt = fetch_prompt("weavy-theme", {"theme_map": theme_map_text})
 
     touched_nodes_text = (

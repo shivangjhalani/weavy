@@ -22,7 +22,9 @@ def _validate_anchors(graph: Graph, anchor_ids: list[str]) -> None:
     found = {row[0] for row in result.result_set}
     missing = [a for a in anchor_ids if a not in found]
     if missing:
-        raise ValueError(f"Anchor target(s) not found as SemanticNode: {', '.join(missing)}")
+        raise ValueError(
+            f"Anchor target(s) not found as SemanticNode: {', '.join(missing)}"
+        )
 
 
 def create_theme(

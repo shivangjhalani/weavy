@@ -53,7 +53,9 @@ def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
     )
 
 
-def _node_from_props(props: dict[str, Any], log_tail: int | None = None) -> SemanticNode:
+def _node_from_props(
+    props: dict[str, Any], log_tail: int | None = None
+) -> SemanticNode:
     """Construct a SemanticNode from raw FalkorDB properties."""
     all_entries = [_deserialize_log_entry(s) for s in (props.get("log") or [])]
     log = all_entries[-log_tail:] if log_tail is not None else all_entries
@@ -65,6 +67,25 @@ def _node_from_props(props: dict[str, Any], log_tail: int | None = None) -> Sema
         total_log_count=props.get("total_log_count", 0),
         log=log,
     )
+
+
+def _build_outgoing_edges(
+    node_id: str,
+    raw_edges: list[list[str | None] | None],
+) -> list[SemanticEdge]:
+    edges: list[SemanticEdge] = []
+    for edge_data in raw_edges:
+        if edge_data is None:
+            continue
+        edge_id, label, to_id = edge_data
+        if edge_id is None or to_id is None:
+            continue
+        edges.append(
+            SemanticEdge(
+                id=edge_id, from_node_id=node_id, to_node_id=to_id, label=label
+            )
+        )
+    return edges
 
 
 def create_node(
@@ -247,39 +268,40 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
 
 
 def get_node(graph: Graph, node_id: str) -> GetNodeResult:
-    # Fetch node properties and outgoing edges in one query
+    nodes_by_id = get_nodes(graph, [node_id])
+    try:
+        return nodes_by_id[node_id]
+    except KeyError as exc:
+        raise ValueError(f"SemanticNode '{node_id}' not found.") from exc
+
+
+def get_nodes(graph: Graph, node_ids: list[str]) -> dict[str, GetNodeResult]:
+    if not node_ids:
+        return {}
+
+    # Fetch node properties and outgoing edges for all requested nodes in one query.
     result = graph.query(
         """
-        MATCH (n:SemanticNode {id: $id})
+        MATCH (n:SemanticNode)
+        WHERE n.id IN $ids
         OPTIONAL MATCH (n)-[r:RELATES]->(m:SemanticNode)
-        RETURN n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id] ELSE null END) AS edges
+        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id] ELSE null END) AS edges
+        RETURN n.id, n, edges
         """,
-        {"id": node_id},
+        {"ids": node_ids},
     )
-    if not result.result_set:
-        raise ValueError(f"SemanticNode '{node_id}' not found.")
 
-    row = result.result_set[0]
-    node_props = row[0].properties
-    raw_edges = row[1] or []
-
-    node = _node_from_props(node_props)
-
-    # Build edge list (skip null placeholders from COLLECT when no edges exist)
-    edges = []
-    for edge_data in raw_edges:
-        if edge_data is None:
-            continue
-        edge_id, label, to_id = edge_data
-        if edge_id is not None:
-            edges.append(SemanticEdge(id=edge_id, from_node_id=node_id, to_node_id=to_id, label=label))
-
-    return GetNodeResult(node=node, edges=edges)
+    nodes_by_id: dict[str, GetNodeResult] = {}
+    for found_node_id, raw_node, raw_edges in result.result_set:
+        node_props = raw_node.properties
+        nodes_by_id[found_node_id] = GetNodeResult(
+            node=_node_from_props(node_props),
+            edges=_build_outgoing_edges(found_node_id, raw_edges or []),
+        )
+    return nodes_by_id
 
 
-def get_node_neighborhood(
-    graph: Graph, node_id: str
-) -> GetNodeNeighborhoodOutput:
+def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutput:
     result = graph.query(
         """
         MATCH (n:SemanticNode {id: $id})

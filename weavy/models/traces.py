@@ -32,10 +32,10 @@ class TurnUsage(BaseModel):
 
 class Turn(BaseModel):
     turn_number: int
-    input_messages: list[dict[str, Any]] = []
+    input_messages: list[dict[str, Any]] = Field(default_factory=list)
     reasoning_content: str | None = None
     text_content: str | None = None
-    tool_calls: list[ToolCall] = []
+    tool_calls: list[ToolCall] = Field(default_factory=list)
     usage: TurnUsage = Field(default_factory=TurnUsage)
     timestamp: datetime
 
@@ -62,11 +62,11 @@ class RunTrace(BaseModel):
     started_at: datetime
     ended_at: datetime | None = None
     input_summary: str
-    turns: list[Turn] = []
+    turns: list[Turn] = Field(default_factory=list)
     total_usage: TurnUsage = Field(default_factory=TurnUsage)
     completion_payload: dict[str, Any] | None = None
-    touched_nodes: list[TouchedNode] = []
-    touched_edges: list[TouchedEdge] = []
+    touched_nodes: list[TouchedNode] = Field(default_factory=list)
+    touched_edges: list[TouchedEdge] = Field(default_factory=list)
     status: Literal["running", "completed", "failed"] = "running"
     error: str | None = None
     conversation: list[dict] | None = None

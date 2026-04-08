@@ -9,7 +9,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from weavy.models.canonical import ChatMessage, ChatSession, Transcript
+from weavy.models.canonical import (
+    ChatMessage,
+    ChatSession,
+    Transcript,
+    TranscriptSegment,
+    parse_transcript_text,
+)
 from weavy.models.tools import ListChatsInput, ListTranscriptsInput
 from weavy.store.canonical import (
     create_chat_session,
@@ -43,20 +49,25 @@ def cmd_status(_args: argparse.Namespace) -> None:
     _print_system_state("System state", state)
 
 
-def cmd_create_transcript(args: argparse.Namespace) -> None:
-    text_path = Path(args.text_file)
-    text = text_path.read_text()
+def _store_transcript(audio_path: str, segments: list[TranscriptSegment]) -> Transcript:
     graph = get_graph()
     get_system(graph)  # ensures System node exists
     rec_id = increment_counter(graph, "rec")
     transcript = Transcript(
         id=rec_id,
-        audio_path=args.audio_path,
+        audio_path=audio_path,
         timestamp=datetime.now(tz=timezone.utc),
-        text=text,
+        segments=segments,
     )
     create_transcript(graph, transcript)
-    print(f"Created transcript {rec_id}")
+    return transcript
+
+
+def cmd_create_transcript(args: argparse.Namespace) -> None:
+    text_path = Path(args.text_file)
+    text = text_path.read_text()
+    transcript = _store_transcript(args.audio_path, parse_transcript_text(text))
+    print(f"Created transcript {transcript.id}")
 
 
 def cmd_list_transcripts(args: argparse.Namespace) -> None:
@@ -113,21 +124,9 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     from weavy.transcribe import transcribe_audio
 
     print(f"Transcribing {args.audio_path} ...")
-    text = transcribe_audio(args.audio_path)
-
-    graph = get_graph()
-    get_system(graph)  # ensure System node exists
-    rec_id = increment_counter(graph, "rec")
-    transcript = Transcript(
-        id=rec_id,
-        audio_path=args.audio_path,
-        timestamp=datetime.now(tz=timezone.utc),
-        text=text,
-    )
-    create_transcript(graph, transcript)
-
-    print(f"Stored as {rec_id}\n")
-    print(text)
+    transcript = _store_transcript(args.audio_path, transcribe_audio(args.audio_path))
+    print(f"Stored as {transcript.id}\n")
+    print(transcript.text)
 
 
 def cmd_update_themes(args: argparse.Namespace) -> None:
@@ -144,6 +143,7 @@ def cmd_update_themes(args: argparse.Namespace) -> None:
 def cmd_query(args: argparse.Namespace) -> None:
     if args.question is None:
         from weavy.modes.query import run_chat_repl
+
         run_chat_repl()
         return
 
@@ -165,14 +165,22 @@ def main() -> None:
     subparsers.add_parser("init-system", help="Initialise the System node in FalkorDB")
     subparsers.add_parser("status", help="Print current System node state")
 
-    p = subparsers.add_parser("create-transcript", help="Store a transcript from a text file")
-    p.add_argument("--audio-path", required=True, help="Path to the audio file artifact")
-    p.add_argument("--text-file", required=True, help="Path to the transcript text file")
+    p = subparsers.add_parser(
+        "create-transcript", help="Store a transcript from a text file"
+    )
+    p.add_argument(
+        "--audio-path", required=True, help="Path to the audio file artifact"
+    )
+    p.add_argument(
+        "--text-file", required=True, help="Path to the transcript text file"
+    )
 
     p = subparsers.add_parser("list-transcripts", help="List stored transcripts")
     p.add_argument("--limit", type=int, default=20)
 
-    p = subparsers.add_parser("create-chat", help="Store a chat session from a JSON messages file")
+    p = subparsers.add_parser(
+        "create-chat", help="Store a chat session from a JSON messages file"
+    )
     p.add_argument(
         "--messages-file",
         required=True,
@@ -190,14 +198,16 @@ def main() -> None:
     p = subparsers.add_parser("ingest", help="Run ingestion for a stored transcript")
     p.add_argument("transcript_id", help="Transcript id to ingest (e.g. rec:1)")
 
-    subparsers.add_parser("update-themes", help="Manually run the theme agent over the current graph")
+    subparsers.add_parser(
+        "update-themes", help="Manually run the theme agent over the current graph"
+    )
 
     p = subparsers.add_parser("query", help="Ask a question against the memory graph")
     p.add_argument(
         "question",
         nargs="?",
         default=None,
-        help='Question to ask. Omit to enter interactive chat.',
+        help="Question to ask. Omit to enter interactive chat.",
     )
 
     args = parser.parse_args()

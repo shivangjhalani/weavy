@@ -6,7 +6,7 @@ and returns one *Output model. Pydantic validates both boundaries.
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 from weavy.models.canonical import ChatSession
 from weavy.models.graph import ProvenanceInput, SemanticEdge, SemanticNode
@@ -88,14 +88,17 @@ class GetNodeInput(BaseModel):
 
 
 class ListTranscriptsInput(BaseModel):
-    date_range: list[datetime] | None = None  # [start, end] — list avoids Gemini prefixItems rejection
+    date_range: list[datetime] | None = (
+        None  # [start, end] — list avoids Gemini prefixItems rejection
+    )
     limit: int = 20
 
 
 class TranscriptSpanRequest(BaseModel):
     transcript_id: str
-    start_offset: int
-    end_offset: int
+    start_offset: float
+    end_offset: float
+    context_secs: float = 0  # seconds of context to include around the span
 
 
 class GetTranscriptSpanInput(BaseModel):
@@ -103,7 +106,9 @@ class GetTranscriptSpanInput(BaseModel):
 
 
 class ListChatsInput(BaseModel):
-    date_range: list[datetime] | None = None  # [start, end] — list avoids Gemini prefixItems rejection
+    date_range: list[datetime] | None = (
+        None  # [start, end] — list avoids Gemini prefixItems rejection
+    )
     limit: int = 20
 
 
@@ -197,12 +202,12 @@ class GetNodeNeighborhoodOutput(BaseModel):
 
 class GetNodeResult(BaseModel):
     node: SemanticNode
-    edges: list[SemanticEdge] = []
+    edges: list[SemanticEdge] = Field(default_factory=list)
 
 
 class GetNodeOutput(BaseModel):
     results: list[GetNodeResult]
-    not_found: list[str] = []
+    not_found: list[str] = Field(default_factory=list)
 
 
 class TranscriptSummary(BaseModel):

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from falkordb import Graph
 
-from weavy.models.canonical import Transcript
+from weavy.models.canonical import Transcript, parse_transcript_text
 from weavy.store import canonical as store_canonical
 from weavy.store.client import get_graph
 from weavy.store.system import increment_counter, init_system
@@ -25,7 +25,12 @@ def reset_test_graph(*extra_labels: str) -> Graph:
 
 
 def store_test_transcript(graph: Any, text: str) -> str:
-    """Create a transcript record for integration-style tests."""
+    """Create a transcript record for integration-style tests.
+
+    Accepts [M:SS]-formatted text and converts it to segments, or wraps
+    plain text as a single segment.
+    """
+    segments = parse_transcript_text(text)
     rec_id = increment_counter(graph, "rec")
     store_canonical.create_transcript(
         graph,
@@ -33,7 +38,7 @@ def store_test_transcript(graph: Any, text: str) -> str:
             id=rec_id,
             audio_path="/dev/null",
             timestamp=datetime.now(tz=timezone.utc),
-            text=text,
+            segments=segments,
         ),
     )
     return rec_id

@@ -422,7 +422,9 @@ def seed() -> None:
         print("done")
 
     lf.flush()
-    print("\nAll prompts seeded. View them at: " + settings.LANGFUSE_HOST + " → Prompts")
+    print(
+        "\nAll prompts seeded. View them at: " + settings.LANGFUSE_HOST + " → Prompts"
+    )
 
 
 if __name__ == "__main__":

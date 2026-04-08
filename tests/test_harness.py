@@ -31,7 +31,14 @@ from weavy.models.tools import (
     CompleteThemeUpdateInput,
     DeliverResponseInput,
 )
-from weavy.models.traces import RunTrace, ToolCall, TouchedEdge, TouchedNode, Turn, TurnUsage
+from weavy.models.traces import (
+    RunTrace,
+    ToolCall,
+    TouchedEdge,
+    TouchedNode,
+    Turn,
+    TurnUsage,
+)
 from weavy.services.workflow import run_theme_update_if_needed
 from weavy.store.client import get_graph
 from weavy.store.system import init_system
@@ -108,7 +115,9 @@ def test_run_theme_update_if_needed_calls_theme_mode() -> None:
     ):
         run_theme_update_if_needed(MagicMock(), trace, "done")
 
-    mock_theme_update.assert_called_once_with("done", trace.touched_nodes, trace.touched_edges)
+    mock_theme_update.assert_called_once_with(
+        "done", trace.touched_nodes, trace.touched_edges
+    )
 
 
 def test_record_turn() -> None:
@@ -122,7 +131,12 @@ def test_record_turn() -> None:
     turn = Turn(
         turn_number=1,
         tool_calls=[call],
-        usage=TurnUsage(prompt_tokens=100, completion_tokens=50, reasoning_tokens=10, total_tokens=160),
+        usage=TurnUsage(
+            prompt_tokens=100,
+            completion_tokens=50,
+            reasoning_tokens=10,
+            total_tokens=160,
+        ),
         timestamp=datetime.now(tz=timezone.utc),
     )
     record_turn(trace, turn)
@@ -215,7 +229,9 @@ def test_run_tracer_record_tool_call() -> None:
     mock_turn_span.start_observation.return_value = mock_tool_span
 
     tracer.start_turn(1, 3)
-    tracer.record_tool_call(1, "tc-1", "search_graph", {"query": "career"}, '{"results":[]}', 42.0)
+    tracer.record_tool_call(
+        1, "tc-1", "search_graph", {"query": "career"}, '{"results":[]}', 42.0
+    )
 
     mock_turn_span.start_observation.assert_called_once()
     call_kwargs = mock_turn_span.start_observation.call_args[1]
@@ -245,7 +261,9 @@ def test_run_tracer_record_tool_error() -> None:
 def test_run_tracer_finalize_flushes() -> None:
     tracer, mock_lf = _make_tracer()
     trace = _running_trace()
-    trace.total_usage = TurnUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+    trace.total_usage = TurnUsage(
+        prompt_tokens=100, completion_tokens=50, total_tokens=150
+    )
     trace.status = "completed"
     trace.completion_payload = {"summary": "done"}
 
@@ -291,7 +309,9 @@ def test_complete_theme_update() -> None:
         updated_themes=["career"],
         priority_order=["career", "health"],
     )
-    result = complete_theme_update(params, ActionContext(graph=MagicMock(), trace=trace))
+    result = complete_theme_update(
+        params, ActionContext(graph=MagicMock(), trace=trace)
+    )
     assert result.ok is True
     assert trace.completion_payload["priority_order"] == ["career", "health"]
 
@@ -303,12 +323,26 @@ def test_complete_theme_update() -> None:
 
 def test_actions_contains_all_expected_entries() -> None:
     expected = {
-        "search_graph", "get_node", "get_node_neighborhood",
-        "list_transcripts", "get_transcript_span", "list_chats", "get_chat",
-        "get_theme", "create_node", "update_node", "delete_node",
-        "create_edge", "update_edge", "delete_edge",
-        "create_theme", "update_theme", "retire_theme",
-        "complete_ingestion", "deliver_response", "complete_theme_update",
+        "search_graph",
+        "get_node",
+        "get_node_neighborhood",
+        "list_transcripts",
+        "get_transcript_span",
+        "list_chats",
+        "get_chat",
+        "get_theme",
+        "create_node",
+        "update_node",
+        "delete_node",
+        "create_edge",
+        "update_edge",
+        "delete_edge",
+        "create_theme",
+        "update_theme",
+        "retire_theme",
+        "complete_ingestion",
+        "deliver_response",
+        "complete_theme_update",
     }
     assert expected == set(reg.ACTIONS.keys())
 
@@ -416,8 +450,12 @@ def test_run_fails_on_bad_args() -> None:
 
 
 def test_run_records_tool_calls() -> None:
-    search_resp = mock_tool_response("search_graph", {"query": "career", "limit": 5}, "tc-1")
-    completion_resp = mock_tool_response("complete_ingestion", {"summary": "done"}, "tc-2")
+    search_resp = mock_tool_response(
+        "search_graph", {"query": "career", "limit": 5}, "tc-1"
+    )
+    completion_resp = mock_tool_response(
+        "complete_ingestion", {"summary": "done"}, "tc-2"
+    )
 
     search_output = MagicMock()
     search_output.model_dump_json.return_value = '{"results":[]}'
@@ -483,7 +521,9 @@ def test_run_caches_context_limit_lookup() -> None:
     resp = mock_tool_response("complete_ingestion", {"summary": "all done"})
 
     with (
-        patch("litellm.get_model_info", return_value={"max_input_tokens": 123}) as mock_info,
+        patch(
+            "litellm.get_model_info", return_value={"max_input_tokens": 123}
+        ) as mock_info,
         patch("litellm.completion", return_value=resp),
         patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):

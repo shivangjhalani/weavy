@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 @pytest.fixture(autouse=True)
 def clear_langfuse_cache():
     try:
@@ -46,5 +47,7 @@ def mock_fetch_prompt():
         yield None
         return
 
-    with patch.object(workflow, "fetch_prompt", return_value="(mocked system prompt)") as mock:
+    with patch.object(
+        workflow, "fetch_prompt", return_value="(mocked system prompt)"
+    ) as mock:
         yield mock

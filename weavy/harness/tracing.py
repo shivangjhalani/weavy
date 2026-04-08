@@ -282,11 +282,16 @@ class RunTracer:
                 name=f"tool:{name}",
                 as_type="tool",
                 input=args,
-                metadata={"tool_call_id": tool_call_id, "duration_ms": round(duration_ms, 1)},
+                metadata={
+                    "tool_call_id": tool_call_id,
+                    "duration_ms": round(duration_ms, 1),
+                },
             )
             span.update(output=result)
             span.end()
-        print(f"[T{turn_number}] ← {name}#{tool_call_id} ({duration_ms:.0f}ms): {_truncate(result, 80)}")
+        print(
+            f"[T{turn_number}] ← {name}#{tool_call_id} ({duration_ms:.0f}ms): {_truncate(result, 80)}"
+        )
 
     def record_tool_error(
         self,

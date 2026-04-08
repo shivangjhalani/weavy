@@ -51,7 +51,9 @@ class Action:
     is_completion: bool = False
 
 
-def complete_ingestion(params: CompleteIngestionInput, ctx: ActionContext) -> OperationResult:
+def complete_ingestion(
+    params: CompleteIngestionInput, ctx: ActionContext
+) -> OperationResult:
     ctx.trace.completion_payload = {
         **params.model_dump(),
         **graph_delta(ctx.trace.touched_nodes, ctx.trace.touched_edges),
@@ -59,7 +61,9 @@ def complete_ingestion(params: CompleteIngestionInput, ctx: ActionContext) -> Op
     return OperationResult(ok=True)
 
 
-def deliver_response(params: DeliverResponseInput, ctx: ActionContext) -> OperationResult:
+def deliver_response(
+    params: DeliverResponseInput, ctx: ActionContext
+) -> OperationResult:
     ctx.trace.completion_payload = params.model_dump()
     return OperationResult(ok=True)
 
@@ -113,7 +117,9 @@ ACTIONS: dict[str, Action] = {
         "get_chat",
         "Get a chat session or slice.",
         GetChatInput,
-        lambda p, ctx: store_canonical.get_chat(ctx.graph, p.chat_id, p.start_index, p.end_index),
+        lambda p, ctx: store_canonical.get_chat(
+            ctx.graph, p.chat_id, p.start_index, p.end_index
+        ),
     ),
     "get_theme": Action(
         "get_theme",
@@ -161,13 +167,17 @@ ACTIONS: dict[str, Action] = {
         "create_theme",
         "Create a theme.",
         CreateThemeInput,
-        lambda p, ctx: store_themes.create_theme(ctx.graph, p.name, p.state, p.anchors, p.status),
+        lambda p, ctx: store_themes.create_theme(
+            ctx.graph, p.name, p.state, p.anchors, p.status
+        ),
     ),
     "update_theme": Action(
         "update_theme",
         "Update a theme.",
         UpdateThemeInput,
-        lambda p, ctx: store_themes.update_theme(ctx.graph, p.name, p.new_state, p.new_anchors, p.new_status),
+        lambda p, ctx: store_themes.update_theme(
+            ctx.graph, p.name, p.new_state, p.new_anchors, p.new_status
+        ),
     ),
     "retire_theme": Action(
         "retire_theme",
@@ -219,7 +229,9 @@ GRAPH_WRITE_ACTIONS = [
 
 INGESTION_ACTIONS = GRAPH_READ_ACTIONS + GRAPH_WRITE_ACTIONS + ["complete_ingestion"]
 # Query mode includes reads, writes (conversational graph mutation), and theme lookup
-QUERY_ACTIONS = GRAPH_READ_ACTIONS + GRAPH_WRITE_ACTIONS + ["get_theme", "deliver_response"]
+QUERY_ACTIONS = (
+    GRAPH_READ_ACTIONS + GRAPH_WRITE_ACTIONS + ["get_theme", "deliver_response"]
+)
 THEME_ACTIONS = [
     "search_graph",
     "get_node",

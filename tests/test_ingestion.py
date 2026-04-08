@@ -27,6 +27,8 @@ SAMPLE_TRANSCRIPT = (
 @pytest.fixture
 def graph() -> Graph:
     return reset_test_graph("Theme", "Transcript")
+
+
 # ---------------------------------------------------------------------------
 # run_ingestion
 # ---------------------------------------------------------------------------
@@ -47,7 +49,9 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
 
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
     create_resp = mock_tool_response("create_node", create_args, "tc-1", usage=usage)
-    done_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage)
+    done_resp = mock_tool_response(
+        "complete_ingestion", completion_args, "tc-2", usage=usage
+    )
 
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
@@ -64,7 +68,9 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
     node_id = trace.touched_nodes[0].node_id
 
     # Node should exist in DB
-    result = graph.query("MATCH (n:SemanticNode {id: $id}) RETURN n.id", {"id": node_id})
+    result = graph.query(
+        "MATCH (n:SemanticNode {id: $id}) RETURN n.id", {"id": node_id}
+    )
     assert result.result_set
 
     # Theme pass should have been triggered with the completion summary
@@ -78,7 +84,9 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
 
     node_id = increment_counter(graph, "node")
     prov = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=10)
-    store_graph.create_node(graph, ["career anxiety"], "Initial state.", "first entry", prov, node_id)
+    store_graph.create_node(
+        graph, ["career anxiety"], "Initial state.", "first entry", prov, node_id
+    )
 
     prov2 = ProvenanceInput(source_id=rec_id, start_offset=14, end_offset=28)
     update_args = {
@@ -91,7 +99,9 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
 
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
     update_resp = mock_tool_response("update_node", update_args, "tc-1", usage=usage)
-    done_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage)
+    done_resp = mock_tool_response(
+        "complete_ingestion", completion_args, "tc-2", usage=usage
+    )
 
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
@@ -140,7 +150,9 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
     assert trace.touched_nodes == []
 
 
-def test_ingest_invalid_node_id_format_fails_at_argument_validation(graph: Graph) -> None:
+def test_ingest_invalid_node_id_format_fails_at_argument_validation(
+    graph: Graph,
+) -> None:
     rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
 
     bad_resp = mock_tool_response(
@@ -148,7 +160,9 @@ def test_ingest_invalid_node_id_format_fails_at_argument_validation(graph: Graph
         {
             "node_id": "node:4,",
             "note": "Malformed id copied from prose.",
-            "provenance": ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=14).model_dump(),
+            "provenance": ProvenanceInput(
+                source_id=rec_id, start_offset=0, end_offset=14
+            ).model_dump(),
         },
         usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
     )
@@ -234,7 +248,9 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
     rec_id = store_test_transcript(graph, SAMPLE_TRANSCRIPT)
     node_id = increment_counter(graph, "node")
     prov = ProvenanceInput(source_id=rec_id, start_offset=0, end_offset=10)
-    store_graph.create_node(graph, ["job change"], "Career decision node.", "init", prov, node_id)
+    store_graph.create_node(
+        graph, ["job change"], "Career decision node.", "init", prov, node_id
+    )
 
     create_theme_args = {
         "name": "career-direction",
@@ -248,8 +264,12 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
     }
 
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-    create_resp = mock_tool_response("create_theme", create_theme_args, "tc-1", usage=usage)
-    done_resp = mock_tool_response("complete_theme_update", completion_args, "tc-2", usage=usage)
+    create_resp = mock_tool_response(
+        "create_theme", create_theme_args, "tc-1", usage=usage
+    )
+    done_resp = mock_tool_response(
+        "complete_theme_update", completion_args, "tc-2", usage=usage
+    )
 
     with (
         patch("weavy.modes.theme.get_graph", return_value=graph),
@@ -312,12 +332,18 @@ def test_ingestion_sets_flag(graph: Graph) -> None:
     with (
         patch("weavy.modes.ingestion.get_graph", return_value=graph),
         patch("weavy.modes.theme.run_theme_update"),
-        patch("litellm.completion", side_effect=[
-            mock_tool_response("create_node", create_args, "tc-1", usage=usage),
-            mock_tool_response("complete_ingestion", completion_args, "tc-2", usage=usage),
-        ]),
+        patch(
+            "litellm.completion",
+            side_effect=[
+                mock_tool_response("create_node", create_args, "tc-1", usage=usage),
+                mock_tool_response(
+                    "complete_ingestion", completion_args, "tc-2", usage=usage
+                ),
+            ],
+        ),
     ):
         from weavy.modes.ingestion import run_ingestion
+
         trace = run_ingestion(rec_id)
 
     assert trace.status == "completed"
@@ -340,6 +366,7 @@ def test_failed_ingestion_resets_flag(graph: Graph) -> None:
         patch("litellm.completion", return_value=bad_resp),
     ):
         from weavy.modes.ingestion import run_ingestion
+
         trace = run_ingestion(rec_id)
 
     assert trace.status == "failed"
@@ -352,7 +379,6 @@ def test_reingest_blocked_when_flag_is_set(graph: Graph) -> None:
     store_canonical.set_ingestion_state(graph, rec_id, "completed")
     with patch("weavy.modes.ingestion.get_graph", return_value=graph):
         from weavy.modes.ingestion import run_ingestion
+
         with pytest.raises(ValueError, match="already completed"):
             run_ingestion(rec_id)
-
-

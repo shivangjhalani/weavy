@@ -1,6 +1,4 @@
-from datetime import datetime
-
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from weavy.timefmt import AgentTimestamp
 
@@ -38,7 +36,7 @@ class SemanticNode(BaseModel):
     summary: str
     embedding: list[float] | None = None
     total_log_count: int = 0
-    log: list[LogEntry] = []
+    log: list[LogEntry] = Field(default_factory=list)
 
     @field_validator("aliases")
     @classmethod

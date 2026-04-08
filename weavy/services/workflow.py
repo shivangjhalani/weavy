@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from falkordb import Graph
@@ -13,9 +14,14 @@ from weavy.store.themes import build_themes_context
 from weavy.timefmt import format_agent_timestamp
 
 
-def fetch_prompt(name: str, variables: dict[str, object]) -> str:
+@lru_cache(maxsize=None)
+def _load_prompt_template(name: str) -> str:
     prompt_path = Path(__file__).parent.parent / "prompts" / f"{name}.txt"
-    template = prompt_path.read_text()
+    return prompt_path.read_text()
+
+
+def fetch_prompt(name: str, variables: dict[str, object]) -> str:
+    template = _load_prompt_template(name)
     for key, value in variables.items():
         template = template.replace("{{" + key + "}}", str(value))
     return template
@@ -50,7 +56,9 @@ def conversation_to_chat_messages(conversation: list[dict]) -> list[ChatMessage]
     ]
 
 
-def run_theme_update_if_needed(graph: Graph, trace: RunTrace, completion_text: str) -> None:
+def run_theme_update_if_needed(
+    graph: Graph, trace: RunTrace, completion_text: str
+) -> None:
     if trace.status != "completed":
         return
     if not trace.touched_nodes and not trace.touched_edges:

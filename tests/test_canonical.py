@@ -10,7 +10,12 @@ from datetime import datetime, timezone
 import pytest
 from falkordb import Graph
 
-from weavy.models.canonical import ChatMessage, ChatSession, Transcript
+from weavy.models.canonical import (
+    ChatMessage,
+    ChatSession,
+    Transcript,
+    TranscriptSegment,
+)
 from weavy.models.tools import ListChatsInput, ListTranscriptsInput
 from weavy.store.canonical import (
     create_chat_session,
@@ -27,10 +32,23 @@ from weavy.store.system import increment_counter, init_system
 
 TEST_GRAPH = "weavy_test"
 
-TRANSCRIPT_TEXT = """\
-[0:00] So I've been thinking about this career decision a lot lately.
-[0:14] I know I should probably just quit but the mortgage keeps stopping me.
-[0:28] And honestly I think I'm scared of what happens if I actually do it."""
+TRANSCRIPT_SEGMENTS = [
+    TranscriptSegment(
+        start=0.0,
+        end=14.0,
+        text="So I've been thinking about this career decision a lot lately.",
+    ),
+    TranscriptSegment(
+        start=14.0,
+        end=28.0,
+        text="I know I should probably just quit but the mortgage keeps stopping me.",
+    ),
+    TranscriptSegment(
+        start=28.0,
+        end=40.0,
+        text="And honestly I think I'm scared of what happens if I actually do it.",
+    ),
+]
 
 
 @pytest.fixture
@@ -46,13 +64,15 @@ def graph() -> Graph:
     g.query("MATCH (c:ChatSession) DELETE c")
 
 
-def _make_transcript(graph: Graph, text: str = TRANSCRIPT_TEXT) -> Transcript:
+def _make_transcript(
+    graph: Graph, segments: list[TranscriptSegment] = TRANSCRIPT_SEGMENTS
+) -> Transcript:
     rec_id = increment_counter(graph, "rec")
     t = Transcript(
         id=rec_id,
         audio_path=f"/audio/{rec_id}.m4a",
         timestamp=datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
-        text=text,
+        segments=segments,
     )
     create_transcript(graph, t)
     return t
@@ -87,7 +107,9 @@ def test_create_and_get_transcript(graph: Graph) -> None:
     assert fetched.id == t.id
     assert fetched.audio_path == t.audio_path
     assert fetched.timestamp == t.timestamp
-    assert fetched.text == t.text
+    assert fetched.segments == t.segments
+    assert "[0:00]" in fetched.text
+    assert "[0:14]" in fetched.text
 
 
 def test_get_transcript_not_found(graph: Graph) -> None:
@@ -116,7 +138,9 @@ def test_list_transcripts_date_range(graph: Graph) -> None:
     # Range that excludes the transcript
     past_start = datetime(2023, 1, 1, tzinfo=timezone.utc)
     past_end = datetime(2023, 12, 31, tzinfo=timezone.utc)
-    output_empty = list_transcripts(graph, ListTranscriptsInput(date_range=[past_start, past_end]))
+    output_empty = list_transcripts(
+        graph, ListTranscriptsInput(date_range=[past_start, past_end])
+    )
     assert all(ts.id != t.id for ts in output_empty.transcripts)
 
 
@@ -136,13 +160,13 @@ def test_list_transcripts_json_humanizes_timestamp(graph: Graph) -> None:
     assert "2024" in payload["transcripts"][0]["timestamp"]
 
 
-def test_get_transcript_span_with_timestamps(graph: Graph) -> None:
+def test_get_transcript_span_exact(graph: Graph) -> None:
     t = _make_transcript(graph)
     result = get_transcript_span(graph, t.id, start_offset=14, end_offset=27)
 
-    assert "[0:14]" in result.text
-    assert "[0:00]" not in result.text
-    assert "[0:28]" not in result.text
+    assert "mortgage" in result.text
+    assert "career decision" not in result.text
+    assert "scared" not in result.text
     assert result.transcript_id == t.id
 
 
@@ -150,17 +174,21 @@ def test_get_transcript_span_full_range(graph: Graph) -> None:
     t = _make_transcript(graph)
     result = get_transcript_span(graph, t.id, start_offset=0, end_offset=3600)
 
-    assert "[0:00]" in result.text
-    assert "[0:14]" in result.text
-    assert "[0:28]" in result.text
+    assert "career decision" in result.text
+    assert "mortgage" in result.text
+    assert "scared" in result.text
 
 
-def test_get_transcript_span_no_timestamps(graph: Graph) -> None:
-    bare_text = "This is a transcript with no inline timestamps."
-    t = _make_transcript(graph, text=bare_text)
-    result = get_transcript_span(graph, t.id, start_offset=0, end_offset=60)
+def test_get_transcript_span_with_context(graph: Graph) -> None:
+    t = _make_transcript(graph)
+    # Request only the middle segment, but add 15s of context on each side
+    result = get_transcript_span(
+        graph, t.id, start_offset=14, end_offset=27, context_secs=15
+    )
 
-    assert result.text == bare_text
+    assert "career decision" in result.text  # segment before, pulled in by context
+    assert "mortgage" in result.text
+    assert "scared" in result.text  # segment after, pulled in by context
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from falkordb import Graph
 
+from weavy.models.canonical import extract_transcript_span
 from weavy.models.graph import ProvenanceInput
 from weavy.models.tools import (
     CreateEdgeInput,
@@ -24,13 +25,11 @@ from weavy.store import system as store_system
 
 
 def get_node(graph: Graph, params: GetNodeInput) -> GetNodeOutput:
-    results = []
-    not_found: list[str] = []
-    for node_id in params.node_ids:
-        try:
-            results.append(store_graph.get_node(graph, node_id))
-        except ValueError:
-            not_found.append(node_id)
+    nodes_by_id = store_graph.get_nodes(graph, params.node_ids)
+    results = [
+        nodes_by_id[node_id] for node_id in params.node_ids if node_id in nodes_by_id
+    ]
+    not_found = [node_id for node_id in params.node_ids if node_id not in nodes_by_id]
     return GetNodeOutput(results=results, not_found=not_found)
 
 
@@ -46,7 +45,12 @@ def get_transcript_span(
     for tid, spans in by_id.items():
         transcript = store_canonical.get_transcript(graph, tid)
         for span in spans:
-            text = store_canonical._extract_span(transcript.text, span.start_offset, span.end_offset)
+            text = extract_transcript_span(
+                transcript.segments,
+                span.start_offset,
+                span.end_offset,
+                span.context_secs,
+            )
             results.append(GetTranscriptSpanResult(transcript_id=tid, text=text))
     return GetTranscriptSpanOutput(results=results)
 
@@ -73,7 +77,9 @@ def _validate_node_provenance(provenance: ProvenanceInput | None, mode: str) -> 
     raise ValueError("Theme mode cannot write semantic nodes.")
 
 
-def create_node(graph: Graph, params: CreateNodeInput, trace: RunTrace) -> OperationResult:
+def create_node(
+    graph: Graph, params: CreateNodeInput, trace: RunTrace
+) -> OperationResult:
     _validate_node_provenance(params.provenance, trace.mode)
     node_id = store_system.increment_counter(graph, "node")
     result = store_graph.create_node(
@@ -88,7 +94,9 @@ def create_node(graph: Graph, params: CreateNodeInput, trace: RunTrace) -> Opera
     return result
 
 
-def update_node(graph: Graph, params: UpdateNodeInput, trace: RunTrace) -> OperationResult:
+def update_node(
+    graph: Graph, params: UpdateNodeInput, trace: RunTrace
+) -> OperationResult:
     _validate_node_provenance(params.provenance, trace.mode)
     result = store_graph.update_node(
         graph,
@@ -102,13 +110,17 @@ def update_node(graph: Graph, params: UpdateNodeInput, trace: RunTrace) -> Opera
     return result
 
 
-def delete_node(graph: Graph, params: DeleteNodeInput, trace: RunTrace) -> OperationResult:
+def delete_node(
+    graph: Graph, params: DeleteNodeInput, trace: RunTrace
+) -> OperationResult:
     result = store_graph.delete_node(graph, params.node_id, params.reason)
     trace.touched_nodes.append(TouchedNode(node_id=params.node_id, action="deleted"))
     return result
 
 
-def create_edge(graph: Graph, params: CreateEdgeInput, trace: RunTrace) -> OperationResult:
+def create_edge(
+    graph: Graph, params: CreateEdgeInput, trace: RunTrace
+) -> OperationResult:
     edge_id = store_system.increment_counter(graph, "edge")
     result = store_graph.create_edge(
         graph,
@@ -121,13 +133,17 @@ def create_edge(graph: Graph, params: CreateEdgeInput, trace: RunTrace) -> Opera
     return result
 
 
-def update_edge(graph: Graph, params: UpdateEdgeInput, trace: RunTrace) -> OperationResult:
+def update_edge(
+    graph: Graph, params: UpdateEdgeInput, trace: RunTrace
+) -> OperationResult:
     result = store_graph.update_edge(graph, params.edge_id, params.new_label)
     trace.touched_edges.append(TouchedEdge(edge_id=params.edge_id, action="updated"))
     return result
 
 
-def delete_edge(graph: Graph, params: DeleteEdgeInput, trace: RunTrace) -> OperationResult:
+def delete_edge(
+    graph: Graph, params: DeleteEdgeInput, trace: RunTrace
+) -> OperationResult:
     result = store_graph.delete_edge(graph, params.edge_id, params.reason)
     trace.touched_edges.append(TouchedEdge(edge_id=params.edge_id, action="deleted"))
     return result

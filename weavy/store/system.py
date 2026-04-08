@@ -71,9 +71,7 @@ def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None
         {"order": priority_order},
     )
     if not result.result_set:
-        raise RuntimeError(
-            "System node not found. Cannot update theme_priority_order."
-        )
+        raise RuntimeError("System node not found. Cannot update theme_priority_order.")
 
 
 def increment_counter(graph: Graph, counter: CounterName) -> str:

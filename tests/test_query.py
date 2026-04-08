@@ -22,6 +22,8 @@ SAMPLE_TRANSCRIPT = (
 @pytest.fixture
 def graph() -> Graph:
     return reset_test_graph("Theme", "Transcript", "ChatSession")
+
+
 # ---------------------------------------------------------------------------
 # run_query
 # ---------------------------------------------------------------------------
@@ -48,7 +50,10 @@ def test_query_delivers_response(graph: Graph) -> None:
         trace = run_query("What have I been thinking about?")
 
     assert trace.status == "completed"
-    assert trace.completion_payload["answer"] == "You have been thinking about changing jobs."
+    assert (
+        trace.completion_payload["answer"]
+        == "You have been thinking about changing jobs."
+    )
     mock_theme.assert_not_called()  # no graph writes → no theme pass
 
 
@@ -109,7 +114,9 @@ def test_query_with_graph_write_triggers_theme(graph: Graph) -> None:
     }
     deliver_args = {
         "answer": "Noted — updated graph with your correction.",
-        "cited_sources": [{"source_id": fixed_chat_id, "start_offset": 0, "end_offset": None}],
+        "cited_sources": [
+            {"source_id": fixed_chat_id, "start_offset": 0, "end_offset": None}
+        ],
         "consulted_nodes": [],
     }
 
