@@ -1,6 +1,5 @@
 """
 System node — singleton node in FalkorDB that holds global counters and config.
-This is the only store module fully implemented in Phase 1.
 """
 
 import json
@@ -9,23 +8,23 @@ from typing import Any, Literal
 from falkordb import Graph
 from pydantic import BaseModel, field_validator
 
-CounterName = Literal["node", "edge", "rec", "chat"]
+CounterName = Literal["node", "edge", "session"]
 
 _COUNTER_FIELD: dict[str, str] = {
     "node": "next_node_id",
     "edge": "next_edge_id",
-    "rec": "next_rec_id",
-    "chat": "next_chat_id",
+    "session": "next_session_id",
 }
 
 
 class SystemState(BaseModel):
     next_node_id: int
     next_edge_id: int
-    next_rec_id: int
-    next_chat_id: int
+    next_session_id: int
     theme_priority_order: list[str]
     hot_theme_token_budget: int
+    last_theme_run_at: str
+    preface: str | None = None  # what this graph is about
 
     @field_validator("theme_priority_order", mode="before")
     @classmethod
@@ -35,8 +34,12 @@ class SystemState(BaseModel):
         return list(v) if v else []
 
 
-def init_system(graph: Graph) -> SystemState:
-    """Create the System node if it does not exist; return current state."""
+def init_system(graph: Graph, embedding_dim: int | None = None) -> SystemState:
+    """Create the System node if it does not exist; return current state.
+
+    When *embedding_dim* is provided, a vector index is created (or verified)
+    on SemanticNode.embedding for hybrid search.
+    """
     result = graph.query(
         """
         MERGE (s:System)
@@ -44,14 +47,31 @@ def init_system(graph: Graph) -> SystemState:
             s.name = 'System',
             s.next_node_id = 1,
             s.next_edge_id = 1,
-            s.next_rec_id  = 1,
-            s.next_chat_id = 1,
+            s.next_session_id = 1,
             s.theme_priority_order  = [],
-            s.hot_theme_token_budget = 250
+            s.hot_theme_token_budget = 2000,
+            s.last_theme_run_at = '1970-01-01T00:00:00+00:00'
         RETURN s
         """
     )
+
+    if embedding_dim is not None:
+        _ensure_vector_index(graph, embedding_dim)
+
     return SystemState(**result.result_set[0][0].properties)
+
+
+def _ensure_vector_index(graph: Graph, dim: int) -> None:
+    try:
+        graph.query(
+            f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
+            f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}"
+        )
+    except Exception as e:
+        msg = str(e).lower()
+        if "already" in msg or "exists" in msg or "equivalent" in msg:
+            return
+        raise
 
 
 def get_system(graph: Graph) -> SystemState:
@@ -64,14 +84,34 @@ def get_system(graph: Graph) -> SystemState:
     return SystemState(**result.result_set[0][0].properties)
 
 
-def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None:
-    """Persist a new theme_priority_order on the System node."""
+def _update_system(
+    graph: Graph, set_clause: str, params: dict, field_name: str
+) -> None:
     result = graph.query(
-        "MATCH (s:System) SET s.theme_priority_order = $order RETURN s",
-        {"order": priority_order},
+        f"MATCH (s:System) SET {set_clause} RETURN s",
+        params,
     )
     if not result.result_set:
-        raise RuntimeError("System node not found. Cannot update theme_priority_order.")
+        raise RuntimeError(f"System node not found. Cannot update {field_name}.")
+
+
+def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None:
+    _update_system(
+        graph,
+        "s.theme_priority_order = $order",
+        {"order": priority_order},
+        "theme_priority_order",
+    )
+
+
+def set_preface(graph: Graph, preface: str) -> None:
+    _update_system(graph, "s.preface = $preface", {"preface": preface}, "preface")
+
+
+def update_last_theme_run_at(graph: Graph, iso_timestamp: str) -> None:
+    _update_system(
+        graph, "s.last_theme_run_at = $ts", {"ts": iso_timestamp}, "last_theme_run_at"
+    )
 
 
 def increment_counter(graph: Graph, counter: CounterName) -> str:
@@ -82,6 +122,7 @@ def increment_counter(graph: Graph, counter: CounterName) -> str:
     The counter field is left pointing at the next available value.
     """
     field = _COUNTER_FIELD[counter]
+    prefix = "s" if counter == "session" else counter
     result = graph.query(
         f"""
         MATCH (s:System)
@@ -94,4 +135,4 @@ def increment_counter(graph: Graph, counter: CounterName) -> str:
             "System node not found. Cannot mint token — run init_system() first."
         )
     minted_id: int = result.result_set[0][0]
-    return f"{counter}:{minted_id}"
+    return f"{prefix}:{minted_id}"

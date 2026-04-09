@@ -1,30 +1,32 @@
 """
-Theme persistence — Theme node CRUD and anchor edge management in FalkorDB.
+Theme persistence — Theme node CRUD in FalkorDB.
+Anchors are stored as a flat list property on the Theme node — no graph edges.
 """
 
-import tiktoken
+from functools import lru_cache
+
 from falkordb import Graph
 
 from weavy.models.themes import Theme, ThemeStatus
 from weavy.models.tools import GetThemeOutput, OperationResult
 
-_ENC = tiktoken.get_encoding("cl100k_base")
+
+@lru_cache(maxsize=1)
+def _get_enc():
+    """cl100k_base is a heuristic proxy — Gemini uses a different tokenizer but
+    exact counts are unavailable via LiteLLM. Close enough for budget gating."""
+    import tiktoken
+
+    return tiktoken.get_encoding("cl100k_base")
 
 
-def _validate_anchors(graph: Graph, anchor_ids: list[str]) -> None:
-    """Raise ValueError if any anchor_ids do not exist as SemanticNodes."""
-    if not anchor_ids:
-        return
-    result = graph.query(
-        "MATCH (n:SemanticNode) WHERE n.id IN $ids RETURN n.id",
-        {"ids": anchor_ids},
+def _theme_from_props(t_props: dict) -> Theme:
+    return Theme(
+        name=t_props["name"],
+        state=t_props["state"],
+        status=t_props.get("status", []),
+        anchors=t_props.get("anchors", []),
     )
-    found = {row[0] for row in result.result_set}
-    missing = [a for a in anchor_ids if a not in found]
-    if missing:
-        raise ValueError(
-            f"Anchor target(s) not found as SemanticNode: {', '.join(missing)}"
-        )
 
 
 def create_theme(
@@ -34,50 +36,27 @@ def create_theme(
     anchors: list[str],
     status: list[ThemeStatus],
 ) -> OperationResult:
-    _validate_anchors(graph, anchors)
-
     graph.query(
-        "CREATE (t:Theme {name: $name, state: $state, status: $status})",
-        {"name": name, "state": state, "status": list(status)},
+        "CREATE (t:Theme {name: $name, state: $state, status: $status, anchors: $anchors})",
+        {
+            "name": name,
+            "state": state,
+            "status": list(status),
+            "anchors": list(anchors),
+        },
     )
-
-    if anchors:
-        graph.query(
-            """
-            MATCH (t:Theme {name: $name})
-            UNWIND $anchor_ids AS aid
-            MATCH (n:SemanticNode {id: aid})
-            CREATE (t)-[:ANCHORS]->(n)
-            """,
-            {"name": name, "anchor_ids": anchors},
-        )
-
     return OperationResult(ok=True, id=name)
 
 
 def get_theme(graph: Graph, name: str) -> GetThemeOutput:
     result = graph.query(
-        """
-        MATCH (t:Theme {name: $name})
-        OPTIONAL MATCH (t)-[:ANCHORS]->(n:SemanticNode)
-        RETURN t, collect(n.id) AS anchor_ids
-        """,
+        "MATCH (t:Theme {name: $name}) RETURN t",
         {"name": name},
     )
     if not result.result_set:
         raise ValueError(f"Theme '{name}' not found.")
-
-    row = result.result_set[0]
-    t_props = row[0].properties
-    anchor_ids = [a for a in (row[1] or []) if a is not None]
-
-    theme = Theme(
-        name=t_props["name"],
-        state=t_props["state"],
-        status=t_props.get("status", []),
-        anchors=anchor_ids,
-    )
-    return GetThemeOutput(theme=theme)
+    t_props = result.result_set[0][0].properties
+    return GetThemeOutput(theme=_theme_from_props(t_props))
 
 
 def update_theme(
@@ -95,6 +74,9 @@ def update_theme(
     if new_status is not None:
         set_parts.append("t.status = $new_status")
         params["new_status"] = list(new_status)
+    if new_anchors is not None:
+        set_parts.append("t.anchors = $new_anchors")
+        params["new_anchors"] = list(new_anchors)
 
     if set_parts:
         result = graph.query(
@@ -107,39 +89,6 @@ def update_theme(
         result = graph.query("MATCH (t:Theme {name: $name}) RETURN t", {"name": name})
         if not result.result_set:
             raise ValueError(f"Theme '{name}' not found.")
-
-    if new_anchors is not None:
-        _validate_anchors(graph, new_anchors)
-
-        result = graph.query(
-            "MATCH (t:Theme {name: $name})-[:ANCHORS]->(n:SemanticNode) RETURN n.id",
-            {"name": name},
-        )
-        current_set = {row[0] for row in result.result_set}
-        new_set = set(new_anchors)
-
-        to_add = list(new_set - current_set)
-        if to_add:
-            graph.query(
-                """
-                MATCH (t:Theme {name: $name})
-                UNWIND $ids AS aid
-                MATCH (n:SemanticNode {id: aid})
-                CREATE (t)-[:ANCHORS]->(n)
-                """,
-                {"name": name, "ids": to_add},
-            )
-
-        to_remove = list(current_set - new_set)
-        if to_remove:
-            graph.query(
-                """
-                MATCH (t:Theme {name: $name})-[r:ANCHORS]->(n:SemanticNode)
-                WHERE n.id IN $ids
-                DELETE r
-                """,
-                {"name": name, "ids": to_remove},
-            )
 
     return OperationResult(ok=True, id=name)
 
@@ -156,27 +105,8 @@ def retire_theme(graph: Graph, name: str) -> OperationResult:
 
 
 def list_all_themes(graph: Graph) -> list[Theme]:
-    result = graph.query(
-        """
-        MATCH (t:Theme)
-        OPTIONAL MATCH (t)-[:ANCHORS]->(n:SemanticNode)
-        WITH t, collect(DISTINCT n.id) AS anchor_ids
-        RETURN t, anchor_ids
-        """
-    )
-    themes = []
-    for row in result.result_set:
-        t_props = row[0].properties
-        anchor_ids = [a for a in (row[1] or []) if a is not None]
-        themes.append(
-            Theme(
-                name=t_props["name"],
-                state=t_props["state"],
-                status=t_props.get("status", []),
-                anchors=anchor_ids,
-            )
-        )
-    return themes
+    result = graph.query("MATCH (t:Theme) RETURN t")
+    return [_theme_from_props(row[0].properties) for row in result.result_set]
 
 
 def render_hot_themes(
@@ -207,7 +137,7 @@ def render_hot_themes(
     for name in priority_order:
         theme = theme_map[name]
         rendered = theme.render_block()
-        token_count = len(_ENC.encode(rendered))
+        token_count = len(_get_enc().encode(rendered))
 
         if tokens_used + token_count <= token_budget:
             hot_parts.append(rendered)

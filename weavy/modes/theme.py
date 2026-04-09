@@ -1,11 +1,12 @@
 """
-Theme mode — delta-driven theme map maintenance.
+Theme mode — self-discovering theme map maintenance.
 """
 
 from weavy.harness.actions import THEME_ACTIONS
 from weavy.harness.runner import run
-from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode
+from weavy.models.traces import RunTrace
 from weavy.services.workflow import fetch_prompt, finalize_theme
+from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
 from weavy.store import themes as store_themes
 from weavy.store.client import get_graph
@@ -22,47 +23,56 @@ def _render_full_theme_map(themes: list, priority_order: list[str]) -> str:
     return "\n".join(lines)
 
 
-def run_theme_update(
-    summary: str = "",
-    touched_nodes: list[TouchedNode] | None = None,
-    touched_edges: list[TouchedEdge] | None = None,
-) -> RunTrace:
-    """Update themes. Can be triggered manually or after any session that writes nodes."""
-    if touched_nodes is None:
-        touched_nodes = []
-    if touched_edges is None:
-        touched_edges = []
+def _render_journal(sessions: list) -> str:
+    lines = [f"Sessions since your last run ({len(sessions)}):\n"]
+    for i, s in enumerate(sessions, 1):
+        changes = s.graph_changes
+        change_parts = []
+        for action in ("created", "updated", "deleted"):
+            node_ids = changes.get(f"nodes_{action}", [])
+            edge_ids = changes.get(f"edges_{action}", [])
+            if node_ids:
+                change_parts.append(f"{action} {', '.join(node_ids)}")
+            if edge_ids:
+                change_parts.append(f"{action} edges {', '.join(edge_ids)}")
+        change_text = "; ".join(change_parts) if change_parts else "no graph changes"
+        lines.append(f'{i}. {s.id}: "{s.summary}" — {change_text}')
+    return "\n".join(lines)
+
+
+def run_theme_update() -> RunTrace:
+    """Update themes. Self-discovers what changed since last run."""
     graph = get_graph()
-    all_themes = store_themes.list_all_themes(graph)
     system_state = store_system.get_system(graph)
+    all_themes = store_themes.list_all_themes(graph)
 
     theme_map_text = _render_full_theme_map(
         all_themes, system_state.theme_priority_order
     )
-    system_prompt = fetch_prompt("weavy-theme", {"theme_map": theme_map_text})
+    system_prompt = fetch_prompt(
+        "weavy-theme",
+        {
+            "theme_map": theme_map_text,
+            "preface": system_state.preface or "(not set)",
+        },
+    )
 
-    touched_nodes_text = (
-        "\n".join(f"  - {n.node_id} ({n.action})" for n in touched_nodes)
-        if touched_nodes
-        else "  (none)"
-    )
-    touched_edges_text = (
-        "\n".join(f"  - {e.edge_id} ({e.action})" for e in touched_edges)
-        if touched_edges
-        else "  (none)"
-    )
-    delta_content = (
-        f"Session summary: {summary}\n\n"
-        f"Touched nodes:\n{touched_nodes_text}\n\n"
-        f"Touched edges:\n{touched_edges_text}"
-    )
+    sessions = store_canonical.get_sessions_since(graph, system_state.last_theme_run_at)
+
+    if sessions:
+        user_content = _render_journal(sessions)
+    else:
+        user_content = (
+            "No new sessions since your last run. "
+            "Review existing themes for coherence and priority."
+        )
 
     trace = run(
         mode="theme",
         system_prompt=system_prompt,
-        initial_messages=[{"role": "user", "content": delta_content}],
+        initial_messages=[{"role": "user", "content": user_content}],
         allowed_actions=THEME_ACTIONS,
-        run_context={"input_summary": f"Theme update after: {summary[:80]}"},
+        run_context={"input_summary": f"Theme update ({len(sessions)} sessions)"},
         graph=graph,
     )
     return finalize_theme(graph, trace)

@@ -26,6 +26,25 @@ from weavy.models.tools import (
 # ---------------------------------------------------------------------------
 
 
+def _vecf32_literal(vec: list[float]) -> str:
+    """Format a Python float list as a FalkorDB vecf32() Cypher literal.
+
+    FalkorDB's vecf32() requires an inline array literal — it cannot accept
+    parameterized values via $variable. All official docs use f-string
+    interpolation. This helper centralizes validation and formatting.
+    """
+    import math
+
+    for i, v in enumerate(vec):
+        if not isinstance(v, (int, float)):
+            raise ValueError(
+                f"Embedding element {i} is {type(v).__name__}, expected float"
+            )
+        if math.isnan(v) or math.isinf(v):
+            raise ValueError(f"Embedding element {i} is {v}, expected finite float")
+    return f"vecf32({vec})"
+
+
 def _serialize_log_entry(entry: LogEntry) -> str:
     return json.dumps(entry.model_dump(mode="python"), default=_json_default)
 
@@ -47,8 +66,7 @@ def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
     return LogEntry(
         source_id=provenance.source_id,
         timestamp=datetime.now(tz=timezone.utc),
-        start_offset=provenance.start_offset,
-        end_offset=provenance.end_offset,
+        offset=provenance.offset,
         note=note,
     )
 
@@ -57,8 +75,9 @@ def _node_from_props(
     props: dict[str, Any], log_tail: int | None = None
 ) -> SemanticNode:
     """Construct a SemanticNode from raw FalkorDB properties."""
-    all_entries = [_deserialize_log_entry(s) for s in (props.get("log") or [])]
-    log = all_entries[-log_tail:] if log_tail is not None else all_entries
+    raw_log = props.get("log") or []
+    raw_tail = raw_log[-log_tail:] if log_tail is not None else raw_log
+    log = [_deserialize_log_entry(s) for s in raw_tail]
     return SemanticNode(
         id=props["id"],
         aliases=props.get("aliases") or [],
@@ -76,12 +95,16 @@ def _build_outgoing_edges(
     for edge_data in raw_edges:
         if edge_data is None:
             continue
-        edge_id, label, to_id = edge_data
+        edge_id, label, to_id, note = edge_data
         if edge_id is None or to_id is None:
             continue
         edges.append(
             SemanticEdge(
-                id=edge_id, from_node_id=node_id, to_node_id=to_id, label=label
+                id=edge_id,
+                from_node_id=node_id,
+                to_node_id=to_id,
+                label=label,
+                note=note,
             )
         )
     return edges
@@ -94,19 +117,23 @@ def create_node(
     note: str,
     provenance: ProvenanceInput | None,
     node_id: str,
+    embedding: list[float] | None = None,
 ) -> OperationResult:
     entry = _make_log_entry(provenance, note)
     entry_json = _serialize_log_entry(entry)
+    embedding_clause = (
+        f", embedding: {_vecf32_literal(embedding)}" if embedding is not None else ""
+    )
     graph.query(
-        """
-        CREATE (n:SemanticNode {
+        f"""
+        CREATE (n:SemanticNode {{
             id: $id,
             name: $name,
             aliases: $aliases,
             summary: $summary,
             total_log_count: 1,
-            log: [$entry_json]
-        })
+            log: [$entry_json]{embedding_clause}
+        }})
         """,
         {
             "id": node_id,
@@ -126,23 +153,24 @@ def update_node(
     new_summary: str | None,
     new_aliases: list[str] | None,
     provenance: ProvenanceInput | None,
+    embedding: list[float] | None = None,
+    current_summary: str | None = None,
 ) -> OperationResult:
-    # Only fetch current summary when archiving it (new_summary is being replaced)
     effective_note = note
     if new_summary is not None:
-        result = graph.query(
-            "MATCH (n:SemanticNode {id: $id}) RETURN n.summary",
-            {"id": node_id},
-        )
-        if not result.result_set:
-            raise ValueError(f"SemanticNode '{node_id}' not found.")
-        current_summary = result.result_set[0][0]
+        if current_summary is None:
+            result = graph.query(
+                "MATCH (n:SemanticNode {id: $id}) RETURN n.summary",
+                {"id": node_id},
+            )
+            if not result.result_set:
+                raise ValueError(f"SemanticNode '{node_id}' not found.")
+            current_summary = result.result_set[0][0]
         effective_note = f"[archived summary] {current_summary} | Agent note: {note}"
 
     entry = _make_log_entry(provenance, effective_note)
     entry_json = _serialize_log_entry(entry)
 
-    # Build SET clauses dynamically
     set_parts = [
         "n.log = n.log + [$entry_json]",
         "n.total_log_count = n.total_log_count + 1",
@@ -157,6 +185,8 @@ def update_node(
         set_parts.append("n.name = $new_name")
         params["new_aliases"] = new_aliases
         params["new_name"] = new_aliases[0]
+    if embedding is not None:
+        set_parts.append(f"n.embedding = {_vecf32_literal(embedding)}")
 
     result = graph.query(
         f"MATCH (n:SemanticNode {{id: $id}}) SET {', '.join(set_parts)} RETURN n",
@@ -189,12 +219,13 @@ def create_edge(
     from_node_id: str,
     to_node_id: str,
     label: str,
+    note: str,
     edge_id: str,
 ) -> OperationResult:
     result = graph.query(
         """
         MATCH (a:SemanticNode {id: $from_id}), (b:SemanticNode {id: $to_id})
-        CREATE (a)-[r:RELATES {id: $edge_id, label: $label}]->(b)
+        CREATE (a)-[r:RELATES {id: $edge_id, label: $label, note: $note}]->(b)
         RETURN r
         """,
         {
@@ -202,6 +233,7 @@ def create_edge(
             "to_id": to_node_id,
             "edge_id": edge_id,
             "label": label,
+            "note": note,
         },
     )
     if not result.result_set:
@@ -238,8 +270,45 @@ def delete_edge(graph: Graph, edge_id: str) -> OperationResult:
 # ---------------------------------------------------------------------------
 
 
-def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
-    result = graph.query(
+def _parse_search_rows(rows: list) -> list[SearchResult]:
+    results: list[SearchResult] = []
+    for row in rows:
+        node_id, aliases, summary, edge_count = row
+        results.append(
+            SearchResult(
+                id=node_id,
+                canonical_alias=aliases[0] if aliases else node_id,
+                summary_line=summary.splitlines()[0] if summary else "",
+                edge_count=int(edge_count),
+            )
+        )
+    return results
+
+
+def search_graph(
+    graph: Graph,
+    params: SearchGraphInput,
+    query_embedding: list[float] | None = None,
+) -> SearchGraphOutput:
+    seen: dict[str, SearchResult] = {}
+
+    if query_embedding is not None:
+        vec_literal = _vecf32_literal(query_embedding)
+        vec_result = graph.query(
+            f"""
+            CALL db.idx.vector.queryNodes(
+                'SemanticNode', 'embedding', $limit, {vec_literal}
+            ) YIELD node, score
+            OPTIONAL MATCH (node)-[r:RELATES]-()
+            WITH node, count(r) AS edge_count
+            RETURN node.id, node.aliases, node.summary, edge_count
+            """,
+            {"limit": params.limit},
+        )
+        for r in _parse_search_rows(vec_result.result_set):
+            seen[r.id] = r
+
+    kw_result = graph.query(
         """
         MATCH (n:SemanticNode)
         WHERE ANY(a IN n.aliases WHERE toLower(a) CONTAINS toLower($query))
@@ -252,18 +321,11 @@ def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
         """,
         {"query": params.query, "limit": params.limit},
     )
-    results = []
-    for row in result.result_set:
-        node_id, aliases, summary, edge_count = row
-        results.append(
-            SearchResult(
-                id=node_id,
-                canonical_alias=aliases[0] if aliases else node_id,
-                summary_line=summary.splitlines()[0] if summary else "",
-                edge_count=int(edge_count),
-            )
-        )
-    return SearchGraphOutput(results=results)
+    for r in _parse_search_rows(kw_result.result_set):
+        if r.id not in seen:
+            seen[r.id] = r
+
+    return SearchGraphOutput(results=list(seen.values())[: params.limit])
 
 
 def get_node(graph: Graph, node_id: str) -> GetNodeResult:
@@ -284,7 +346,7 @@ def get_nodes(graph: Graph, node_ids: list[str]) -> dict[str, GetNodeResult]:
         MATCH (n:SemanticNode)
         WHERE n.id IN $ids
         OPTIONAL MATCH (n)-[r:RELATES]->(m:SemanticNode)
-        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id] ELSE null END) AS edges
+        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, r.note] ELSE null END) AS edges
         RETURN n.id, n, edges
         """,
         {"ids": node_ids},
@@ -305,7 +367,7 @@ def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutp
         """
         MATCH (n:SemanticNode {id: $id})
         OPTIONAL MATCH (n)-[r:RELATES]-(m:SemanticNode)
-        RETURN n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, m.aliases, m.summary] ELSE null END) AS neighbor_data
+        RETURN n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, m.aliases, m.summary, r.note] ELSE null END) AS neighbor_data
         """,
         {"id": node_id},
     )
@@ -323,7 +385,14 @@ def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutp
     for nd in raw_neighbors:
         if nd is None:
             continue
-        edge_id, edge_label, neighbor_id, neighbor_aliases, neighbor_summary = nd
+        (
+            edge_id,
+            edge_label,
+            neighbor_id,
+            neighbor_aliases,
+            neighbor_summary,
+            edge_note,
+        ) = nd
         if edge_id is None or edge_id in seen_edge_ids:
             continue
         seen_edge_ids.add(edge_id)
@@ -333,6 +402,7 @@ def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutp
             NeighborSummary(
                 edge_id=edge_id,
                 edge_label=edge_label,
+                edge_note=edge_note,
                 node_id=neighbor_id,
                 canonical_alias=canonical,
                 summary_line=summary_line,

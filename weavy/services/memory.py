@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from falkordb import Graph
 
-from weavy.models.canonical import extract_transcript_span
-from weavy.models.graph import ProvenanceInput
 from weavy.models.tools import (
     CreateEdgeInput,
     CreateNodeInput,
@@ -11,15 +9,14 @@ from weavy.models.tools import (
     DeleteNodeInput,
     GetNodeInput,
     GetNodeOutput,
-    GetTranscriptSpanInput,
-    GetTranscriptSpanOutput,
-    GetTranscriptSpanResult,
     OperationResult,
+    SearchGraphInput,
+    SearchGraphOutput,
     UpdateEdgeInput,
     UpdateNodeInput,
 )
 from weavy.models.traces import RunTrace, TouchedEdge, TouchedNode
-from weavy.store import canonical as store_canonical
+from weavy.services import embedding
 from weavy.store import graph as store_graph
 from weavy.store import system as store_system
 
@@ -33,55 +30,16 @@ def get_node(graph: Graph, params: GetNodeInput) -> GetNodeOutput:
     return GetNodeOutput(results=results, not_found=not_found)
 
 
-def get_transcript_span(
-    graph: Graph, params: GetTranscriptSpanInput
-) -> GetTranscriptSpanOutput:
-    # Group by transcript_id to avoid fetching the same transcript multiple times
-    by_id: dict[str, list] = {}
-    for span in params.spans:
-        by_id.setdefault(span.transcript_id, []).append(span)
-
-    results: list[GetTranscriptSpanResult] = []
-    for tid, spans in by_id.items():
-        transcript = store_canonical.get_transcript(graph, tid)
-        for span in spans:
-            text = extract_transcript_span(
-                transcript.segments,
-                span.start_offset,
-                span.end_offset,
-                span.context_secs,
-            )
-            results.append(GetTranscriptSpanResult(transcript_id=tid, text=text))
-    return GetTranscriptSpanOutput(results=results)
-
-
-def _validate_node_provenance(provenance: ProvenanceInput | None, mode: str) -> None:
-    if mode == "ingestion":
-        if provenance is None:
-            raise ValueError("Ingestion writes require provenance.")
-        if not provenance.source_id.startswith("rec:"):
-            raise ValueError("Ingestion provenance must use rec:N.")
-        if provenance.end_offset is None:
-            raise ValueError("Ingestion provenance requires end_offset.")
-        return
-
-    if mode == "query":
-        if provenance is None:
-            raise ValueError("Query writes require provenance.")
-        if not provenance.source_id.startswith("chat:"):
-            raise ValueError("Query provenance must use chat:N.")
-        if provenance.end_offset is not None:
-            raise ValueError("Query provenance end_offset must be None.")
-        return
-
-    raise ValueError("Theme mode cannot write semantic nodes.")
+def search_graph(graph: Graph, params: SearchGraphInput) -> SearchGraphOutput:
+    query_embedding = embedding.embed(params.query)
+    return store_graph.search_graph(graph, params, query_embedding)
 
 
 def create_node(
     graph: Graph, params: CreateNodeInput, trace: RunTrace
 ) -> OperationResult:
-    _validate_node_provenance(params.provenance, trace.mode)
     node_id = store_system.increment_counter(graph, "node")
+    vec = embedding.embed_node(params.aliases, params.summary)
     result = store_graph.create_node(
         graph,
         aliases=params.aliases,
@@ -89,6 +47,7 @@ def create_node(
         note=params.note,
         provenance=params.provenance,
         node_id=node_id,
+        embedding=vec,
     )
     trace.touched_nodes.append(TouchedNode(node_id=node_id, action="created"))
     return result
@@ -97,7 +56,21 @@ def create_node(
 def update_node(
     graph: Graph, params: UpdateNodeInput, trace: RunTrace
 ) -> OperationResult:
-    _validate_node_provenance(params.provenance, trace.mode)
+    vec: list[float] | None = None
+    fetched_summary: str | None = None
+    if params.new_summary is not None or params.new_aliases is not None:
+        current = store_graph.get_node(graph, params.node_id)
+        fetched_summary = current.node.summary
+        aliases = (
+            params.new_aliases
+            if params.new_aliases is not None
+            else current.node.aliases
+        )
+        summary = (
+            params.new_summary if params.new_summary is not None else fetched_summary
+        )
+        vec = embedding.embed_node(aliases, summary)
+
     result = store_graph.update_node(
         graph,
         node_id=params.node_id,
@@ -105,6 +78,8 @@ def update_node(
         new_summary=params.new_summary,
         new_aliases=params.new_aliases,
         provenance=params.provenance,
+        embedding=vec,
+        current_summary=fetched_summary,
     )
     trace.touched_nodes.append(TouchedNode(node_id=params.node_id, action="updated"))
     return result
@@ -127,6 +102,7 @@ def create_edge(
         from_node_id=params.from_node_id,
         to_node_id=params.to_node_id,
         label=params.label,
+        note=params.note,
         edge_id=edge_id,
     )
     trace.touched_edges.append(TouchedEdge(edge_id=edge_id, action="created"))

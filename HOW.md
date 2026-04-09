@@ -3,36 +3,37 @@
 Weavy is a local, CLI-first memory system built on top of:
 
 - FalkorDB for canonical records, semantic graph state, themes, and system counters
-- Gemini via LiteLLM for ingestion, query, and theme agents
+- Gemini via LiteLLM for the session agent and theme agent
 - Groq Whisper via LiteLLM for audio transcription
-- Langfuse for prompt management, run traces, and eval visibility
+- Langfuse for run traces and eval visibility
 
-There is no web app or API layer in this repo right now. The main way to use the app is:
+There is no web app or API layer. The main way to use the app is:
 
 1. Start the backing services
 2. Initialize the `System` node
-3. Create or transcribe transcripts
-4. Ingest those transcripts into the graph
-5. Query the graph from the CLI
+3. Add text (from any source) into the memory graph
+4. Query the graph, or continue any prior session
 
 ## What Works Right Now
 
-- Store transcripts as canonical `Transcript` records
-- Transcribe audio into `[M:SS]`-annotated transcript text
-- Ingest a transcript into the semantic graph with provenance-aware node writes
+- Add any text into the memory graph via `add` — source-agnostic ingestion
+- Transcribe audio into text and pipe it through `add` in one step
+- Steer ingestion with optional caller context (e.g., "These are chat logs between a user and an AI assistant")
+- Ingest text into the semantic graph with provenance-aware node writes
 - Ask grounded questions against the graph
-- Persist chat sessions as canonical `ChatSession` records
-- Run theme maintenance manually when you want to refresh the theme map
-- Track agent runs and prompt versions in Langfuse
-- Run eval scenarios through Langfuse-backed datasets
+- Continue any prior session — ingestion or query — to ask follow-up questions with full context
+- A single unified agent handles both ingestion and query, sharing the same tool set and message history model
+- Run theme maintenance manually — the theme agent self-discovers changes since its last run
+- Track agent runs in Langfuse
 
 ## What To Expect
 
-- Weavy is synchronous and explicit. If a dependency is missing, it tends to fail loudly rather than silently degrading.
-- The graph is a derived memory layer, not the source of truth. Canonical transcripts and chats remain the primary records.
-- Query runs may mutate the graph if the agent decides your new statement should update memory.
-- Theme updates are manual via `uv run python -m weavy.cli update-themes`.
-- Long node histories are compacted by fence checks using the configured token budget.
+- Weavy is synchronous and explicit. If a dependency is missing, it fails loudly rather than silently degrading.
+- The graph is a derived memory layer, not the source of truth. Canonical sessions remain the primary records.
+- All sessions store their full message history. Ingestion sessions contain the input text + the agent's analysis. Query sessions contain the full conversation.
+- Any session can be continued in query mode — `continue s:N "question"` loads the prior messages as context and runs the query agent.
+- Query runs may mutate the graph if the agent decides a new statement should update memory.
+- Theme updates are manual via `update-themes`. The theme agent queries all sessions completed since its last run and reconciles themes.
 - Run traces are not written to disk. Langfuse is the trace store.
 
 ## Prerequisites
@@ -43,7 +44,7 @@ You need:
 - Docker
 - a Gemini API key
 - a Groq API key if you want to use `transcribe`
-- a running Langfuse stack if you want ingestion/query/theme/evals to work
+- a running Langfuse stack if you want tracing
 
 At minimum, copy the example env file:
 
@@ -65,7 +66,7 @@ LANGFUSE_SECRET_KEY=...
 Notes:
 
 - `GROQ_API_KEY` is only required for audio transcription.
-- `LANGFUSE_*` is required for prompt fetches and tracing.
+- `LANGFUSE_*` is required for tracing. The agent runs without it but you lose observability.
 - FalkorDB defaults to `localhost:6379`.
 - The default graph name is `weavy`.
 
@@ -79,7 +80,7 @@ The project expects FalkorDB to be available before you use the CLI:
 devenv up
 ```
 
-Keep that running in one terminal. Open another terminal for commands.
+Keep that running in one terminal. Open another for commands.
 
 Then enter the environment:
 
@@ -95,23 +96,15 @@ devenv shell -- uv run python -m weavy.cli status
 
 ### Langfuse
 
-Langfuse is effectively part of the app flow now because prompts are fetched from it and traces are recorded there.
-
-To avoid browser session collisions between the two local UIs, open them on different hostnames:
+Langfuse is used for run tracing. To avoid browser session collisions between the two local UIs, open them on different hostnames:
 
 - FalkorDB UI: `http://127.0.0.1:3000`
 - Langfuse UI: `http://localhost:3100`
 
-You can start the included local stack with:
+Start the included local stack with:
 
 ```bash
 docker compose -f docker-compose.langfuse.yml up -d
-```
-
-The UI is available at:
-
-```text
-http://localhost:3100
 ```
 
 After Langfuse is up, create or copy your API keys into `.env`.
@@ -126,12 +119,12 @@ uv run python -m weavy.cli init-system
 
 This creates the singleton `System` node, including:
 
-- next ids for nodes, edges, transcripts, and chats
+- next IDs for nodes, edges, and sessions
 - `theme_priority_order`
-- `log_token_budget`
 - `hot_theme_token_budget`
+- `last_theme_run_at`
 
-Safe to run again. It uses `MERGE`.
+Safe to run again — uses `MERGE`.
 
 Inspect current state any time:
 
@@ -139,13 +132,49 @@ Inspect current state any time:
 uv run python -m weavy.cli status
 ```
 
-If the `System` node does not exist, many operations will fail with a message telling you to run `init-system` first.
+If the `System` node does not exist, most operations will fail with a message telling you to run `init-system` first.
 
-## Create Or Transcribe Transcripts
+## Add Text To The Memory Graph
 
-Weavy ingests stored transcripts, not raw audio directly. You have two main paths.
+The primary entry point is `add`. It accepts any text — transcripts, chat logs, notes, journal entries, documents — and runs the ingestion agent to integrate it into the semantic graph.
 
-### Option 1: Transcribe Audio
+```bash
+uv run python -m weavy.cli add /path/to/notes.txt
+```
+
+Or pipe from stdin:
+
+```bash
+echo "Today I decided to switch to Rust for the backend." | uv run python -m weavy.cli add -
+```
+
+What happens:
+
+1. A canonical `Session` is created with the text as the first user message
+2. The ingestion agent reads the text, searches the existing graph, and creates/updates semantic nodes and edges
+3. The CLI prints the session status, touched node IDs, and the ingestion summary
+
+### Caller Context
+
+Use `--context` to steer the agent's interpretation without modifying the prompt:
+
+```bash
+uv run python -m weavy.cli add chat-export.txt --context "These are chat sessions between a user and an AI assistant"
+```
+
+The context is injected into the system prompt as `- **Caller context:** <value>`. When omitted, the slot resolves to empty string. The agent reads the text and determines what it is on its own.
+
+### Timestamps
+
+Use `--timestamp` to set the session timestamp (defaults to now):
+
+```bash
+uv run python -m weavy.cli add journal.txt --timestamp 2026-04-01T10:00:00+00:00
+```
+
+## Transcribe Audio
+
+Transcription is a pre-processing utility that converts audio to text, then pipes it through `add`:
 
 ```bash
 uv run python -m weavy.cli transcribe /path/to/recording.m4a
@@ -153,34 +182,22 @@ uv run python -m weavy.cli transcribe /path/to/recording.m4a
 
 What happens:
 
-- the file is sent to Groq Whisper through LiteLLM
-- the response is normalized into transcript lines with inline `[M:SS]` markers
-- a canonical `Transcript` is created in FalkorDB
-- the CLI prints `Created transcript rec:N`
+- The file is sent to Groq Whisper through LiteLLM
+- The response is normalized into indexed transcript lines
+- The text is passed to `add` — a session is created and ingestion runs automatically
 
-Supported audio extensions:
+Supported audio extensions: `.mp3`, `.mp4`, `.mpeg`, `.mpga`, `.m4a`, `.wav`, `.webm`, `.ogg`
 
-- `.mp3`
-- `.mp4`
-- `.mpeg`
-- `.mpga`
-- `.m4a`
-- `.wav`
-- `.webm`
-- `.ogg`
+Use `--context` to steer ingestion:
+
+```bash
+uv run python -m weavy.cli transcribe recording.m4a --context "A voice memo about project planning"
+```
 
 Important behavior:
 
-- missing files raise `FileNotFoundError`
-- unsupported extensions raise `ValueError`
-- the transcription call always asks for `verbose_json`
-- the stored transcript is plain text with inline timestamps
-
-Example output:
-
-```text
-Created transcript rec:1
-```
+- Missing files raise `FileNotFoundError`
+- Unsupported extensions raise `ValueError`
 
 Whisper-related env vars:
 
@@ -191,53 +208,35 @@ WHISPER_PROMPT=
 WHISPER_TEMPERATURE=0
 ```
 
-### List Stored Transcripts
+### List Stored Sessions
 
 ```bash
-uv run python -m weavy.cli list-transcripts
-uv run python -m weavy.cli list-transcripts --limit 5
+uv run python -m weavy.cli list-sessions
+uv run python -m weavy.cli list-sessions --limit 5
 ```
 
-Expect output shaped like:
+Output includes session ID, timestamp, and summary (if ingested):
 
 ```text
-rec:1  2026-04-04T12:34:56+00:00  /path/to/audio.m4a
+s:1  2026-04-04T12:34:56+00:00  Ingested notes about career planning.
+s:2  2026-04-05T10:15:00+00:00  (not yet ingested)
 ```
 
-## Ingest A Transcript
+## Continue Any Session
 
-Once you have a `rec:N`, ingest it:
+After adding content, you can continue that session to ask questions with the full text + agent analysis as context:
 
 ```bash
-uv run python -m weavy.cli ingest rec:1
+uv run python -m weavy.cli continue s:1 "What did I say about my mortgage?"
 ```
 
-What ingestion does:
+This always runs in query mode — the query agent is given the session's existing message history plus your new question. It can search the graph and answer based on both the stored graph and the conversation context.
 
-1. Loads the transcript from FalkorDB
-2. Builds the ingestion system prompt from Langfuse plus current hot-theme context
-3. Runs the harness with read/write graph tools
-4. Lets the agent search, inspect, create, and update semantic graph entities
-5. Requires provenance on every node write
-6. Finalizes with `complete_ingestion`
-7. Ends after `complete_ingestion`; theme maintenance is manual
-
-What the CLI prints:
-
-- final run status
-- touched node ids
-- the ingestion summary
-
-Important expectations:
-
-- ingestion fails if the transcript id does not exist
-- ingestion fails if Langfuse prompt fetch fails
-- ingestion may create new nodes, update existing nodes, and create/update edges
-- provenance is anchored back to transcript time offsets, so timestamp quality matters
+This works on any session — ingestion or query — making every conversation resumable.
 
 ## Query The Graph
 
-Run a one-shot query:
+Run a one-shot query (creates a new session):
 
 ```bash
 uv run python -m weavy.cli query "What have I been thinking about recently?"
@@ -245,28 +244,24 @@ uv run python -m weavy.cli query "What have I been thinking about recently?"
 
 What query mode does:
 
-1. Mints or reuses a `chat:N`
-2. Builds the query system prompt from Langfuse plus hot themes
-3. Lets the agent search the graph, inspect neighborhoods, and retrieve transcript evidence
-4. Finishes via `deliver_response`
-5. Persists the conversation as a canonical `ChatSession`
-6. Theme maintenance remains manual; run it separately if needed
+1. Mints a new session
+2. Builds the system prompt from `weavy-query.md` plus hot themes
+3. Lets the agent search the graph, inspect neighborhoods, and retrieve source evidence
+4. Finalizes with `complete`
+5. Persists the full conversation as a canonical `Session`
 
 What the CLI prints:
 
 - `Status: completed` or `Status: failed`
 - the final answer if successful
-- the error if the run failed
 
 ### Interactive Chat Mode
 
-If you omit the question argument:
+Omit the question argument to start a REPL:
 
 ```bash
 uv run python -m weavy.cli query
 ```
-
-Weavy starts a REPL:
 
 ```text
 Weavy chat — type 'exit' or Ctrl-D to quit.
@@ -274,36 +269,10 @@ Weavy chat — type 'exit' or Ctrl-D to quit.
 
 Behavior to expect:
 
-- one `chat:N` is created for the full REPL session
-- full prior conversation is fed back into subsequent turns
-- on exit, the chat session is persisted if there was any conversation
+- one session (`s:N`) is created for the full REPL session
+- each turn calls the query agent with the full accumulated history, loaded from FalkorDB
+- history is persisted after each turn so the session is crash-safe
 - if a turn fails, the REPL prints the error and continues
-
-## Chat And Transcript Canonical Records
-
-Weavy keeps canonical records alongside the derived semantic graph.
-
-You can also manually create chat sessions:
-
-```bash
-uv run python -m weavy.cli create-chat --messages-file messages.json
-```
-
-Where `messages.json` looks like:
-
-```json
-[
-  { "role": "user", "content": "I think I want to move cities." },
-  { "role": "assistant", "content": "What makes that feel urgent right now?" }
-]
-```
-
-List stored chats:
-
-```bash
-uv run python -m weavy.cli list-chats
-uv run python -m weavy.cli list-chats --limit 10
-```
 
 ## Themes
 
@@ -313,28 +282,21 @@ Theme maintenance is a top-level CLI command you run manually:
 uv run python -m weavy.cli update-themes
 ```
 
-What the theme pass receives:
+The theme agent is self-discovering. It queries all sessions completed since its last run (tracked via `last_theme_run_at` on the System node) and builds a journal of recent activity.
 
-- the completion summary or answer text
-- touched node ids and actions
-- touched edge ids and actions
+What the theme agent receives:
+
 - the current full theme map
+- a session journal listing each completed session's summary and graph changes
 
 What to expect:
 
 - new themes may be created
 - existing themes may be updated or retired
 - `theme_priority_order` on the `System` node may change
+- `last_theme_run_at` is updated after a successful run
 
-## Tracing, Prompts, And Langfuse
-
-Langfuse is used for three distinct jobs:
-
-- prompt storage and versioning
-- run traces
-- eval dataset and experiment visibility
-
-### Traces
+## Tracing And Langfuse
 
 Each harness run creates a Langfuse trace with nested spans for:
 
@@ -343,27 +305,21 @@ Each harness run creates a Langfuse trace with nested spans for:
 - each LLM generation
 - each tool call
 
-These are not saved to a local `runs/` folder. If you want to inspect a run, use Langfuse.
+These are not saved locally. If you want to inspect a run, use the Langfuse UI.
 
 ### Prompts
 
-Weavy fetches prompts by name from Langfuse with the `production` label:
+Agent prompts live in `weavy/prompts/` as local markdown files:
 
-- `weavy-ingestion`
-- `weavy-query`
-- `weavy-theme`
+- `weavy-ingestion.md` — ingestion agent prompt (source-agnostic, uses `{{caller_context}}` for steering)
+- `weavy-query.md` — query/chat agent prompt
+- `weavy-theme.md` — theme maintenance prompt
 
-If you change prompts in Langfuse, that changes runtime behavior without a code change.
+Template variables (e.g. `{{session_id}}`, `{{themes_context}}`, `{{caller_context}}`) are replaced at runtime.
 
 ## Inspect The Database
 
-You can inspect FalkorDB directly. The current local setup usually exposes the database on:
-
-```text
-localhost:6379
-```
-
-Useful example Cypher queries:
+FalkorDB is available on `localhost:6379`. Useful Cypher queries:
 
 ```cypher
 MATCH (n:SemanticNode)
@@ -377,39 +333,14 @@ RETURN t.name, t.state, t.status
 ```
 
 ```cypher
-MATCH (t:Transcript)
-RETURN t.id, t.timestamp, t.audio_path
-ORDER BY t.timestamp DESC
+MATCH (s:Session)
+RETURN s.id, s.timestamp, s.completed_at, s.summary
+ORDER BY s.timestamp DESC
 ```
 
 ```cypher
-MATCH (c:ChatSession)
-RETURN c.id, c.timestamp
-ORDER BY c.timestamp DESC
+MATCH (s:System) RETURN s
 ```
-
-```cypher
-MATCH (t:Theme)-[:ANCHORS]->(n:SemanticNode)
-RETURN t.name, n.id, n.aliases[0]
-```
-
-## Evals
-
-This repo includes eval execution code, but not a CLI command for it.
-
-The eval flow is Python-level and Langfuse-backed:
-
-- datasets live in Langfuse
-- dataset items are loaded into `EvalItem`
-- `ingestion`, `query`, and `theme` scenario items are supported
-- results are linked back to the Langfuse dataset item as experiment runs
-
-Relevant modules:
-
-- `weavy.evals.scenarios`
-- `weavy.evals.runner`
-- `weavy.evals.judges`
-- `weavy.evals.reports`
 
 ## Full CLI Reference
 
@@ -425,13 +356,13 @@ Commands:
 init-system
 status
 
-list-transcripts [--limit N]
+list-sessions [--limit N]
 
-create-chat --messages-file PATH
-list-chats [--limit N]
-
-transcribe <audio_path>
-ingest <transcript_id>
+add <file_or_-> [--context "..."] [--timestamp ISO]
+transcribe <audio_path> [--context "..."]
+continue <session_id> <question>
+update-themes
+set-preface <preface>
 query [question]
 ```
 
@@ -439,50 +370,23 @@ query [question]
 
 ### `System node not found`
 
-Run:
-
 ```bash
 uv run python -m weavy.cli init-system
 ```
 
-### Prompt fetch or trace failures
+### Tracing failures
 
-Check:
-
-- Langfuse is running
-- `LANGFUSE_HOST` is correct
-- `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set
+Check that Langfuse is running and `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` are set.
 
 ### Transcription failures
 
-Check:
-
-- `GROQ_API_KEY` is set
-- the file exists
-- the extension is supported
+Check that `GROQ_API_KEY` is set, the file exists, and the extension is supported.
 
 ### LLM or query failures
 
-Check:
+Check that `GEMINI_API_KEY` is set and the graph is reachable.
 
-- `GEMINI_API_KEY` is set
-- the graph is reachable
-- Langfuse is available
-
-### Tests failing in this environment
-
-Some test runs may fail before collection if native dependencies used by `litellm` or `tokenizers` are missing from the runtime environment. That is an environment issue, not necessarily an Weavy logic issue.
-
-## Current Limits
-
-- CLI-first only
-- no API server
-- no UI for normal app usage
-- no separate manual theme-update CLI command
-- prompt management depends on Langfuse
-- semantic/vector behavior depends on the graph/index/runtime setup and may not be fully production-shaped yet
-
-If you want the shortest happy path, use this sequence:
+## Shortest Happy Path
 
 ```bash
 cp .example.env .env
@@ -493,7 +397,10 @@ docker compose -f docker-compose.langfuse.yml up -d
 
 devenv shell
 uv run python -m weavy.cli init-system
-uv run python -m weavy.cli transcribe /path/to/recording.m4a
-uv run python -m weavy.cli ingest rec:1
+uv run python -m weavy.cli add notes.txt --context "Personal journal entry"
 uv run python -m weavy.cli query "What has been on my mind recently?"
+uv run python -m weavy.cli continue s:1 "Tell me more about what I said about X"
+
+# or transcribe audio and ingest in one step:
+uv run python -m weavy.cli transcribe /path/to/recording.m4a
 ```

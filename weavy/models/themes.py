@@ -6,18 +6,22 @@ from pydantic import BaseModel, field_validator
 ThemeStatus = Literal["deep", "active", "emerging", "dormant"]
 
 
+def _parse_json_list(v: Any) -> list:
+    if isinstance(v, str):
+        return json.loads(v)
+    return list(v) if v else []
+
+
 class Theme(BaseModel):
     name: str
     state: str
     status: list[ThemeStatus]  # 1-2 items
     anchors: list[str]  # node ids
 
-    @field_validator("status", mode="before")
+    @field_validator("status", "anchors", mode="before")
     @classmethod
-    def parse_status(cls, v: Any) -> list:
-        if isinstance(v, str):
-            return json.loads(v)
-        return list(v) if v else []
+    def parse_json_list(cls, v: Any) -> list:
+        return _parse_json_list(v)
 
     @field_validator("status")
     @classmethod

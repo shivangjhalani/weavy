@@ -1,47 +1,53 @@
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 from falkordb import Graph
 
-from weavy.models.canonical import Transcript, parse_transcript_text
+from weavy.models.canonical import (
+    ChatMessage,
+    Session,
+)
+from weavy.models.traces import RunTrace
 from weavy.store import canonical as store_canonical
 from weavy.store.client import get_graph
 from weavy.store.system import increment_counter, init_system
 
 TEST_GRAPH = "weavy_test"
 
+SAMPLE_TEXT = (
+    "I've been thinking about changing jobs a lot lately. "
+    "The mortgage scares me but I'm feeling trapped. "
+    "Had a great talk with my mentor yesterday about risk."
+)
+
 
 def reset_test_graph(*extra_labels: str) -> Graph:
     """Reset the shared FalkorDB test graph and reinitialize system state."""
+    from tests.conftest import TEST_EMBEDDING_DIM
+
     graph = get_graph(TEST_GRAPH)
     graph.query("MATCH (s:System) DELETE s")
     graph.query("MATCH (n:SemanticNode) DETACH DELETE n")
     for label in extra_labels:
         graph.query(f"MATCH (n:{label}) DETACH DELETE n")
-    init_system(graph)
+    init_system(graph, embedding_dim=TEST_EMBEDDING_DIM)
     return graph
 
 
-def store_test_transcript(graph: Any, text: str) -> str:
-    """Create a transcript record for integration-style tests.
-
-    Accepts [M:SS]-formatted text and converts it to segments, or wraps
-    plain text as a single segment.
-    """
-    segments = parse_transcript_text(text)
-    rec_id = increment_counter(graph, "rec")
-    store_canonical.create_transcript(
+def store_test_session(graph: Any, text: str) -> str:
+    """Create a session from text for integration-style tests."""
+    session_id = increment_counter(graph, "session")
+    store_canonical.create_session(
         graph,
-        Transcript(
-            id=rec_id,
-            audio_path="/dev/null",
+        Session(
+            id=session_id,
             timestamp=datetime.now(tz=timezone.utc),
-            segments=segments,
+            messages=[ChatMessage(role="user", content=text)],
         ),
     )
-    return rec_id
+    return session_id
 
 
 def mock_tool_response(
@@ -78,3 +84,29 @@ def mock_tool_response(
     usage_mock.completion_tokens_details = usage.get("completion_tokens_details")
     resp.usage = usage_mock
     return resp
+
+
+def mock_text_response(content: str = "I think the answer is...") -> MagicMock:
+    """Build a mock response where the model returns text without a tool call."""
+    msg = MagicMock()
+    msg.tool_calls = None
+    msg.content = content
+    msg.reasoning_content = None
+
+    choice = MagicMock()
+    choice.message = msg
+
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.usage = None
+    return resp
+
+
+def make_test_trace(
+    mode: Literal["ingestion", "query", "theme"] = "ingestion",
+) -> RunTrace:
+    return RunTrace(
+        mode=mode,
+        started_at=datetime.now(tz=timezone.utc),
+        input_summary="test",
+    )

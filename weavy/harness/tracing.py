@@ -13,7 +13,7 @@ Langfuse observation hierarchy (standalone run):
         └── tool:create_node span
     └── turn-2 span
         ├── llm generation
-        └── tool:complete_ingestion span
+        └── tool:complete span
 
 Langfuse observation hierarchy (interactive chat session via ChatSessionTracer):
     chat-session root-span
@@ -35,7 +35,7 @@ from typing import Any, Literal
 import litellm
 
 from weavy.config import settings
-from weavy.models.traces import RunTrace, TurnUsage, graph_delta
+from weavy.models.traces import RunMode, RunTrace, TurnUsage, graph_delta
 
 
 @lru_cache(maxsize=64)
@@ -186,18 +186,14 @@ class RunTracer:
             self._current_generation.end()
             self._current_generation = None
         if self._current_turn_span is not None:
-            self._current_turn_span.update(output=text_content)
+            if text_content is not None:
+                self._current_turn_span.update(output=text_content)
             self._current_turn_span.end()
             self._current_turn_span = None
 
     def _close_open_spans(self) -> None:
         """Safety net: close any spans left open on error paths."""
-        if self._current_generation is not None:
-            self._current_generation.end()
-            self._current_generation = None
-        if self._current_turn_span is not None:
-            self._current_turn_span.end()
-            self._current_turn_span = None
+        self.end_turn(None)
 
     # ---- LLM call (created before the call for accurate timing) ----
 
@@ -294,7 +290,9 @@ class RunTracer:
             )
             span.update(output=result)
             span.end()
-        print(f"[T{turn_number}] ← {name} ({duration_ms:.0f}ms): {_truncate(result, 80)}")
+        print(
+            f"[T{turn_number}] ← {name} ({duration_ms:.0f}ms): {_truncate(result, 80)}"
+        )
 
     def record_tool_error(
         self,
@@ -365,7 +363,7 @@ class RunTracer:
 
 
 def new_trace(
-    mode: Literal["ingestion", "query", "theme"],
+    mode: RunMode,
     input_summary: str,
 ) -> RunTrace:
     return RunTrace(

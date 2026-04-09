@@ -43,14 +43,12 @@ class Settings:
     GRAPH_NAME: str = _getenv("GRAPH_NAME", "weavy")
 
     GEMINI_MODEL: str = _getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
+    GEMINI_EMBEDDING_MODEL: str = _getenv(
+        "GEMINI_EMBEDDING_MODEL", "gemini/gemini-embedding-001"
+    )
     REASONING_EFFORT: str = _getenv("REASONING_EFFORT", "medium")
 
     HOT_THEME_TOKEN_BUDGET: int = int(_getenv("HOT_THEME_TOKEN_BUDGET", "250"))
-
-    WHISPER_MODEL: str = _getenv("WHISPER_MODEL", "groq/whisper-large-v3-turbo")
-    WHISPER_LANGUAGE: str = _getenv("WHISPER_LANGUAGE", "")
-    WHISPER_PROMPT: str = _getenv("WHISPER_PROMPT", "")
-    WHISPER_TEMPERATURE: float = float(_getenv("WHISPER_TEMPERATURE", "0"))
 
     LANGFUSE_HOST: str = _langfuse_host()
     LANGFUSE_PUBLIC_KEY: str = _getenv("LANGFUSE_PUBLIC_KEY", "")

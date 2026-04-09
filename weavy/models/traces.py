@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+RunMode = Literal["ingestion", "query", "theme"]
+
 
 class TouchedNode(BaseModel):
     node_id: str
@@ -41,25 +43,33 @@ class Turn(BaseModel):
     timestamp: datetime
 
 
+def graph_changes(
+    touched_nodes: list["TouchedNode"],
+    touched_edges: list["TouchedEdge"],
+) -> dict[str, list[str]]:
+    """Return ID-lists grouped by action, e.g. {"nodes_created": ["node:1"]}."""
+    result: dict[str, list[str]] = {}
+    for action in ("created", "updated", "deleted"):
+        node_ids = [n.node_id for n in touched_nodes if n.action == action]
+        edge_ids = [e.edge_id for e in touched_edges if e.action == action]
+        if node_ids:
+            result[f"nodes_{action}"] = node_ids
+        if edge_ids:
+            result[f"edges_{action}"] = edge_ids
+    return result
+
+
 def graph_delta(
     touched_nodes: list["TouchedNode"],
     touched_edges: list["TouchedEdge"],
 ) -> dict[str, int]:
     """Summarise write activity as action-count pairs, e.g. nodes_created=3."""
-    delta: dict[str, int] = {}
-    for action in ("created", "updated", "deleted"):
-        nc = sum(1 for n in touched_nodes if n.action == action)
-        ec = sum(1 for e in touched_edges if e.action == action)
-        if nc:
-            delta[f"nodes_{action}"] = nc
-        if ec:
-            delta[f"edges_{action}"] = ec
-    return delta
+    return {k: len(v) for k, v in graph_changes(touched_nodes, touched_edges).items()}
 
 
 class RunTrace(BaseModel):
     run_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
-    mode: Literal["ingestion", "query", "theme"]
+    mode: RunMode
     started_at: datetime
     ended_at: datetime | None = None
     input_summary: str
@@ -71,3 +81,4 @@ class RunTrace(BaseModel):
     status: Literal["running", "completed", "failed"] = "running"
     error: str | None = None
     conversation: list[dict] | None = None
+    conversation_raw: list[dict] | None = None  # full messages excluding system prompt

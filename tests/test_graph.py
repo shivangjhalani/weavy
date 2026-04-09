@@ -5,7 +5,7 @@ Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 from falkordb import Graph
@@ -22,46 +22,14 @@ from weavy.models.tools import (
     UpdateEdgeInput,
     UpdateNodeInput,
 )
-from weavy.models.traces import RunTrace
 from weavy.services import memory
 from weavy.store import graph as store_graph
-from weavy.store.client import get_graph
-from weavy.store.system import init_system
-
-TEST_GRAPH = "weavy_test"
-
-
-def _ingestion_trace() -> RunTrace:
-    return RunTrace(
-        mode="ingestion",
-        started_at=datetime.now(tz=timezone.utc),
-        input_summary="test",
-    )
-
-
-def _query_trace() -> RunTrace:
-    return RunTrace(
-        mode="query",
-        started_at=datetime.now(tz=timezone.utc),
-        input_summary="test",
-    )
-
-
-def _theme_trace() -> RunTrace:
-    return RunTrace(
-        mode="theme",
-        started_at=datetime.now(tz=timezone.utc),
-        input_summary="test",
-    )
+from tests.helpers import make_test_trace, reset_test_graph
 
 
 @pytest.fixture
 def graph() -> Graph:
-    g = get_graph(TEST_GRAPH)
-    g.query("MATCH (s:System) DELETE s")
-    g.query("MATCH (n:SemanticNode) DETACH DELETE n")
-    init_system(g)
-    return g
+    return reset_test_graph()
 
 
 # ---------------------------------------------------------------------------
@@ -70,19 +38,18 @@ def graph() -> Graph:
 
 
 def test_create_node_ingestion(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=30)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     params = CreateNodeInput(
         aliases=["career anxiety", "work stress"],
         summary="Persistent worry about career direction.",
-        note="First mention in rec:1",
+        note="First mention in s:1",
         provenance=prov,
     )
-    result = memory.create_node(graph, params, _ingestion_trace())
+    result = memory.create_node(graph, params, make_test_trace())
     assert result.ok
     assert result.id is not None
     assert result.id.startswith("node:")
 
-    # Verify the node exists in the store with the correct log entry
     out = store_graph.get_node(graph, result.id)
     assert out.node.aliases == ["career anxiety", "work stress"]
     assert out.node.summary == "Persistent worry about career direction."
@@ -90,69 +57,42 @@ def test_create_node_ingestion(graph: Graph) -> None:
     assert len(out.node.log) == 1
     entry = out.node.log[0]
     assert isinstance(entry, LogEntry)
-    assert entry.source_id == "rec:1"
-    assert entry.start_offset == 0
-    assert entry.end_offset == 30
-    assert entry.note == "First mention in rec:1"
+    assert entry.source_id == "s:1"
+    assert entry.offset == 0
+    assert entry.note == "First mention in s:1"
 
 
-def test_create_node_chat_provenance(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="chat:1", start_offset=3, end_offset=None)
+def test_create_node_query_provenance(graph: Graph) -> None:
+    prov = ProvenanceInput(source_id="s:2", offset=3)
     params = CreateNodeInput(
         aliases=["fear of failure"],
         summary="Fear of failing after a career change.",
         note="User mentioned during chat at message 3",
         provenance=prov,
     )
-    result = memory.create_node(graph, params, _query_trace())
+    result = memory.create_node(graph, params, make_test_trace("query"))
     assert result.ok
     assert result.id.startswith("node:")
 
 
-def test_create_node_no_provenance_rejected(graph: Graph) -> None:
-    params = CreateNodeInput(
-        aliases=["something"],
-        summary="Some concept.",
-        note="no provenance",
-        provenance=None,
-    )
-    with pytest.raises(ValueError, match="require provenance"):
-        memory.create_node(graph, params, _ingestion_trace())
-
-
-def test_create_node_wrong_source_rejected(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="chat:1", start_offset=0, end_offset=None)
-    params = CreateNodeInput(
-        aliases=["something"],
-        summary="Some concept.",
-        note="chat provenance in ingestion mode",
-        provenance=prov,
-    )
-    with pytest.raises(ValueError, match="rec:"):
-        memory.create_node(graph, params, _ingestion_trace())
-
-
-def test_create_node_theme_mode_rejected(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
-    params = CreateNodeInput(
-        aliases=["x"],
-        summary="x",
-        note="x",
-        provenance=prov,
-    )
-    with pytest.raises(ValueError, match="Theme mode"):
-        memory.create_node(graph, params, _theme_trace())
+def test_create_node_no_provenance_rejected() -> None:
+    with pytest.raises(ValidationError):
+        CreateNodeInput(
+            aliases=["something"],
+            summary="Some concept.",
+            note="no provenance",
+        )
 
 
 def test_create_node_recorded_in_trace(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     params = CreateNodeInput(
         aliases=["focus"],
         summary="Ability to focus deeply.",
         note="first mention",
         provenance=prov,
     )
-    trace = _ingestion_trace()
+    trace = make_test_trace()
     result = memory.create_node(graph, params, trace)
     assert len(trace.touched_nodes) == 1
     assert trace.touched_nodes[0].node_id == result.id
@@ -165,7 +105,7 @@ def test_create_node_recorded_in_trace(graph: Graph) -> None:
 
 
 def test_update_node_archives_summary(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     node_id = memory.create_node(
         graph,
         CreateNodeInput(
@@ -174,10 +114,10 @@ def test_update_node_archives_summary(graph: Graph) -> None:
             note="created",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
 
-    update_prov = ProvenanceInput(source_id="rec:2", start_offset=5, end_offset=15)
+    update_prov = ProvenanceInput(source_id="s:2", offset=1)
     memory.update_node(
         graph,
         UpdateNodeInput(
@@ -186,7 +126,7 @@ def test_update_node_archives_summary(graph: Graph) -> None:
             new_summary="Anxiety reduced significantly.",
             provenance=update_prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     )
 
     out = store_graph.get_node(graph, node_id)
@@ -200,7 +140,7 @@ def test_update_node_archives_summary(graph: Graph) -> None:
 
 
 def test_update_node_aliases_only(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     node_id = memory.create_node(
         graph,
         CreateNodeInput(
@@ -209,10 +149,10 @@ def test_update_node_aliases_only(graph: Graph) -> None:
             note="created",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
 
-    update_prov = ProvenanceInput(source_id="rec:2", start_offset=0, end_offset=5)
+    update_prov = ProvenanceInput(source_id="s:2", offset=0)
     memory.update_node(
         graph,
         UpdateNodeInput(
@@ -221,7 +161,7 @@ def test_update_node_aliases_only(graph: Graph) -> None:
             new_aliases=["dad", "papa", "father"],
             provenance=update_prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     )
 
     out = store_graph.get_node(graph, node_id)
@@ -235,11 +175,16 @@ def test_node_and_edge_ids_reject_trailing_punctuation() -> None:
         UpdateNodeInput(
             node_id="node:4,",
             note="bad id",
-            provenance=ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=1),
+            provenance=ProvenanceInput(source_id="s:1", offset=0),
         )
 
     with pytest.raises(ValidationError, match=r"node:\d+"):
-        CreateEdgeInput(from_node_id="node:1", to_node_id="node:2.", label="related")
+        CreateEdgeInput(
+            from_node_id="node:1",
+            to_node_id="node:2.",
+            label="related",
+            note="x",
+        )
 
     with pytest.raises(ValidationError, match=r"edge:\d+"):
         UpdateEdgeInput(edge_id="edge:3)", new_label="updated")
@@ -251,24 +196,29 @@ def test_node_and_edge_ids_reject_trailing_punctuation() -> None:
 
 
 def test_delete_node_removes_node_and_edges(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="Node A", note="a", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="Node B", note="b", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     memory.create_edge(
         graph,
-        CreateEdgeInput(from_node_id=a, to_node_id=b, label="related"),
-        _ingestion_trace(),
+        CreateEdgeInput(
+            from_node_id=a,
+            to_node_id=b,
+            label="related",
+            note="A relates to B",
+        ),
+        make_test_trace(),
     )
 
-    trace = _ingestion_trace()
+    trace = make_test_trace()
     memory.delete_node(graph, DeleteNodeInput(node_id=a, reason="test cleanup"), trace)
     assert trace.touched_nodes[-1].action == "deleted"
 
@@ -286,7 +236,7 @@ def test_delete_node_not_found_raises(graph: Graph) -> None:
         memory.delete_node(
             graph,
             DeleteNodeInput(node_id="node:9999", reason="missing"),
-            _ingestion_trace(),
+            make_test_trace(),
         )
 
 
@@ -296,21 +246,28 @@ def test_delete_node_not_found_raises(graph: Graph) -> None:
 
 
 def test_create_edge(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
 
-    trace = _ingestion_trace()
+    trace = make_test_trace()
     result = memory.create_edge(
-        graph, CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"), trace
+        graph,
+        CreateEdgeInput(
+            from_node_id=a,
+            to_node_id=b,
+            label="causes",
+            note="A causes B",
+        ),
+        trace,
     )
     assert result.ok
     assert result.id.startswith("edge:")
@@ -322,27 +279,32 @@ def test_create_edge(graph: Graph) -> None:
 
 
 def test_update_edge_label(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     edge_id = memory.create_edge(
         graph,
-        CreateEdgeInput(from_node_id=a, to_node_id=b, label="old label"),
-        _ingestion_trace(),
+        CreateEdgeInput(
+            from_node_id=a,
+            to_node_id=b,
+            label="old label",
+            note="initial relationship",
+        ),
+        make_test_trace(),
     ).id
 
     memory.update_edge(
         graph,
         UpdateEdgeInput(edge_id=edge_id, new_label="new label"),
-        _ingestion_trace(),
+        make_test_trace(),
     )
 
     out = store_graph.get_node(graph, a)
@@ -350,24 +312,29 @@ def test_update_edge_label(graph: Graph) -> None:
 
 
 def test_delete_edge(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     edge_id = memory.create_edge(
         graph,
-        CreateEdgeInput(from_node_id=a, to_node_id=b, label="linked"),
-        _ingestion_trace(),
+        CreateEdgeInput(
+            from_node_id=a,
+            to_node_id=b,
+            label="linked",
+            note="A linked to B",
+        ),
+        make_test_trace(),
     ).id
 
-    trace = _ingestion_trace()
+    trace = make_test_trace()
     memory.delete_edge(graph, DeleteEdgeInput(edge_id=edge_id, reason="test"), trace)
     assert trace.touched_edges[-1].action == "deleted"
 
@@ -382,7 +349,7 @@ def test_delete_edge(graph: Graph) -> None:
 
 
 def test_search_graph_alias_match(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     memory.create_node(
         graph,
         CreateNodeInput(
@@ -391,7 +358,7 @@ def test_search_graph_alias_match(graph: Graph) -> None:
             note="x",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     )
     out = store_graph.search_graph(graph, SearchGraphInput(query="career"))
     assert len(out.results) >= 1
@@ -399,7 +366,7 @@ def test_search_graph_alias_match(graph: Graph) -> None:
 
 
 def test_search_graph_summary_match(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     memory.create_node(
         graph,
         CreateNodeInput(
@@ -408,7 +375,7 @@ def test_search_graph_summary_match(graph: Graph) -> None:
             note="x",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     )
     out = store_graph.search_graph(graph, SearchGraphInput(query="mindfulness"))
     assert len(out.results) >= 1
@@ -427,21 +394,27 @@ def test_search_graph_no_match(graph: Graph) -> None:
 
 
 def test_get_node_returns_edges(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     memory.create_edge(
         graph,
-        CreateEdgeInput(from_node_id=a, to_node_id=b, label="test edge"),
-        _ingestion_trace(),
+        CreateEdgeInput(
+            from_node_id=a,
+            to_node_id=b,
+            label="test edge",
+            note="A test edge from A to B",
+            provenance=prov,
+        ),
+        make_test_trace(),
     )
 
     out = memory.get_node(graph, GetNodeInput(node_ids=[a]))
@@ -450,16 +423,16 @@ def test_get_node_returns_edges(graph: Graph) -> None:
 
 
 def test_get_node_returns_multiple_results_and_not_found(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(aliases=["A"], summary="A", note="a", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
         CreateNodeInput(aliases=["B"], summary="B", note="b", provenance=prov),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
 
     out = memory.get_node(graph, GetNodeInput(node_ids=[a, "node:9999", b]))
@@ -469,13 +442,13 @@ def test_get_node_returns_multiple_results_and_not_found(graph: Graph) -> None:
 
 
 def test_get_node_json_has_iso_timestamps(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     node_id = memory.create_node(
         graph,
         CreateNodeInput(
             aliases=["test node"], summary="Test.", note="initial", provenance=prov
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
 
     out = memory.get_node(graph, GetNodeInput(node_ids=[node_id]))
@@ -490,7 +463,7 @@ def test_get_node_json_has_iso_timestamps(graph: Graph) -> None:
 
 
 def test_get_node_neighborhood(graph: Graph) -> None:
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=10)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     a = memory.create_node(
         graph,
         CreateNodeInput(
@@ -499,7 +472,7 @@ def test_get_node_neighborhood(graph: Graph) -> None:
             note="a",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     b = memory.create_node(
         graph,
@@ -509,7 +482,7 @@ def test_get_node_neighborhood(graph: Graph) -> None:
             note="b",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     c = memory.create_node(
         graph,
@@ -519,17 +492,29 @@ def test_get_node_neighborhood(graph: Graph) -> None:
             note="c",
             provenance=prov,
         ),
-        _ingestion_trace(),
+        make_test_trace(),
     ).id
     memory.create_edge(
         graph,
-        CreateEdgeInput(from_node_id=a, to_node_id=b, label="causes"),
-        _ingestion_trace(),
+        CreateEdgeInput(
+            from_node_id=a,
+            to_node_id=b,
+            label="causes",
+            note="Career anxiety causes persistent anxiety",
+            provenance=prov,
+        ),
+        make_test_trace(),
     )
     memory.create_edge(
         graph,
-        CreateEdgeInput(from_node_id=c, to_node_id=a, label="influences"),
-        _ingestion_trace(),
+        CreateEdgeInput(
+            from_node_id=c,
+            to_node_id=a,
+            label="influences",
+            note="Mentor influences career direction",
+            provenance=prov,
+        ),
+        make_test_trace(),
     )
 
     out = store_graph.get_node_neighborhood(graph, a)

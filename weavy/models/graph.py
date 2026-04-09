@@ -1,32 +1,26 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LogEntry(BaseModel):
-    source_id: str  # rec:N or chat:N
+    source_id: str  # s:N
     timestamp: datetime
-    start_offset: int  # seconds for rec, message_index for chat
-    end_offset: int | None  # seconds for rec, null for chat
+    offset: int  # segment index (transcript) or turn index (chat)
     note: str
 
 
 class ProvenanceInput(BaseModel):
-    source_id: str  # rec:N or chat:N
-    start_offset: int
-    end_offset: int | None
+    model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="after")
-    def validate_offsets(self) -> "ProvenanceInput":
-        if self.source_id.startswith("rec:") and self.end_offset is None:
-            raise ValueError("rec: provenance requires end_offset")
-        return self
+    source_id: str  # s:N
+    offset: int  # segment index (transcript) or turn index (chat)
 
     @field_validator("source_id")
     @classmethod
     def validate_source_id(cls, v: str) -> str:
-        if not (v.startswith("rec:") or v.startswith("chat:")):
-            raise ValueError("source_id must be rec:N or chat:N")
+        if not v.startswith("s:"):
+            raise ValueError("source_id must be s:N")
         return v
 
 
@@ -50,3 +44,4 @@ class SemanticEdge(BaseModel):
     from_node_id: str
     to_node_id: str
     label: str
+    note: str | None = None  # why this relationship exists

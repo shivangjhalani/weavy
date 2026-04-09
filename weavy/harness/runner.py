@@ -2,11 +2,12 @@
 Agent harness runner — one loop engine shared by ingestion, query, and theme modes.
 """
 
-from copy import deepcopy
 import json
+import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any
 
 import litellm
 from falkordb import Graph
@@ -14,9 +15,12 @@ from falkordb import Graph
 from weavy.config import settings
 from weavy.harness import actions
 from weavy.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
-from weavy.models.traces import RunTrace, ToolCall, Turn, TurnUsage
+from weavy.models.canonical import conversation_to_chat_messages
+from weavy.models.traces import RunMode, RunTrace, ToolCall, Turn, TurnUsage
 
-_MAX_COMPLETION_NUDGES = 1
+_MAX_PLAINTEXT_RETRIES = 1  # times to re-prompt before failing when model returns text instead of calling a tool
+_MAX_TOOL_RETRIES = 3  # total tool-error nudges across the run before hard-failing
+_STALE_TOOL_RESULT_MAX = 500  # chars to keep from tool results the model has already processed
 
 
 def _with_cache_control(message: dict[str, Any]) -> dict[str, Any]:
@@ -30,7 +34,9 @@ def _with_cache_control(message: dict[str, Any]) -> dict[str, Any]:
     msg = deepcopy(message)
     content = msg.get("content")
     if isinstance(content, str):
-        msg["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+        msg["content"] = [
+            {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+        ]
     elif isinstance(content, list) and content:
         last = dict(content[-1])
         last["cache_control"] = {"type": "ephemeral"}
@@ -47,9 +53,7 @@ def _sanitize_message_for_trace(message: dict[str, Any]) -> dict[str, Any]:
             {
                 **{k: v for k, v in tc.items() if k != "id"},
                 "function": {
-                    k: v
-                    for k, v in tc.get("function", {}).items()
-                    if k != "id"
+                    k: v for k, v in tc.get("function", {}).items() if k != "id"
                 },
             }
             for tc in tool_calls
@@ -58,16 +62,34 @@ def _sanitize_message_for_trace(message: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
-def _sanitize_messages_for_trace(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _sanitize_messages_for_trace(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     return [_sanitize_message_for_trace(m) for m in messages]
 
 
 def _conversation_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {"role": m["role"], "content": m["content"]}
-        for m in messages
-        if m["role"] in ("user", "assistant") and m.get("content")
-    ]
+    return [m.model_dump() for m in conversation_to_chat_messages(messages)]
+
+
+def _trim_stale_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a copy of messages with old tool results truncated.
+
+    Tool results before the last assistant message have already been processed
+    by the model — they don't need to be re-sent in full on subsequent turns.
+    """
+    last_asst = max(
+        (i for i, m in enumerate(messages) if m.get("role") == "assistant"),
+        default=-1,
+    )
+    result = []
+    for i, msg in enumerate(messages):
+        if i < last_asst and msg.get("role") == "tool":
+            content = msg.get("content", "")
+            if isinstance(content, str) and len(content) > _STALE_TOOL_RESULT_MAX:
+                msg = {**msg, "content": content[:_STALE_TOOL_RESULT_MAX] + " …[trimmed]"}
+        result.append(msg)
+    return result
 
 
 @lru_cache(maxsize=None)
@@ -136,7 +158,7 @@ def _build_turn_usage(usage_raw: Any) -> TurnUsage:
 
 
 def run(
-    mode: Literal["ingestion", "query", "theme"],
+    mode: RunMode,
     system_prompt: str,
     initial_messages: list[dict[str, Any]],
     allowed_actions: list[str],
@@ -168,20 +190,23 @@ def run(
         {"role": "system", "content": system_prompt},
         *initial_messages,
     ]
-    _model = settings.GEMINI_MODEL
-    if not _model.startswith("gemini/"):
+    if not settings.GEMINI_MODEL.startswith("gemini/"):
         static_messages[-1] = _with_cache_control(static_messages[-1])
     messages: list[dict[str, Any]] = static_messages
     tool_definitions = actions.get_action_definitions(allowed_actions)
     turn_number = 0
-    completion_nudges = 0
+    plaintext_retries = 0
+    tool_error_retries = 0
+    sanitized_cache: list[dict[str, Any]] = []
 
     context_limit = _get_context_limit(settings.GEMINI_MODEL)
 
     while True:
         turn_number += 1
         turn_ts = datetime.now(tz=timezone.utc)
-        input_messages_snapshot = _sanitize_messages_for_trace(messages)
+        new_messages = messages[len(sanitized_cache) :]
+        sanitized_cache.extend(_sanitize_messages_for_trace(new_messages))
+        input_messages_snapshot = list(sanitized_cache)
 
         tracer.start_turn(turn_number, len(messages))
 
@@ -190,7 +215,7 @@ def run(
         try:
             response = litellm.completion(
                 model=settings.GEMINI_MODEL,
-                messages=messages,
+                messages=_trim_stale_tool_results(messages),
                 tools=tool_definitions,
                 tool_choice="auto",
                 reasoning_effort=settings.REASONING_EFFORT,
@@ -230,8 +255,8 @@ def run(
 
         if not tool_calls:
             record_turn(trace, turn)
-            if message.content and completion_nudges < _MAX_COMPLETION_NUDGES:
-                completion_nudges += 1
+            if message.content and plaintext_retries < _MAX_PLAINTEXT_RETRIES:
+                plaintext_retries += 1
                 tracer.end_turn(message.content)
                 messages.append({"role": "assistant", "content": message.content})
                 messages.append(
@@ -239,7 +264,7 @@ def run(
                         "role": "user",
                         "content": (
                             "You must call the completion tool to finish. "
-                            "Do not respond with plain text — call deliver_response "
+                            "Do not respond with plain text — call complete "
                             "(or the appropriate completion tool for this mode) now."
                         ),
                     }
@@ -269,10 +294,17 @@ def run(
         )
 
         # --- Process each tool call ---
+        tool_errored = False
         for tc in tool_calls:
             tool_name = tc.function.name
             tool_call_id = tc.id
             called_at = datetime.now(tz=timezone.utc)
+
+            if tool_errored:
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call_id, "content": "Skipped: prior tool call in this batch failed."}
+                )
+                continue
 
             # Resolve tool
             entry = actions.ACTIONS.get(tool_name)
@@ -280,9 +312,12 @@ def run(
                 err = f"Unknown tool '{tool_name}'."
                 tracer.record_tool_error(turn_number, tool_name, {}, err)
                 _append_tool_call_error(turn, tool_name, {}, err, called_at)
-                return _finalize_failed_run(
-                    trace, tracer, err, context_limit, turn=turn
-                )
+                if tool_error_retries >= _MAX_TOOL_RETRIES:
+                    return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
+                tool_error_retries += 1
+                messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"Error: {err}"})
+                tool_errored = True
+                continue
 
             # Parse args
             args_dict: dict[str, Any] = {}
@@ -293,23 +328,29 @@ def run(
                 err = f"Invalid arguments for '{tool_name}': {e}"
                 tracer.record_tool_error(turn_number, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                return _finalize_failed_run(
-                    trace, tracer, err, context_limit, turn=turn
-                )
+                if tool_error_retries >= _MAX_TOOL_RETRIES:
+                    return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
+                tool_error_retries += 1
+                messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"Error: {err}"})
+                tool_errored = True
+                continue
 
             # Execute tool
-            t0 = datetime.now(tz=timezone.utc).timestamp()
+            t0 = time.monotonic()
             try:
                 result = entry.fn(params, ctx)
             except Exception as e:
                 err = f"Tool '{tool_name}' raised: {e}"
                 tracer.record_tool_error(turn_number, tool_name, args_dict, err)
                 _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                return _finalize_failed_run(
-                    trace, tracer, err, context_limit, turn=turn
-                )
+                if tool_error_retries >= _MAX_TOOL_RETRIES:
+                    return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
+                tool_error_retries += 1
+                messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"Error: {err}"})
+                tool_errored = True
+                continue
 
-            duration_ms = (datetime.now(tz=timezone.utc).timestamp() - t0) * 1000
+            duration_ms = (time.monotonic() - t0) * 1000
             result_str = (
                 result.model_dump_json()
                 if hasattr(result, "model_dump_json")
@@ -334,6 +375,7 @@ def run(
             if entry.is_completion:
                 record_turn(trace, turn)
                 trace.conversation = _conversation_messages(messages)
+                trace.conversation_raw = messages[1:]  # skip system message
                 finalize_trace(trace, "completed")
                 tracer.end_turn(message.content)
                 tracer.finalize(trace, context_limit=context_limit)

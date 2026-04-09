@@ -1,6 +1,6 @@
-from weavy.models.canonical import (
+from transcribe import (
     TranscriptSegment,
-    extract_transcript_span,
+    extract_segment_range,
     parse_transcript_text,
 )
 
@@ -29,9 +29,23 @@ def test_parse_transcript_text_wraps_plain_text() -> None:
     ]
 
 
-def test_extract_transcript_span_returns_plain_text_for_untimed_transcript() -> None:
+def test_extract_segment_range_returns_text_by_index() -> None:
+    segments = parse_transcript_text(
+        "[0:00] First line.\n[0:14] Second line.\n[0:28] Third line."
+    )
+
+    assert extract_segment_range(segments, 1, 2) == "Second line."
+    assert extract_segment_range(segments, 0, 3) == "First line. Second line. Third line."
+    assert extract_segment_range(segments, 0, 1) == "First line."
+
+
+def test_extract_segment_range_plain_text() -> None:
     segments = parse_transcript_text("This transcript has no inline timestamps.")
 
-    assert extract_transcript_span(segments, start_offset=30, end_offset=45) == (
-        "This transcript has no inline timestamps."
-    )
+    assert extract_segment_range(segments, 0, 1) == "This transcript has no inline timestamps."
+
+
+def test_extract_segment_range_empty_on_out_of_bounds() -> None:
+    segments = parse_transcript_text("[0:00] Only line.")
+
+    assert extract_segment_range(segments, 5, 10) == ""

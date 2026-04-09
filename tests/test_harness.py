@@ -1,11 +1,10 @@
 """
-Phase 4 tests — Agent harness, completion actions, and runner loop.
+Agent harness, completion actions, and runner loop tests.
 Runner tests mock litellm.completion to avoid real LLM calls.
 Integration tests that touch FalkorDB use the "weavy_test" graph.
 """
 
 import json
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,30 +14,18 @@ from weavy.harness import actions as reg
 from weavy.harness import runner as harness_runner
 from weavy.harness.runner import run
 from weavy.harness.tracing import RunTracer
-from weavy.models.traces import RunTrace, TurnUsage
-from weavy.store.client import get_graph
-from weavy.store.system import init_system
-from tests.helpers import mock_tool_response
-
-TEST_GRAPH = "weavy_test"
-
-
-def _running_trace(mode: str = "ingestion") -> RunTrace:
-    return RunTrace(
-        mode=mode,  # type: ignore[arg-type]
-        started_at=datetime.now(tz=timezone.utc),
-        input_summary="test run",
-        status="running",
-    )
+from weavy.models.traces import TurnUsage
+from tests.helpers import (
+    make_test_trace,
+    mock_text_response,
+    mock_tool_response,
+    reset_test_graph,
+)
 
 
 @pytest.fixture
 def graph() -> Graph:
-    g = get_graph(TEST_GRAPH)
-    g.query("MATCH (s:System) DELETE s")
-    g.query("MATCH (n:SemanticNode) DETACH DELETE n")
-    init_system(g)
-    return g
+    return reset_test_graph()
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +56,8 @@ def test_run_tracer_creates_langfuse_trace() -> None:
         tracer = RunTracer(
             "1eaa8338-f95d-4592-838f-00d18a352b81",
             "ingestion",
-            "Ingesting rec:1",
-            session_id="rec:1",
+            "Ingesting s:1",
+            session_id="s:1",
         )
 
     mock_lf.start_observation.assert_called_once()
@@ -79,7 +66,7 @@ def test_run_tracer_creates_langfuse_trace() -> None:
         "trace_id": "1eaa8338f95d4592838f00d18a352b81"
     }
     assert call_kwargs["name"] == "ingestion-run"
-    assert call_kwargs["input"] == "Ingesting rec:1"
+    assert call_kwargs["input"] == "Ingesting s:1"
     assert tracer.get_trace_id() == "1eaa8338-f95d-4592-838f-00d18a352b81"
 
 
@@ -141,7 +128,7 @@ def test_run_tracer_record_tool_error() -> None:
 
 def test_run_tracer_finalize_flushes() -> None:
     tracer, mock_lf = _make_tracer()
-    trace = _running_trace()
+    trace = make_test_trace()
     trace.total_usage = TurnUsage(
         prompt_tokens=100, completion_tokens=50, total_tokens=150
     )
@@ -168,10 +155,8 @@ def test_actions_contains_all_expected_entries() -> None:
         "search_graph",
         "get_node",
         "get_node_neighborhood",
-        "list_transcripts",
-        "get_transcript_span",
-        "list_chats",
-        "get_chat",
+        "list_sessions",
+        "get_session",
         "get_theme",
         "create_node",
         "update_node",
@@ -182,28 +167,16 @@ def test_actions_contains_all_expected_entries() -> None:
         "create_theme",
         "update_theme",
         "retire_theme",
-        "complete_ingestion",
-        "deliver_response",
+        "set_preface",
+        "complete",
         "complete_theme_update",
     }
     assert expected == set(reg.ACTIONS.keys())
+
+
 # ---------------------------------------------------------------------------
 # runner.py — unit tests (no FalkorDB)
 # ---------------------------------------------------------------------------
-def _mock_no_tool_response() -> MagicMock:
-    """Build a mock response where the model returns text without a tool call."""
-    msg = MagicMock()
-    msg.tool_calls = None
-    msg.content = "I think the answer is..."
-    msg.reasoning_content = None
-
-    choice = MagicMock()
-    choice.message = msg
-
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage = None
-    return resp
 
 
 def _mock_run_tracer() -> MagicMock:
@@ -215,15 +188,15 @@ def _mock_run_tracer() -> MagicMock:
 
 def test_run_fails_without_tool_call() -> None:
     with (
-        patch("litellm.completion", return_value=_mock_no_tool_response()),
+        patch("litellm.completion", return_value=mock_text_response()),
         patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
     ):
         trace = run(
             mode="ingestion",
-            system_prompt="You are an ingestion agent.",
-            initial_messages=[{"role": "user", "content": "ingest rec:1"}],
-            allowed_actions=reg.INGESTION_ACTIONS,
-            run_context={"input_summary": "rec:1"},
+            system_prompt="You are an agent.",
+            initial_messages=[{"role": "user", "content": "process s:1"}],
+            allowed_actions=reg.SESSION_ACTIONS,
+            run_context={"input_summary": "s:1"},
             graph=MagicMock(),
         )
     assert trace.status == "failed"
@@ -238,9 +211,9 @@ def test_run_fails_on_unknown_tool() -> None:
     ):
         trace = run(
             mode="ingestion",
-            system_prompt="You are an ingestion agent.",
+            system_prompt="You are an agent.",
             initial_messages=[],
-            allowed_actions=reg.INGESTION_ACTIONS,
+            allowed_actions=reg.SESSION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -257,9 +230,9 @@ def test_run_fails_on_bad_args() -> None:
     ):
         trace = run(
             mode="ingestion",
-            system_prompt="You are an ingestion agent.",
+            system_prompt="You are an agent.",
             initial_messages=[],
-            allowed_actions=reg.INGESTION_ACTIONS,
+            allowed_actions=reg.SESSION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -271,9 +244,7 @@ def test_run_records_tool_calls() -> None:
     search_resp = mock_tool_response(
         "search_graph", {"query": "career", "limit": 5}, "tc-1"
     )
-    completion_resp = mock_tool_response(
-        "complete_ingestion", {"summary": "done"}, "tc-2"
-    )
+    completion_resp = mock_tool_response("complete", {"summary": "done"}, "tc-2")
 
     search_output = MagicMock()
     search_output.model_dump_json.return_value = '{"results":[]}'
@@ -285,9 +256,9 @@ def test_run_records_tool_calls() -> None:
     ):
         trace = run(
             mode="ingestion",
-            system_prompt="You are an ingestion agent.",
+            system_prompt="You are an agent.",
             initial_messages=[],
-            allowed_actions=reg.INGESTION_ACTIONS,
+            allowed_actions=reg.SESSION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -295,8 +266,10 @@ def test_run_records_tool_calls() -> None:
     assert trace.status == "completed"
     assert len(trace.turns) == 2
     assert trace.turns[0].tool_calls[0].tool_name == "search_graph"
-    assert trace.turns[1].tool_calls[0].tool_name == "complete_ingestion"
-    assert "tool_call_id" not in json.dumps([turn.model_dump(mode="json") for turn in trace.turns])
+    assert trace.turns[1].tool_calls[0].tool_name == "complete"
+    assert "tool_call_id" not in json.dumps(
+        [turn.model_dump(mode="json") for turn in trace.turns]
+    )
 
 
 def test_run_redacts_tool_call_ids_from_trace_and_tracer() -> None:
@@ -304,7 +277,7 @@ def test_run_redacts_tool_call_ids_from_trace_and_tracer() -> None:
         "search_graph", {"query": "career", "limit": 5}, "provider-tool-call-id-1"
     )
     completion_resp = mock_tool_response(
-        "complete_ingestion", {"summary": "done"}, "provider-tool-call-id-2"
+        "complete", {"summary": "done"}, "provider-tool-call-id-2"
     )
 
     search_output = MagicMock()
@@ -318,9 +291,9 @@ def test_run_redacts_tool_call_ids_from_trace_and_tracer() -> None:
     ):
         trace = run(
             mode="ingestion",
-            system_prompt="You are an ingestion agent.",
+            system_prompt="You are an agent.",
             initial_messages=[],
-            allowed_actions=reg.INGESTION_ACTIONS,
+            allowed_actions=reg.SESSION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -330,11 +303,17 @@ def test_run_redacts_tool_call_ids_from_trace_and_tracer() -> None:
     assert first_llm_call["tool_calls"] == [
         {"name": "search_graph", "args": '{"query": "career", "limit": 5}'}
     ]
-    assert "tool_call_id" not in trace.model_dump_json()
+    # conversation_raw intentionally keeps tool_call_ids for session replay;
+    # check only the Langfuse-bound parts of the trace.
+    langfuse_data = json.dumps(
+        [turn.model_dump(mode="json") for turn in trace.turns]
+        + (trace.conversation or [])
+    )
+    assert "tool_call_id" not in langfuse_data
 
 
 def test_run_completes_on_completion_tool() -> None:
-    resp = mock_tool_response("complete_ingestion", {"summary": "all done"})
+    resp = mock_tool_response("complete", {"summary": "all done"})
     with (
         patch("litellm.completion", return_value=resp),
         patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
@@ -343,12 +322,12 @@ def test_run_completes_on_completion_tool() -> None:
             mode="ingestion",
             system_prompt="system",
             initial_messages=[],
-            allowed_actions=reg.INGESTION_ACTIONS,
+            allowed_actions=reg.SESSION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
     assert trace.status == "completed"
-    assert trace.completion_payload == {"summary": "all done"}
+    assert trace.completion_payload["summary"] == "all done"
     assert trace.ended_at is not None
 
 
@@ -361,7 +340,7 @@ def test_run_fails_on_model_exception() -> None:
             mode="query",
             system_prompt="system",
             initial_messages=[],
-            allowed_actions=reg.QUERY_ACTIONS,
+            allowed_actions=reg.SESSION_ACTIONS,
             run_context={"input_summary": "test"},
             graph=MagicMock(),
         )
@@ -371,7 +350,7 @@ def test_run_fails_on_model_exception() -> None:
 
 def test_run_caches_context_limit_lookup() -> None:
     harness_runner._get_context_limit.cache_clear()
-    resp = mock_tool_response("complete_ingestion", {"summary": "all done"})
+    resp = mock_tool_response("complete", {"summary": "all done"})
 
     with (
         patch(
@@ -385,7 +364,7 @@ def test_run_caches_context_limit_lookup() -> None:
                 mode="ingestion",
                 system_prompt="system",
                 initial_messages=[],
-                allowed_actions=reg.INGESTION_ACTIONS,
+                allowed_actions=reg.SESSION_ACTIONS,
                 run_context={"input_summary": "test"},
                 graph=MagicMock(),
             )
@@ -404,7 +383,7 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     """Runner executes a create_node call and the trace captures the touched node."""
     from weavy.models.graph import ProvenanceInput
 
-    prov = ProvenanceInput(source_id="rec:1", start_offset=0, end_offset=30)
+    prov = ProvenanceInput(source_id="s:1", offset=0)
     create_args = {
         "aliases": ["test concept"],
         "summary": "A test concept node.",
@@ -414,7 +393,7 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     completion_args = {"summary": "done"}
 
     create_resp = mock_tool_response("create_node", create_args, "tc-1")
-    completion_resp = mock_tool_response("complete_ingestion", completion_args, "tc-2")
+    completion_resp = mock_tool_response("complete", completion_args, "tc-2")
 
     with (
         patch("litellm.completion", side_effect=[create_resp, completion_resp]),
@@ -422,10 +401,10 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     ):
         trace = run(
             mode="ingestion",
-            system_prompt="You are an ingestion agent.",
-            initial_messages=[{"role": "user", "content": "ingest"}],
-            allowed_actions=reg.INGESTION_ACTIONS,
-            run_context={"input_summary": "rec:1"},
+            system_prompt="You are an agent.",
+            initial_messages=[{"role": "user", "content": "process"}],
+            allowed_actions=reg.SESSION_ACTIONS,
+            run_context={"input_summary": "s:1"},
             graph=graph,
         )
 

@@ -8,7 +8,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
-from weavy.models.canonical import ChatSession
+from weavy.models.canonical import Session
 from weavy.models.graph import ProvenanceInput, SemanticEdge, SemanticNode
 from weavy.models.themes import Theme, ThemeStatus
 
@@ -36,7 +36,7 @@ class CreateNodeInput(BaseModel):
     aliases: list[str]
     summary: str
     note: str
-    provenance: ProvenanceInput | None = None
+    provenance: ProvenanceInput
 
 
 class UpdateNodeInput(BaseModel):
@@ -44,13 +44,14 @@ class UpdateNodeInput(BaseModel):
     note: str
     new_summary: str | None = None
     new_aliases: list[str] | None = None
-    provenance: ProvenanceInput | None = None
+    provenance: ProvenanceInput
 
 
 class CreateEdgeInput(BaseModel):
     from_node_id: NodeId
     to_node_id: NodeId
     label: str
+    note: str
 
 
 class UpdateEdgeInput(BaseModel):
@@ -86,35 +87,18 @@ class GetNodeInput(BaseModel):
     node_ids: list[NodeId]  # one or more, e.g. ["node:1"] or ["node:1", "node:2"]
 
 
-class ListTranscriptsInput(BaseModel):
+class ListSessionsInput(BaseModel):
     date_range: list[datetime] | None = (
         None  # [start, end] — list avoids Gemini prefixItems rejection
     )
     limit: int = 20
 
 
-class TranscriptSpanRequest(BaseModel):
-    transcript_id: str
-    start_offset: float
-    end_offset: float
-    context_secs: float = 0  # seconds of context to include around the span
-
-
-class GetTranscriptSpanInput(BaseModel):
-    spans: list[TranscriptSpanRequest]  # one or more
-
-
-class ListChatsInput(BaseModel):
-    date_range: list[datetime] | None = (
-        None  # [start, end] — list avoids Gemini prefixItems rejection
-    )
-    limit: int = 20
-
-
-class GetChatInput(BaseModel):
-    chat_id: str
+class GetSessionInput(BaseModel):
+    session_id: str
     start_index: int | None = None
     end_index: int | None = None
+    max_chars: int = 6000  # total content limit; increase if you need more context
 
 
 class GetThemeInput(BaseModel):
@@ -144,25 +128,20 @@ class RetireThemeInput(BaseModel):
     name: str
 
 
+class SetPrefaceInput(BaseModel):
+    preface: str
+
+
 # ---------------------------------------------------------------------------
 # Completion tool inputs
 # ---------------------------------------------------------------------------
 
 
-class CompleteIngestionInput(BaseModel):
+class CompleteInput(BaseModel):
     summary: str
-
-
-class CitedSource(BaseModel):
-    source_id: str  # rec:N or chat:N
-    start_offset: int | None = None
-    end_offset: int | None = None
-
-
-class DeliverResponseInput(BaseModel):
-    answer: str
-    cited_sources: list[CitedSource]
-    consulted_nodes: list[str]
+    answer: str | None = None
+    cited_sources: list[str] = Field(default_factory=list)
+    consulted_nodes: list[str] = Field(default_factory=list)
 
 
 class CompleteThemeUpdateInput(BaseModel):
@@ -189,6 +168,7 @@ class SearchGraphOutput(BaseModel):
 class NeighborSummary(BaseModel):
     edge_id: str
     edge_label: str
+    edge_note: str | None = None
     node_id: str
     canonical_alias: str
     summary_line: str
@@ -209,35 +189,18 @@ class GetNodeOutput(BaseModel):
     not_found: list[str] = Field(default_factory=list)
 
 
-class TranscriptSummary(BaseModel):
+class SessionSummary(BaseModel):
     id: str
     timestamp: datetime
+    summary: str | None = None
 
 
-class ListTranscriptsOutput(BaseModel):
-    transcripts: list[TranscriptSummary]
+class ListSessionsOutput(BaseModel):
+    sessions: list[SessionSummary]
 
 
-class GetTranscriptSpanResult(BaseModel):
-    transcript_id: str
-    text: str
-
-
-class GetTranscriptSpanOutput(BaseModel):
-    results: list[GetTranscriptSpanResult]
-
-
-class ChatSummary(BaseModel):
-    id: str
-    timestamp: datetime
-
-
-class ListChatsOutput(BaseModel):
-    chats: list[ChatSummary]
-
-
-class GetChatOutput(BaseModel):
-    session: ChatSession
+class GetSessionOutput(BaseModel):
+    session: Session
 
 
 class GetThemeOutput(BaseModel):
