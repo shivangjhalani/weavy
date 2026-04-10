@@ -380,7 +380,7 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     """Runner executes a create_node call and the trace captures the touched node."""
     from weavy.models.graph import ProvenanceInput
 
-    prov = ProvenanceInput(source_id="s:1", offset=0)
+    prov = ProvenanceInput(source_id="s:1")
     create_args = {
         "aliases": ["test concept"],
         "summary": "A test concept node.",

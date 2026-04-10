@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable
 
 from falkordb import Graph
@@ -39,6 +40,8 @@ from weavy.store import themes as store_themes
 class ActionContext:
     graph: Graph
     trace: RunTrace
+    event_time: datetime | None = None
+    session_id: str | None = None
 
 
 @dataclass
@@ -58,9 +61,11 @@ def _complete(params: Any, ctx: ActionContext) -> OperationResult:
 ACTIONS: dict[str, Action] = {
     "search_graph": Action(
         "search_graph",
-        "Hybrid search over semantic nodes — combines semantic similarity (embedding) with keyword matching on aliases and summaries. Use varied phrasings to maximize recall; synonyms and rephrasings are matched by the vector component even when exact keywords differ.",
+        "Hybrid search over semantic nodes — combines semantic similarity (embedding) with keyword matching on aliases and summaries. Use varied phrasings to maximize recall; synonyms and rephrasings are matched by the vector component even when exact keywords differ. Optional time_range [start, end] filters to nodes with log entries in that window.",
         SearchGraphInput,
-        lambda p, ctx: memory.search_graph(ctx.graph, query=p.query, limit=p.limit),
+        lambda p, ctx: memory.search_graph(
+            ctx.graph, query=p.query, limit=p.limit, time_range=p.time_range
+        ),
     ),
     "get_node": Action(
         "get_node",
@@ -109,6 +114,7 @@ ACTIONS: dict[str, Action] = {
             note=p.note,
             provenance=p.provenance,
             trace=ctx.trace,
+            event_time=ctx.event_time,
         ),
     ),
     "update_node": Action(
@@ -123,6 +129,7 @@ ACTIONS: dict[str, Action] = {
             trace=ctx.trace,
             new_summary=p.new_summary,
             new_aliases=p.new_aliases,
+            event_time=ctx.event_time,
         ),
     ),
     "delete_node": Action(
@@ -144,6 +151,7 @@ ACTIONS: dict[str, Action] = {
             label=p.label,
             note=p.note,
             trace=ctx.trace,
+            source_id=ctx.session_id,
         ),
     ),
     "update_edge": Action(

@@ -68,13 +68,23 @@ def run_session(
     caller_context: str | None = None,
 ) -> RunTrace:
     graph = get_graph()
-    if mode == "ingestion":
-        store_canonical.get_session(graph, session_id, check_completed=True)
+    session = store_canonical.get_session(
+        graph, session_id, check_completed=(mode == "ingestion")
+    )
     system_state = store_system.get_system(graph)
 
     initial_messages = store_canonical.load_messages(graph, session_id)
     if append_message:
         initial_messages.append({"role": "user", "content": append_message})
+
+    # Ingestion prompt gets the session's event time so the agent knows
+    # *when* the events occurred. Query prompt gets wall-clock time for
+    # date arithmetic against "now".
+    current_time = (
+        session.timestamp.strftime("%Y-%m-%dT%H:%MZ")
+        if mode == "ingestion"
+        else None
+    )
 
     system_prompt = build_themed_system_prompt(
         "weavy-ingestion" if mode == "ingestion" else "weavy-query",
@@ -83,6 +93,7 @@ def run_session(
         empty_themes_message="(No themes yet — start with search_graph or list_sessions.)",
         variables={"session_id": session_id},
         caller_context=caller_context,
+        current_time=current_time,
     )
 
     trace = run(
@@ -94,6 +105,7 @@ def run_session(
         graph=graph,
         session_id=session_id,
         parent_observation=parent_observation,
+        event_time=session.timestamp,
     )
     return finalize_session(graph, session_id, trace)
 

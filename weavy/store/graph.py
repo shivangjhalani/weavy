@@ -59,13 +59,16 @@ def _deserialize_log_entry(s: str) -> LogEntry:
     return LogEntry(**data)
 
 
-def _make_log_entry(provenance: ProvenanceInput | None, note: str) -> LogEntry:
+def _make_log_entry(
+    provenance: ProvenanceInput | None,
+    note: str,
+    event_time: datetime | None = None,
+) -> LogEntry:
     if provenance is None:
         raise ValueError("Log entry requires provenance")
     return LogEntry(
         source_id=provenance.source_id,
-        timestamp=datetime.now(tz=timezone.utc),
-        offset=provenance.offset,
+        timestamp=event_time or datetime.now(tz=timezone.utc),
         note=note,
     )
 
@@ -94,7 +97,7 @@ def _build_outgoing_edges(
     for edge_data in raw_edges:
         if edge_data is None:
             continue
-        edge_id, label, to_id, note = edge_data
+        edge_id, label, to_id, note, source_id = edge_data
         if edge_id is None or to_id is None:
             continue
         edges.append(
@@ -104,6 +107,7 @@ def _build_outgoing_edges(
                 to_node_id=to_id,
                 label=label,
                 note=note,
+                source_id=source_id,
             )
         )
     return edges
@@ -117,8 +121,9 @@ def create_node(
     provenance: ProvenanceInput | None,
     node_id: str,
     embedding: list[float] | None = None,
+    event_time: datetime | None = None,
 ) -> OperationResult:
-    entry = _make_log_entry(provenance, note)
+    entry = _make_log_entry(provenance, note, event_time)
     entry_json = _serialize_log_entry(entry)
     embedding_clause = (
         f", embedding: {_vecf32_literal(embedding)}" if embedding is not None else ""
@@ -154,6 +159,7 @@ def update_node(
     provenance: ProvenanceInput | None,
     embedding: list[float] | None = None,
     current_summary: str | None = None,
+    event_time: datetime | None = None,
 ) -> OperationResult:
     effective_note = note
     if new_summary is not None:
@@ -167,7 +173,7 @@ def update_node(
             current_summary = result.result_set[0][0]
         effective_note = f"[archived summary] {current_summary} | Agent note: {note}"
 
-    entry = _make_log_entry(provenance, effective_note)
+    entry = _make_log_entry(provenance, effective_note, event_time)
     entry_json = _serialize_log_entry(entry)
 
     set_parts = [
@@ -220,11 +226,12 @@ def create_edge(
     label: str,
     note: str,
     edge_id: str,
+    source_id: str | None = None,
 ) -> OperationResult:
     result = graph.query(
         """
         MATCH (a:SemanticNode {id: $from_id}), (b:SemanticNode {id: $to_id})
-        CREATE (a)-[r:RELATES {id: $edge_id, label: $label, note: $note}]->(b)
+        CREATE (a)-[r:RELATES {id: $edge_id, label: $label, note: $note, source_id: $source_id}]->(b)
         RETURN r
         """,
         {
@@ -233,6 +240,7 @@ def create_edge(
             "edge_id": edge_id,
             "label": label,
             "note": note,
+            "source_id": source_id,
         },
     )
     if not result.result_set:
@@ -284,12 +292,37 @@ def _parse_search_rows(rows: list) -> list[SearchResult]:
     return results
 
 
+def _filter_by_time_range(
+    graph: Graph,
+    results: list[SearchResult],
+    time_range: list[datetime],
+) -> list[SearchResult]:
+    """Keep only nodes that have at least one log entry within [start, end]."""
+    if not results:
+        return results
+    start, end = time_range[0], time_range[1]
+    node_ids = [r.id for r in results]
+    rows = graph.query(
+        "MATCH (n:SemanticNode) WHERE n.id IN $ids RETURN n.id, n.log",
+        {"ids": node_ids},
+    )
+    passing: set[str] = set()
+    for node_id, raw_log in rows.result_set:
+        for entry_str in raw_log or []:
+            entry = _deserialize_log_entry(entry_str)
+            if start <= entry.timestamp <= end:
+                passing.add(node_id)
+                break
+    return [r for r in results if r.id in passing]
+
+
 def search_graph(
     graph: Graph,
     *,
     query: str,
     limit: int = 10,
     query_embedding: list[float] | None = None,
+    time_range: list[datetime] | None = None,
 ) -> SearchGraphOutput:
     seen: dict[str, SearchResult] = {}
 
@@ -326,7 +359,10 @@ def search_graph(
         if r.id not in seen:
             seen[r.id] = r
 
-    return SearchGraphOutput(results=list(seen.values())[:limit])
+    results = list(seen.values())[:limit]
+    if time_range:
+        results = _filter_by_time_range(graph, results, time_range)
+    return SearchGraphOutput(results=results)
 
 
 def get_node(graph: Graph, node_id: str) -> GetNodeResult:
@@ -347,7 +383,7 @@ def get_nodes(graph: Graph, node_ids: list[str]) -> dict[str, GetNodeResult]:
         MATCH (n:SemanticNode)
         WHERE n.id IN $ids
         OPTIONAL MATCH (n)-[r:RELATES]->(m:SemanticNode)
-        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, r.note] ELSE null END) AS edges
+        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, r.note, r.source_id] ELSE null END) AS edges
         RETURN n.id, n, edges
         """,
         {"ids": node_ids},

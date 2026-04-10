@@ -39,7 +39,7 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
     """Agent creates a node then calls complete; node appears in graph."""
     session_id = store_test_session(graph, SAMPLE_TEXT)
 
-    prov = ProvenanceInput(source_id=session_id, offset=0)
+    prov = ProvenanceInput(source_id=session_id)
     create_args = {
         "aliases": ["job change"],
         "summary": "Contemplating leaving current job.",
@@ -76,12 +76,12 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
     session_id = store_test_session(graph, SAMPLE_TEXT)
 
     node_id = increment_counter(graph, "node")
-    prov = ProvenanceInput(source_id=session_id, offset=0)
+    prov = ProvenanceInput(source_id=session_id)
     store_graph.create_node(
         graph, ["career anxiety"], "Initial state.", "first entry", prov, node_id
     )
 
-    prov2 = ProvenanceInput(source_id=session_id, offset=0)
+    prov2 = ProvenanceInput(source_id=session_id)
     update_args = {
         "node_id": node_id,
         "note": "Mortgage fear now explicit.",
@@ -155,7 +155,7 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
     """Theme agent calls create_theme then complete_theme_update; Theme node and priority_order persist."""
     session_id = store_test_session(graph, SAMPLE_TEXT)
     node_id = increment_counter(graph, "node")
-    prov = ProvenanceInput(source_id=session_id, offset=0)
+    prov = ProvenanceInput(source_id=session_id)
     store_graph.create_node(
         graph, ["job change"], "Career decision node.", "init", prov, node_id
     )
@@ -234,7 +234,7 @@ def test_ingest_writes_outcomes(graph: Graph) -> None:
     """After a successful ingestion, session outcomes are persisted."""
     session_id = store_test_session(graph, SAMPLE_TEXT)
 
-    prov = ProvenanceInput(source_id=session_id, offset=0)
+    prov = ProvenanceInput(source_id=session_id)
     create_args = {
         "aliases": ["job change"],
         "summary": "Contemplating leaving current job.",

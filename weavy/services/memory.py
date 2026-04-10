@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from falkordb import Graph
 
 from weavy.application.contracts import GetNodeOutput, OperationResult, SearchGraphOutput
@@ -19,10 +21,20 @@ def get_node(graph: Graph, *, node_ids: list[str]) -> GetNodeOutput:
     return GetNodeOutput(results=results, not_found=not_found)
 
 
-def search_graph(graph: Graph, *, query: str, limit: int = 10) -> SearchGraphOutput:
+def search_graph(
+    graph: Graph,
+    *,
+    query: str,
+    limit: int = 10,
+    time_range: list[datetime] | None = None,
+) -> SearchGraphOutput:
     query_embedding = embedding.embed(query)
     return store_graph.search_graph(
-        graph, query=query, limit=limit, query_embedding=query_embedding
+        graph,
+        query=query,
+        limit=limit,
+        query_embedding=query_embedding,
+        time_range=time_range,
     )
 
 
@@ -34,6 +46,7 @@ def create_node(
     note: str,
     provenance: ProvenanceInput,
     trace: RunTrace,
+    event_time: datetime | None = None,
 ) -> OperationResult:
     node_id = store_system.increment_counter(graph, "node")
     vec = embedding.embed_node(aliases, summary)
@@ -45,6 +58,7 @@ def create_node(
         provenance=provenance,
         node_id=node_id,
         embedding=vec,
+        event_time=event_time,
     )
     trace.touched_nodes.append(TouchedNode(node_id=node_id, action="created"))
     return result
@@ -59,6 +73,7 @@ def update_node(
     trace: RunTrace,
     new_summary: str | None = None,
     new_aliases: list[str] | None = None,
+    event_time: datetime | None = None,
 ) -> OperationResult:
     vec: list[float] | None = None
     fetched_summary: str | None = None
@@ -78,6 +93,7 @@ def update_node(
         provenance=provenance,
         embedding=vec,
         current_summary=fetched_summary,
+        event_time=event_time,
     )
     trace.touched_nodes.append(TouchedNode(node_id=node_id, action="updated"))
     return result
@@ -97,6 +113,7 @@ def create_edge(
     label: str,
     note: str,
     trace: RunTrace,
+    source_id: str | None = None,
 ) -> OperationResult:
     edge_id = store_system.increment_counter(graph, "edge")
     result = store_graph.create_edge(
@@ -106,6 +123,7 @@ def create_edge(
         label=label,
         note=note,
         edge_id=edge_id,
+        source_id=source_id,
     )
     trace.touched_edges.append(TouchedEdge(edge_id=edge_id, action="created"))
     return result

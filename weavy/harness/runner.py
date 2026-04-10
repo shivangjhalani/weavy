@@ -145,6 +145,7 @@ def run(
     graph: Graph,
     session_id: str | None = None,
     parent_observation: Any = None,
+    event_time: datetime | None = None,
 ) -> RunTrace:
     """
     Execute an agentic loop until the mode's completion tool is called.
@@ -159,7 +160,9 @@ def run(
         session_id=session_id,
         parent_observation=parent_observation,
     )
-    ctx = actions.ActionContext(graph=graph, trace=trace)
+    ctx = actions.ActionContext(
+        graph=graph, trace=trace, event_time=event_time, session_id=session_id
+    )
 
     # Build static prefix. Mark the last message for prompt caching on
     # providers that support it alongside tool use (e.g. Anthropic).

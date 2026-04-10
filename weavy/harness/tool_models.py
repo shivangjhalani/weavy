@@ -57,6 +57,7 @@ class DeleteEdgeInput(BaseModel):
 class SearchGraphInput(BaseModel):
     query: str
     limit: int = 10
+    time_range: list[datetime] | None = None  # [start, end] — filter nodes by log timestamps
 
 
 class GetNodeNeighborhoodInput(BaseModel):

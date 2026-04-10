@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class LogEntry(BaseModel):
     source_id: str  # s:N
     timestamp: datetime
-    offset: int  # segment index (transcript) or turn index (chat)
     note: str
 
 
@@ -14,7 +13,6 @@ class ProvenanceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_id: str  # s:N
-    offset: int  # segment index (transcript) or turn index (chat)
 
     @field_validator("source_id")
     @classmethod
@@ -45,3 +43,4 @@ class SemanticEdge(BaseModel):
     to_node_id: str
     label: str
     note: str | None = None  # why this relationship exists
+    source_id: str | None = None  # s:N — which session created this edge
