@@ -6,7 +6,7 @@ from pathlib import Path
 
 from falkordb import Graph
 
-from weavy.models.canonical import ChatMessage
+
 from weavy.models.traces import RunTrace, graph_changes as _graph_changes
 from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
@@ -44,8 +44,10 @@ def build_themed_system_prompt(
     caller_context: str | None = None,
 ) -> str:
     prompt_variables = dict(variables or {})
+    # Truncate to the minute so the system prompt stays stable across turns
+    # within the same session — important for prefix cache hit rate.
     prompt_variables["current_time"] = (
-        current_time or datetime.now(tz=timezone.utc).isoformat()
+        current_time or datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     )
     prompt_variables["preface"] = (
         system_state.preface or "(not set — call set_preface to describe this graph)"
@@ -66,11 +68,7 @@ def _merge_graph_changes(existing: dict, new: dict) -> dict:
     """Accumulate graph changes across multiple runs on the same session."""
     merged = dict(existing)
     for key, ids in new.items():
-        if key in merged:
-            seen = set(merged[key])
-            merged[key] = merged[key] + [i for i in ids if i not in seen]
-        else:
-            merged[key] = list(ids)
+        merged[key] = list(dict.fromkeys([*merged.get(key, []), *ids]))
     return merged
 
 
@@ -78,17 +76,13 @@ def finalize_session(
     graph: Graph,
     session_id: str,
     trace: RunTrace,
-    messages: list[ChatMessage] | None = None,
 ) -> RunTrace:
     """Write session outcomes after a completed agent run."""
     if trace.status != "completed":
         return trace
 
-    if messages:
-        store_canonical.update_session_messages(graph, session_id, messages)
-
-    if trace.conversation_raw:
-        store_canonical.update_session_raw_messages(graph, session_id, trace.conversation_raw)
+    if trace.conversation is not None:
+        store_canonical.update_messages(graph, session_id, trace.conversation)
 
     summary = (trace.completion_payload or {}).get("summary", "")
     completed_at = datetime.now(tz=timezone.utc).isoformat()

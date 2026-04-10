@@ -107,5 +107,3 @@ def test_query_conversation_captured(graph: Graph) -> None:
     roles = [m["role"] for m in trace.conversation]
     assert "system" not in roles
     assert "user" in roles
-    assert "tool" not in roles
-    assert "tool_call_id" not in json.dumps(trace.conversation)

@@ -84,34 +84,31 @@ def get_system(graph: Graph) -> SystemState:
     return SystemState(**result.result_set[0][0].properties)
 
 
-def _update_system(
-    graph: Graph, set_clause: str, params: dict, field_name: str
-) -> None:
+def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None:
     result = graph.query(
-        f"MATCH (s:System) SET {set_clause} RETURN s",
-        params,
+        "MATCH (s:System) SET s.theme_priority_order = $order RETURN s",
+        {"order": priority_order},
     )
     if not result.result_set:
-        raise RuntimeError(f"System node not found. Cannot update {field_name}.")
-
-
-def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None:
-    _update_system(
-        graph,
-        "s.theme_priority_order = $order",
-        {"order": priority_order},
-        "theme_priority_order",
-    )
+        raise RuntimeError("System node not found. Cannot update theme_priority_order.")
 
 
 def set_preface(graph: Graph, preface: str) -> None:
-    _update_system(graph, "s.preface = $preface", {"preface": preface}, "preface")
+    result = graph.query(
+        "MATCH (s:System) SET s.preface = $preface RETURN s",
+        {"preface": preface},
+    )
+    if not result.result_set:
+        raise RuntimeError("System node not found. Cannot update preface.")
 
 
 def update_last_theme_run_at(graph: Graph, iso_timestamp: str) -> None:
-    _update_system(
-        graph, "s.last_theme_run_at = $ts", {"ts": iso_timestamp}, "last_theme_run_at"
+    result = graph.query(
+        "MATCH (s:System) SET s.last_theme_run_at = $ts RETURN s",
+        {"ts": iso_timestamp},
     )
+    if not result.result_set:
+        raise RuntimeError("System node not found. Cannot update last_theme_run_at.")
 
 
 def increment_counter(graph: Graph, counter: CounterName) -> str:

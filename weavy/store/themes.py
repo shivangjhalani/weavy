@@ -78,17 +78,12 @@ def update_theme(
         set_parts.append("t.anchors = $new_anchors")
         params["new_anchors"] = list(new_anchors)
 
+    query = "MATCH (t:Theme {name: $name})"
     if set_parts:
-        result = graph.query(
-            f"MATCH (t:Theme {{name: $name}}) SET {', '.join(set_parts)} RETURN t",
-            params,
-        )
-        if not result.result_set:
-            raise ValueError(f"Theme '{name}' not found.")
-    else:
-        result = graph.query("MATCH (t:Theme {name: $name}) RETURN t", {"name": name})
-        if not result.result_set:
-            raise ValueError(f"Theme '{name}' not found.")
+        query += f" SET {', '.join(set_parts)}"
+    result = graph.query(query + " RETURN t", params)
+    if not result.result_set:
+        raise ValueError(f"Theme '{name}' not found.")
 
     return OperationResult(ok=True, id=name)
 

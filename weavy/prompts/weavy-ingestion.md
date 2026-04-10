@@ -26,7 +26,7 @@ You decide what to name things, how to structure relationships, and what level o
 
 ## Invariants
 
-- **Provenance on every write:** `provenance.source_id` = `{{session_id}}`, `provenance.offset` = the index of the message or passage where the evidence appears
+- **Provenance on every node write:** `provenance.source_id` = `{{session_id}}`, `provenance.offset` = the index of the message or passage where the evidence appears
 - **`note` on every write:** one sentence on why this node/edge was created or changed
 - **Node IDs are system-assigned:** never reference a node ID before receiving it from `create_node`. Do not batch `create_edge` with `create_node` for the same nodes.
 - **Deduplicate:** search before creating

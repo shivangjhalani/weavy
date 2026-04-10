@@ -50,24 +50,8 @@ class Action:
     is_completion: bool = False
 
 
-def complete(params: CompleteInput, ctx: ActionContext) -> OperationResult:
+def _complete(params: Any, ctx: ActionContext) -> OperationResult:
     ctx.trace.completion_payload = params.model_dump()
-    return OperationResult(ok=True)
-
-
-def complete_theme_update(
-    params: CompleteThemeUpdateInput,
-    ctx: ActionContext,
-) -> OperationResult:
-    ctx.trace.completion_payload = params.model_dump()
-    return OperationResult(ok=True)
-
-
-def set_preface_action(
-    params: SetPrefaceInput,
-    ctx: ActionContext,
-) -> OperationResult:
-    store_system.set_preface(ctx.graph, params.preface)
     return OperationResult(ok=True)
 
 
@@ -98,10 +82,10 @@ ACTIONS: dict[str, Action] = {
     ),
     "get_session": Action(
         "get_session",
-        "Get a session's messages or a slice. Returns at most max_chars of content (default 6000); increase max_chars if you need the full transcript.",
+        "Get a session's messages or a slice.",
         GetSessionInput,
         lambda p, ctx: store_canonical.get_session_messages(
-            ctx.graph, p.session_id, p.start_index, p.end_index, p.max_chars
+            ctx.graph, p.session_id, p.start_index, p.end_index
         ),
     ),
     "get_theme": Action(
@@ -130,7 +114,7 @@ ACTIONS: dict[str, Action] = {
     ),
     "create_edge": Action(
         "create_edge",
-        "Create a semantic edge between two nodes. Both node IDs must already exist in the graph — use only IDs returned by prior create_node calls, never IDs of nodes being created in the same batch. Requires a label (short relationship type), a note (why this relationship exists), and provenance.",
+        "Create a semantic edge between two nodes. Both node IDs must already exist in the graph — use only IDs returned by prior create_node calls, never IDs of nodes being created in the same batch. Requires a label (short relationship type) and a note (why this relationship exists).",
         CreateEdgeInput,
         lambda p, ctx: memory.create_edge(ctx.graph, p, ctx.trace),
     ),
@@ -172,20 +156,20 @@ ACTIONS: dict[str, Action] = {
         "set_preface",
         "Set or update the graph preface — a short description of what this graph is about and whose it is.",
         SetPrefaceInput,
-        set_preface_action,
+        lambda p, ctx: store_system.set_preface(ctx.graph, p.preface) or OperationResult(ok=True),
     ),
     "complete": Action(
         "complete",
         "Finish a session run.",
         CompleteInput,
-        complete,
+        _complete,
         is_completion=True,
     ),
     "complete_theme_update": Action(
         "complete_theme_update",
         "Finish a theme update run.",
         CompleteThemeUpdateInput,
-        complete_theme_update,
+        _complete,
         is_completion=True,
     ),
 }
@@ -209,12 +193,7 @@ GRAPH_WRITE_ACTIONS = [
 
 SESSION_ACTIONS = GRAPH_READ_ACTIONS + GRAPH_WRITE_ACTIONS + ["get_theme", "complete"]
 
-THEME_ACTIONS = [
-    "search_graph",
-    "get_node",
-    "get_node_neighborhood",
-    "list_sessions",
-    "get_session",
+THEME_ACTIONS = GRAPH_READ_ACTIONS + [
     "get_theme",
     "create_theme",
     "update_theme",

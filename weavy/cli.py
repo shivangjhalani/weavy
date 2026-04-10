@@ -7,6 +7,7 @@ import argparse
 import sys
 from datetime import datetime
 
+from weavy.models.traces import RunTrace
 from weavy.models.tools import ListSessionsInput
 from weavy.store.canonical import list_sessions
 from weavy.store.client import get_graph
@@ -27,6 +28,32 @@ def _print_system_state(header: str, state: SystemState) -> None:
     print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
     print(f"  theme_priority_order  = {state.theme_priority_order}")
     print(f"  last_theme_run_at     = {state.last_theme_run_at}")
+
+
+def _read_text(source: str) -> str:
+    if source == "-":
+        return sys.stdin.read()
+    with open(source) as f:
+        return f.read()
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def _print_trace_status(trace: RunTrace) -> bool:
+    print(f"Status: {trace.status}")
+    if trace.error:
+        print(f"Error: {trace.error}", file=sys.stderr)
+        return False
+    return True
+
+
+def _completion_field(trace: RunTrace, field: str) -> str:
+    value = (trace.completion_payload or {}).get(field)
+    return value if isinstance(value, str) else ""
 
 
 def cmd_init_system(_args: argparse.Namespace) -> None:
@@ -57,39 +84,28 @@ def cmd_list_sessions(args: argparse.Namespace) -> None:
 def cmd_add(args: argparse.Namespace) -> None:
     from weavy.modes.session import run_add
 
-    if args.source == "-":
-        text = sys.stdin.read()
-    else:
-        with open(args.source) as f:
-            text = f.read()
+    text = _read_text(args.source)
 
     if not text.strip():
         print("Error: empty input.", file=sys.stderr)
         sys.exit(1)
 
-    timestamp = None
-    if args.timestamp:
-        timestamp = datetime.fromisoformat(args.timestamp)
+    trace = run_add(
+        text, timestamp=_parse_timestamp(args.timestamp), context=args.context
+    )
+    if not _print_trace_status(trace):
+        return
 
-    trace = run_add(text, timestamp=timestamp, context=args.context)
-    print(f"Status: {trace.status}")
-    if trace.error:
-        print(f"Error: {trace.error}", file=sys.stderr)
-    else:
-        touched = list(dict.fromkeys(n.node_id for n in trace.touched_nodes))
-        summary = (trace.completion_payload or {}).get("summary", "")
-        print(f"Touched nodes: {touched}")
-        print(f"Summary: {summary}")
+    touched = list(dict.fromkeys(n.node_id for n in trace.touched_nodes))
+    print(f"Touched nodes: {touched}")
+    print(f"Summary: {_completion_field(trace, 'summary')}")
 
 
 def cmd_update_themes(_args: argparse.Namespace) -> None:
     from weavy.modes.theme import run_theme_update
 
     trace = run_theme_update()
-    print(f"Status: {trace.status}")
-    if trace.error:
-        print(f"Error: {trace.error}", file=sys.stderr)
-    else:
+    if _print_trace_status(trace):
         print("Theme update complete.")
 
 
@@ -103,12 +119,8 @@ def cmd_continue(args: argparse.Namespace) -> None:
     from weavy.modes.session import run_session
 
     trace = run_session(args.session_id, "query", args.question)
-    print(f"Status: {trace.status}")
-    if trace.error:
-        print(f"Error: {trace.error}", file=sys.stderr)
-    else:
-        answer = (trace.completion_payload or {}).get("answer", "")
-        print(f"\n{answer}")
+    if _print_trace_status(trace):
+        print(f"\n{_completion_field(trace, 'answer')}")
 
 
 def cmd_query(args: argparse.Namespace) -> None:
@@ -121,12 +133,8 @@ def cmd_query(args: argparse.Namespace) -> None:
     from weavy.modes.session import run_query
 
     trace = run_query(args.question)
-    print(f"Status: {trace.status}")
-    if trace.error:
-        print(f"Error: {trace.error}", file=sys.stderr)
-    else:
-        answer = (trace.completion_payload or {}).get("answer", "")
-        print(f"\n{answer}")
+    if _print_trace_status(trace):
+        print(f"\n{_completion_field(trace, 'answer')}")
 
 
 def main() -> None:
@@ -144,7 +152,9 @@ def main() -> None:
         "source",
         help="Path to a text file, or '-' to read from stdin",
     )
-    p.add_argument("--context", default=None, help="Caller context for the ingestion agent")
+    p.add_argument(
+        "--context", default=None, help="Caller context for the ingestion agent"
+    )
     p.add_argument("--timestamp", default=None, help="ISO timestamp for the session")
 
     subparsers.add_parser(

@@ -303,13 +303,10 @@ def test_run_redacts_tool_call_ids_from_trace_and_tracer() -> None:
     assert first_llm_call["tool_calls"] == [
         {"name": "search_graph", "args": '{"query": "career", "limit": 5}'}
     ]
-    # conversation_raw intentionally keeps tool_call_ids for session replay;
-    # check only the Langfuse-bound parts of the trace.
-    langfuse_data = json.dumps(
-        [turn.model_dump(mode="json") for turn in trace.turns]
-        + (trace.conversation or [])
-    )
-    assert "tool_call_id" not in langfuse_data
+    # trace.conversation keeps tool_call_ids for session replay;
+    # turns are sanitized before being sent to Langfuse.
+    turns_data = json.dumps([turn.model_dump(mode="json") for turn in trace.turns])
+    assert "tool_call_id" not in turns_data
 
 
 def test_run_completes_on_completion_tool() -> None:

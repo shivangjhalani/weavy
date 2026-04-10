@@ -15,12 +15,11 @@ from falkordb import Graph
 from weavy.config import settings
 from weavy.harness import actions
 from weavy.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
-from weavy.models.canonical import conversation_to_chat_messages
+
 from weavy.models.traces import RunMode, RunTrace, ToolCall, Turn, TurnUsage
 
 _MAX_PLAINTEXT_RETRIES = 1  # times to re-prompt before failing when model returns text instead of calling a tool
 _MAX_TOOL_RETRIES = 3  # total tool-error nudges across the run before hard-failing
-_STALE_TOOL_RESULT_MAX = 500  # chars to keep from tool results the model has already processed
 
 
 def _with_cache_control(message: dict[str, Any]) -> dict[str, Any]:
@@ -62,34 +61,6 @@ def _sanitize_message_for_trace(message: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
-def _sanitize_messages_for_trace(
-    messages: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    return [_sanitize_message_for_trace(m) for m in messages]
-
-
-def _conversation_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [m.model_dump() for m in conversation_to_chat_messages(messages)]
-
-
-def _trim_stale_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return a copy of messages with old tool results truncated.
-
-    Tool results before the last assistant message have already been processed
-    by the model — they don't need to be re-sent in full on subsequent turns.
-    """
-    last_asst = max(
-        (i for i, m in enumerate(messages) if m.get("role") == "assistant"),
-        default=-1,
-    )
-    result = []
-    for i, msg in enumerate(messages):
-        if i < last_asst and msg.get("role") == "tool":
-            content = msg.get("content", "")
-            if isinstance(content, str) and len(content) > _STALE_TOOL_RESULT_MAX:
-                msg = {**msg, "content": content[:_STALE_TOOL_RESULT_MAX] + " …[trimmed]"}
-        result.append(msg)
-    return result
 
 
 @lru_cache(maxsize=None)
@@ -116,45 +87,53 @@ def _finalize_failed_run(
     return trace
 
 
-def _append_tool_call_error(
+def _handle_tool_error(
+    *,
+    trace: RunTrace,
+    tracer: RunTracer,
     turn: Turn,
     tool_name: str,
     args: dict[str, Any],
     error: str,
     called_at: datetime,
-) -> None:
-    turn.tool_calls.append(
-        ToolCall(
-            tool_name=tool_name,
-            args=args,
-            result=None,
-            error=error,
-            called_at=called_at,
+    tool_call_id: str,
+    messages: list[dict[str, Any]],
+    tool_error_retries: int,
+    context_limit: int | None,
+) -> tuple[int, RunTrace | None]:
+    tracer.record_tool_error(turn.turn_number, tool_name, args, error)
+    turn.tool_calls.append(ToolCall(tool_name=tool_name, args=args, result=None, error=error, called_at=called_at))
+    if tool_error_retries >= _MAX_TOOL_RETRIES:
+        return tool_error_retries, _finalize_failed_run(
+            trace, tracer, error, context_limit, turn=turn
         )
+
+    messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": f"Error: {error}",
+        }
     )
+    return tool_error_retries + 1, None
+
+
+def _get_attr(obj: Any, key: str) -> int:
+    """Read key from a dict or object attribute, returning 0 if absent or falsy."""
+    val = obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+    return val or 0
 
 
 def _build_turn_usage(usage_raw: Any) -> TurnUsage:
-    usage = TurnUsage()
     if not usage_raw:
-        return usage
-
-    usage.prompt_tokens = getattr(usage_raw, "prompt_tokens", 0) or 0
-    usage.completion_tokens = getattr(usage_raw, "completion_tokens", 0) or 0
-    usage.total_tokens = getattr(usage_raw, "total_tokens", 0) or 0
-
-    prompt_details = getattr(usage_raw, "prompt_tokens_details", None)
-    if isinstance(prompt_details, dict):
-        usage.cached_tokens = prompt_details.get("cached_tokens", 0) or 0
-    elif prompt_details is not None:
-        usage.cached_tokens = getattr(prompt_details, "cached_tokens", 0) or 0
-
-    completion_details = getattr(usage_raw, "completion_tokens_details", None)
-    if isinstance(completion_details, dict):
-        usage.reasoning_tokens = completion_details.get("reasoning_tokens", 0) or 0
-    elif completion_details is not None:
-        usage.reasoning_tokens = getattr(completion_details, "reasoning_tokens", 0) or 0
-    return usage
+        return TurnUsage()
+    return TurnUsage(
+        prompt_tokens=getattr(usage_raw, "prompt_tokens", 0) or 0,
+        completion_tokens=getattr(usage_raw, "completion_tokens", 0) or 0,
+        total_tokens=getattr(usage_raw, "total_tokens", 0) or 0,
+        cached_tokens=_get_attr(getattr(usage_raw, "prompt_tokens_details", None), "cached_tokens"),
+        reasoning_tokens=_get_attr(getattr(usage_raw, "completion_tokens_details", None), "reasoning_tokens"),
+    )
 
 
 def run(
@@ -205,7 +184,7 @@ def run(
         turn_number += 1
         turn_ts = datetime.now(tz=timezone.utc)
         new_messages = messages[len(sanitized_cache) :]
-        sanitized_cache.extend(_sanitize_messages_for_trace(new_messages))
+        sanitized_cache.extend([_sanitize_message_for_trace(m) for m in new_messages])
         input_messages_snapshot = list(sanitized_cache)
 
         tracer.start_turn(turn_number, len(messages))
@@ -215,7 +194,7 @@ def run(
         try:
             response = litellm.completion(
                 model=settings.GEMINI_MODEL,
-                messages=_trim_stale_tool_results(messages),
+                messages=messages,
                 tools=tool_definitions,
                 tool_choice="auto",
                 reasoning_effort=settings.REASONING_EFFORT,
@@ -302,7 +281,11 @@ def run(
 
             if tool_errored:
                 messages.append(
-                    {"role": "tool", "tool_call_id": tool_call_id, "content": "Skipped: prior tool call in this batch failed."}
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": "Skipped: prior tool call in this batch failed.",
+                    }
                 )
                 continue
 
@@ -310,12 +293,21 @@ def run(
             entry = actions.ACTIONS.get(tool_name)
             if entry is None:
                 err = f"Unknown tool '{tool_name}'."
-                tracer.record_tool_error(turn_number, tool_name, {}, err)
-                _append_tool_call_error(turn, tool_name, {}, err, called_at)
-                if tool_error_retries >= _MAX_TOOL_RETRIES:
-                    return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
-                tool_error_retries += 1
-                messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"Error: {err}"})
+                tool_error_retries, failed_trace = _handle_tool_error(
+                    trace=trace,
+                    tracer=tracer,
+                    turn=turn,
+                    tool_name=tool_name,
+                    args={},
+                    error=err,
+                    called_at=called_at,
+                    tool_call_id=tool_call_id,
+                    messages=messages,
+                    tool_error_retries=tool_error_retries,
+                    context_limit=context_limit,
+                )
+                if failed_trace is not None:
+                    return failed_trace
                 tool_errored = True
                 continue
 
@@ -326,12 +318,21 @@ def run(
                 params = entry.input_model(**args_dict)
             except Exception as e:
                 err = f"Invalid arguments for '{tool_name}': {e}"
-                tracer.record_tool_error(turn_number, tool_name, args_dict, err)
-                _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                if tool_error_retries >= _MAX_TOOL_RETRIES:
-                    return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
-                tool_error_retries += 1
-                messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"Error: {err}"})
+                tool_error_retries, failed_trace = _handle_tool_error(
+                    trace=trace,
+                    tracer=tracer,
+                    turn=turn,
+                    tool_name=tool_name,
+                    args=args_dict,
+                    error=err,
+                    called_at=called_at,
+                    tool_call_id=tool_call_id,
+                    messages=messages,
+                    tool_error_retries=tool_error_retries,
+                    context_limit=context_limit,
+                )
+                if failed_trace is not None:
+                    return failed_trace
                 tool_errored = True
                 continue
 
@@ -341,12 +342,21 @@ def run(
                 result = entry.fn(params, ctx)
             except Exception as e:
                 err = f"Tool '{tool_name}' raised: {e}"
-                tracer.record_tool_error(turn_number, tool_name, args_dict, err)
-                _append_tool_call_error(turn, tool_name, args_dict, err, called_at)
-                if tool_error_retries >= _MAX_TOOL_RETRIES:
-                    return _finalize_failed_run(trace, tracer, err, context_limit, turn=turn)
-                tool_error_retries += 1
-                messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": f"Error: {err}"})
+                tool_error_retries, failed_trace = _handle_tool_error(
+                    trace=trace,
+                    tracer=tracer,
+                    turn=turn,
+                    tool_name=tool_name,
+                    args=args_dict,
+                    error=err,
+                    called_at=called_at,
+                    tool_call_id=tool_call_id,
+                    messages=messages,
+                    tool_error_retries=tool_error_retries,
+                    context_limit=context_limit,
+                )
+                if failed_trace is not None:
+                    return failed_trace
                 tool_errored = True
                 continue
 
@@ -374,8 +384,7 @@ def run(
 
             if entry.is_completion:
                 record_turn(trace, turn)
-                trace.conversation = _conversation_messages(messages)
-                trace.conversation_raw = messages[1:]  # skip system message
+                trace.conversation = messages[1:]  # skip system message
                 finalize_trace(trace, "completed")
                 tracer.end_turn(message.content)
                 tracer.finalize(trace, context_limit=context_limit)

@@ -98,7 +98,6 @@ class GetSessionInput(BaseModel):
     session_id: str
     start_index: int | None = None
     end_index: int | None = None
-    max_chars: int = 6000  # total content limit; increase if you need more context
 
 
 class GetThemeInput(BaseModel):

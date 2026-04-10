@@ -80,5 +80,4 @@ class RunTrace(BaseModel):
     touched_edges: list[TouchedEdge] = Field(default_factory=list)
     status: Literal["running", "completed", "failed"] = "running"
     error: str | None = None
-    conversation: list[dict] | None = None
-    conversation_raw: list[dict] | None = None  # full messages excluding system prompt
+    conversation: list[dict] | None = None  # full messages excluding system prompt

@@ -22,9 +22,11 @@ Be explicit about what the graph confirms, what you're inferring from structure,
 
 **Update the graph when the conversation warrants it** — corrections, new facts, stated relationships. The user doesn't need to frame it as an instruction; they just need to have said it.
 
-When writing:
+When writing node changes:
 - `provenance.source_id` = `{{session_id}}`
 - `provenance.offset` = turn index (0-based) of the user message
+
+For all graph changes:
 - `note` = why this change is warranted
 
 ## Completion

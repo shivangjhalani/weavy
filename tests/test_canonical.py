@@ -113,6 +113,25 @@ def test_get_session_messages_with_slice(graph: Graph) -> None:
     assert result.session.messages[0].content == "Hi there"
 
 
+def test_get_session_messages_returns_all(graph: Graph) -> None:
+    s = _make_session(
+        graph,
+        [
+            ChatMessage(role="user", content="12345"),
+            ChatMessage(role="assistant", content="67890"),
+            ChatMessage(role="user", content="abcde"),
+        ],
+    )
+
+    result = get_session_messages(graph, s.id, None, None)
+
+    assert [message.content for message in result.session.messages] == [
+        "12345",
+        "67890",
+        "abcde",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Session outcomes
 # ---------------------------------------------------------------------------

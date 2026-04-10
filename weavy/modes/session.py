@@ -31,15 +31,11 @@ def run_session(
     caller_context is optional steering injected into the system prompt.
     """
     graph = get_graph()
-    session = store_canonical.get_session(
-        graph, session_id, check_completed=(mode == "ingestion")
-    )
+    if mode == "ingestion":
+        store_canonical.get_session(graph, session_id, check_completed=True)
     system_state = store_system.get_system(graph)
 
-    # Use full raw messages (with tool calls) if available — enables true chat continuity.
-    # Fall back to text-only messages for new sessions.
-    raw = store_canonical.get_session_raw_messages(graph, session_id)
-    initial_messages: list = raw if raw is not None else [m.model_dump() for m in session.messages]
+    initial_messages = store_canonical.load_messages(graph, session_id)
     if append_message:
         initial_messages.append({"role": "user", "content": append_message})
 
@@ -63,10 +59,7 @@ def run_session(
         parent_observation=parent_observation,
     )
 
-    messages = (
-        [ChatMessage(**m) for m in trace.conversation] if trace.conversation else None
-    )
-    return finalize_session(graph, session_id, trace, messages)
+    return finalize_session(graph, session_id, trace)
 
 
 def _create_session(
@@ -104,14 +97,14 @@ def run_ingest(session_id: str) -> RunTrace:
 def run_query(question: str, context: str | None = None) -> RunTrace:
     """Create a new query session and run the query agent."""
     graph = get_graph()
-    session_id = _create_session(graph, "", None)
+    session_id = _create_session(graph, "")
     return run_session(session_id, "query", question, caller_context=context)
 
 
 def run_chat_repl() -> None:
     """Interactive REPL: each turn runs the query agent with full session history."""
     graph = get_graph()
-    session_id = _create_session(graph, "", None)
+    session_id = _create_session(graph, "")
 
     session_tracer = ChatSessionTracer(session_id)
     message_count = 0

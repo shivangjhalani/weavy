@@ -111,33 +111,6 @@ def transcribe_audio(audio_path: str) -> dict:
     return response.model_dump()
 
 
-def _seg_attr(seg: object, key: str) -> object:
-    if isinstance(seg, dict):
-        return seg[key]
-    return getattr(seg, key)
-
-
-def _parse_segments(response: object) -> list[TranscriptSegment]:
-    """Convert a verbose_json Whisper response into TranscriptSegment list."""
-    raw = getattr(response, "segments", None)
-    if not raw:
-        return parse_transcript_text(response.text.strip())
-
-    segments = []
-    for seg in raw:
-        text = _seg_attr(seg, "text").strip()
-        if not text:
-            continue
-        segments.append(
-            TranscriptSegment(
-                start=float(_seg_attr(seg, "start")),
-                end=float(_seg_attr(seg, "end")),
-                text=text,
-            )
-        )
-    return segments
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Transcribe audio to JSON via Whisper"

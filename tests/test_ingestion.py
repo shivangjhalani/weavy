@@ -4,12 +4,15 @@ Mocks litellm.completion to avoid real LLM calls.
 Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
 from falkordb import Graph
 
 from weavy.models.graph import ProvenanceInput
+from weavy.models.traces import RunTrace
+from weavy.services.workflow import finalize_session
 from weavy.store import canonical as store_canonical
 from weavy.store import graph as store_graph
 from weavy.store import themes as store_themes
@@ -270,3 +273,20 @@ def test_reingest_blocked_when_completed(graph: Graph) -> None:
 
         with pytest.raises(ValueError, match="already completed"):
             run_ingest(session_id)
+
+
+def test_finalize_session_persists_conversation(graph: Graph) -> None:
+    session_id = store_test_session(graph, SAMPLE_TEXT)
+    trace = RunTrace(
+        mode="query",
+        started_at=datetime.now(tz=timezone.utc),
+        input_summary="test",
+        status="completed",
+        conversation=[],
+        completion_payload={"summary": "Cleared history."},
+    )
+
+    finalize_session(graph, session_id, trace)
+
+    stored = store_canonical.get_session(graph, session_id)
+    assert stored.messages == []
