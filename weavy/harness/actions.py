@@ -6,7 +6,8 @@ from typing import Any, Callable
 from falkordb import Graph
 from pydantic import BaseModel
 
-from weavy.models.tools import (
+from weavy.application.contracts import GetSessionOutput, GetThemeOutput, OperationResult
+from weavy.harness.tool_models import (
     CompleteInput,
     CompleteThemeUpdateInput,
     CreateEdgeInput,
@@ -19,7 +20,6 @@ from weavy.models.tools import (
     GetSessionInput,
     GetThemeInput,
     ListSessionsInput,
-    OperationResult,
     RetireThemeInput,
     SearchGraphInput,
     SetPrefaceInput,
@@ -60,13 +60,13 @@ ACTIONS: dict[str, Action] = {
         "search_graph",
         "Hybrid search over semantic nodes — combines semantic similarity (embedding) with keyword matching on aliases and summaries. Use varied phrasings to maximize recall; synonyms and rephrasings are matched by the vector component even when exact keywords differ.",
         SearchGraphInput,
-        lambda p, ctx: memory.search_graph(ctx.graph, p),
+        lambda p, ctx: memory.search_graph(ctx.graph, query=p.query, limit=p.limit),
     ),
     "get_node": Action(
         "get_node",
         "Get one or more semantic nodes by id.",
         GetNodeInput,
-        lambda p, ctx: memory.get_node(ctx.graph, p),
+        lambda p, ctx: memory.get_node(ctx.graph, node_ids=p.node_ids),
     ),
     "get_node_neighborhood": Action(
         "get_node_neighborhood",
@@ -78,57 +78,89 @@ ACTIONS: dict[str, Action] = {
         "list_sessions",
         "List sessions (transcripts and chats).",
         ListSessionsInput,
-        lambda p, ctx: store_canonical.list_sessions(ctx.graph, p),
+        lambda p, ctx: store_canonical.list_sessions(
+            ctx.graph, limit=p.limit, date_range=p.date_range
+        ),
     ),
     "get_session": Action(
         "get_session",
         "Get a session's messages or a slice.",
         GetSessionInput,
-        lambda p, ctx: store_canonical.get_session_messages(
-            ctx.graph, p.session_id, p.start_index, p.end_index
+        lambda p, ctx: GetSessionOutput(
+            session=store_canonical.get_session_messages(
+                ctx.graph, p.session_id, p.start_index, p.end_index
+            )
         ),
     ),
     "get_theme": Action(
         "get_theme",
         "Get a theme by name.",
         GetThemeInput,
-        lambda p, ctx: store_themes.get_theme(ctx.graph, p.name),
+        lambda p, ctx: GetThemeOutput(theme=store_themes.get_theme(ctx.graph, p.name)),
     ),
     "create_node": Action(
         "create_node",
         "Create a semantic node.",
         CreateNodeInput,
-        lambda p, ctx: memory.create_node(ctx.graph, p, ctx.trace),
+        lambda p, ctx: memory.create_node(
+            ctx.graph,
+            aliases=p.aliases,
+            summary=p.summary,
+            note=p.note,
+            provenance=p.provenance,
+            trace=ctx.trace,
+        ),
     ),
     "update_node": Action(
         "update_node",
         "Update a semantic node.",
         UpdateNodeInput,
-        lambda p, ctx: memory.update_node(ctx.graph, p, ctx.trace),
+        lambda p, ctx: memory.update_node(
+            ctx.graph,
+            node_id=p.node_id,
+            note=p.note,
+            provenance=p.provenance,
+            trace=ctx.trace,
+            new_summary=p.new_summary,
+            new_aliases=p.new_aliases,
+        ),
     ),
     "delete_node": Action(
         "delete_node",
         "Delete a semantic node.",
         DeleteNodeInput,
-        lambda p, ctx: memory.delete_node(ctx.graph, p, ctx.trace),
+        lambda p, ctx: memory.delete_node(
+            ctx.graph, node_id=p.node_id, trace=ctx.trace
+        ),
     ),
     "create_edge": Action(
         "create_edge",
         "Create a semantic edge between two nodes. Both node IDs must already exist in the graph — use only IDs returned by prior create_node calls, never IDs of nodes being created in the same batch. Requires a label (short relationship type) and a note (why this relationship exists).",
         CreateEdgeInput,
-        lambda p, ctx: memory.create_edge(ctx.graph, p, ctx.trace),
+        lambda p, ctx: memory.create_edge(
+            ctx.graph,
+            from_node_id=p.from_node_id,
+            to_node_id=p.to_node_id,
+            label=p.label,
+            note=p.note,
+            trace=ctx.trace,
+        ),
     ),
     "update_edge": Action(
         "update_edge",
         "Update a semantic edge.",
         UpdateEdgeInput,
-        lambda p, ctx: memory.update_edge(ctx.graph, p, ctx.trace),
+        lambda p, ctx: memory.update_edge(
+            ctx.graph, edge_id=p.edge_id, new_label=p.new_label, trace=ctx.trace
+        ),
     ),
     "delete_edge": Action(
         "delete_edge",
         "Delete a semantic edge.",
         DeleteEdgeInput,
-        lambda p, ctx: memory.delete_edge(ctx.graph, p, ctx.trace),
+        lambda p, ctx: memory.delete_edge(
+            ctx.graph, edge_id=p.edge_id, trace=ctx.trace
+        ),
     ),
     "create_theme": Action(
         "create_theme",
@@ -156,7 +188,8 @@ ACTIONS: dict[str, Action] = {
         "set_preface",
         "Set or update the graph preface — a short description of what this graph is about and whose it is.",
         SetPrefaceInput,
-        lambda p, ctx: store_system.set_preface(ctx.graph, p.preface) or OperationResult(ok=True),
+        lambda p, ctx: store_system.set_preface(ctx.graph, p.preface)
+        or OperationResult(ok=True),
     ),
     "complete": Action(
         "complete",

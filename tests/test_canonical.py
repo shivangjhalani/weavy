@@ -10,7 +10,6 @@ import pytest
 from falkordb import Graph
 
 from weavy.models.canonical import ChatMessage, Session
-from weavy.models.tools import ListSessionsInput
 from weavy.store.canonical import (
     create_session,
     get_session,
@@ -75,7 +74,7 @@ def test_get_session_not_found(graph: Graph) -> None:
 def test_list_sessions_no_filter(graph: Graph) -> None:
     s1 = _make_session(graph)
     s2 = _make_session(graph)
-    output = list_sessions(graph, ListSessionsInput())
+    output = list_sessions(graph)
 
     ids = [s.id for s in output.sessions]
     assert s1.id in ids
@@ -86,21 +85,19 @@ def test_list_sessions_date_range(graph: Graph) -> None:
     s = _make_session(graph)
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     end = datetime(2024, 12, 31, tzinfo=timezone.utc)
-    output = list_sessions(graph, ListSessionsInput(date_range=[start, end]))
+    output = list_sessions(graph, date_range=[start, end])
     assert any(ss.id == s.id for ss in output.sessions)
 
     past_start = datetime(2023, 1, 1, tzinfo=timezone.utc)
     past_end = datetime(2023, 12, 31, tzinfo=timezone.utc)
-    output_empty = list_sessions(
-        graph, ListSessionsInput(date_range=[past_start, past_end])
-    )
+    output_empty = list_sessions(graph, date_range=[past_start, past_end])
     assert all(ss.id != s.id for ss in output_empty.sessions)
 
 
 def test_list_sessions_limit(graph: Graph) -> None:
     for _ in range(3):
         _make_session(graph)
-    output = list_sessions(graph, ListSessionsInput(limit=2))
+    output = list_sessions(graph, limit=2)
     assert len(output.sessions) <= 2
 
 
@@ -108,9 +105,9 @@ def test_get_session_messages_with_slice(graph: Graph) -> None:
     s = _make_session(graph)
     result = get_session_messages(graph, s.id, 1, 2)
 
-    assert len(result.session.messages) == 1
-    assert result.session.messages[0].role == "assistant"
-    assert result.session.messages[0].content == "Hi there"
+    assert len(result.messages) == 1
+    assert result.messages[0].role == "assistant"
+    assert result.messages[0].content == "Hi there"
 
 
 def test_get_session_messages_returns_all(graph: Graph) -> None:
@@ -125,7 +122,7 @@ def test_get_session_messages_returns_all(graph: Graph) -> None:
 
     result = get_session_messages(graph, s.id, None, None)
 
-    assert [message.content for message in result.session.messages] == [
+    assert [message.content for message in result.messages] == [
         "12345",
         "67890",
         "abcde",

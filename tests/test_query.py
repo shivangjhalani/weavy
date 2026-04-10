@@ -4,7 +4,6 @@ Mocks litellm.completion to avoid real LLM calls.
 Uses the "weavy_test" graph to avoid touching the main graph.
 """
 
-import json
 from unittest.mock import patch
 
 import pytest
@@ -41,7 +40,7 @@ def test_query_delivers_response(graph: Graph) -> None:
     done_resp = mock_tool_response("complete", deliver_args)
 
     with (
-        patch("weavy.modes.session.get_graph", return_value=graph),
+        patch("weavy.application.session_runs.get_graph", return_value=graph),
         patch("litellm.completion", return_value=done_resp),
     ):
         from weavy.modes.session import run_query
@@ -68,7 +67,7 @@ def test_query_creates_session(graph: Graph) -> None:
     done_resp = mock_tool_response("complete", deliver_args)
 
     with (
-        patch("weavy.modes.session.get_graph", return_value=graph),
+        patch("weavy.application.session_runs.get_graph", return_value=graph),
         patch("litellm.completion", return_value=done_resp),
     ):
         from weavy.modes.session import run_query
@@ -96,7 +95,7 @@ def test_query_conversation_captured(graph: Graph) -> None:
     done_resp = mock_tool_response("complete", deliver_args)
 
     with (
-        patch("weavy.modes.session.get_graph", return_value=graph),
+        patch("weavy.application.session_runs.get_graph", return_value=graph),
         patch("litellm.completion", return_value=done_resp),
     ):
         from weavy.modes.session import run_query

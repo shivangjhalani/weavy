@@ -9,16 +9,15 @@ from typing import Any
 
 from falkordb import Graph
 
-from weavy.models.graph import LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
-from weavy.models.tools import (
+from weavy.application.contracts import (
     GetNodeNeighborhoodOutput,
     GetNodeResult,
     NeighborSummary,
     OperationResult,
-    SearchGraphInput,
     SearchGraphOutput,
     SearchResult,
 )
+from weavy.models.graph import LogEntry, ProvenanceInput, SemanticEdge, SemanticNode
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +286,9 @@ def _parse_search_rows(rows: list) -> list[SearchResult]:
 
 def search_graph(
     graph: Graph,
-    params: SearchGraphInput,
+    *,
+    query: str,
+    limit: int = 10,
     query_embedding: list[float] | None = None,
 ) -> SearchGraphOutput:
     seen: dict[str, SearchResult] = {}
@@ -303,7 +304,7 @@ def search_graph(
             WITH node, count(r) AS edge_count
             RETURN node.id, node.aliases, node.summary, edge_count
             """,
-            {"limit": params.limit},
+            {"limit": limit},
         )
         for r in _parse_search_rows(vec_result.result_set):
             seen[r.id] = r
@@ -319,13 +320,13 @@ def search_graph(
         ORDER BY edge_count DESC
         LIMIT $limit
         """,
-        {"query": params.query, "limit": params.limit},
+        {"query": query, "limit": limit},
     )
     for r in _parse_search_rows(kw_result.result_set):
         if r.id not in seen:
             seen[r.id] = r
 
-    return SearchGraphOutput(results=list(seen.values())[: params.limit])
+    return SearchGraphOutput(results=list(seen.values())[:limit])
 
 
 def get_node(graph: Graph, node_id: str) -> GetNodeResult:

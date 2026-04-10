@@ -6,15 +6,13 @@ import json
 from datetime import datetime
 
 from falkordb import Graph
-from pydantic import BaseModel
 
-from weavy.models.canonical import Session, conversation_to_chat_messages
-from weavy.models.tools import (
-    GetSessionOutput,
-    ListSessionsInput,
+from weavy.application.contracts import (
+    CompletedSessionRow,
     ListSessionsOutput,
     SessionSummary,
 )
+from weavy.models.canonical import Session, conversation_to_chat_messages
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +81,14 @@ def update_messages(graph: Graph, session_id: str, messages: list[dict]) -> None
     )
 
 
-def list_sessions(graph: Graph, params: ListSessionsInput) -> ListSessionsOutput:
-    if params.date_range:
-        start, end = params.date_range
+def list_sessions(
+    graph: Graph,
+    *,
+    limit: int = 20,
+    date_range: list[datetime] | None = None,
+) -> ListSessionsOutput:
+    if date_range:
+        start, end = date_range
         result = graph.query(
             """
             MATCH (s:Session)
@@ -97,13 +100,13 @@ def list_sessions(graph: Graph, params: ListSessionsInput) -> ListSessionsOutput
             {
                 "start": start.isoformat(),
                 "end": end.isoformat(),
-                "limit": params.limit,
+                "limit": limit,
             },
         )
     else:
         result = graph.query(
             "MATCH (s:Session) RETURN s.id, s.timestamp, s.summary ORDER BY s.timestamp DESC LIMIT $limit",
-            {"limit": params.limit},
+            {"limit": limit},
         )
     sessions = [
         SessionSummary(
@@ -121,14 +124,12 @@ def get_session_messages(
     session_id: str,
     start_index: int | None,
     end_index: int | None,
-) -> GetSessionOutput:
+) -> Session:
     session = get_session(graph, session_id)
-    return GetSessionOutput(
-        session=Session(
-            id=session.id,
-            timestamp=session.timestamp,
-            messages=session.messages[start_index:end_index],
-        )
+    return Session(
+        id=session.id,
+        timestamp=session.timestamp,
+        messages=session.messages[start_index:end_index],
     )
 
 
@@ -172,13 +173,6 @@ def persist_session_outcomes(
 def is_session_completed(graph: Graph, session_id: str) -> bool:
     """Check if a session has already been processed."""
     return _get_session_props(graph, session_id).get("completed_at") is not None
-
-
-class CompletedSessionRow(BaseModel):
-    id: str
-    summary: str
-    graph_changes: dict
-    completed_at: str
 
 
 def get_sessions_since(graph: Graph, since_iso: str) -> list[CompletedSessionRow]:

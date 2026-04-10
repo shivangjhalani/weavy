@@ -7,6 +7,7 @@ Uses the "weavy_test" graph to avoid touching the main graph.
 import pytest
 from falkordb import Graph
 
+from weavy.application.prompts import render_hot_themes
 from weavy.models.themes import Theme
 from weavy.store import themes as store_themes
 from tests.helpers import reset_test_graph
@@ -26,8 +27,7 @@ def test_create_theme_basic(graph: Graph) -> None:
     store_themes.create_theme(
         graph, "career-direction", "Weighing a job change.", ["node:1"], ["active"]
     )
-    result = store_themes.get_theme(graph, "career-direction")
-    theme = result.theme
+    theme = store_themes.get_theme(graph, "career-direction")
     assert theme.name == "career-direction"
     assert theme.state == "Weighing a job change."
     assert theme.status == ["active"]
@@ -39,7 +39,7 @@ def test_create_theme_no_anchors(graph: Graph) -> None:
         graph, "sleep-routine", "Tracking sleep.", [], ["emerging"]
     )
     result = store_themes.get_theme(graph, "sleep-routine")
-    assert result.theme.anchors == []
+    assert result.anchors == []
 
 
 def test_get_theme_not_found(graph: Graph) -> None:
@@ -64,9 +64,9 @@ def test_update_theme_state_only(graph: Graph) -> None:
         new_status=None,
     )
     result = store_themes.get_theme(graph, "meditation-practice")
-    assert result.theme.state == "Practiced for 2 weeks."
-    assert result.theme.status == ["emerging"]  # unchanged
-    assert "node:1" in result.theme.anchors  # unchanged
+    assert result.state == "Practiced for 2 weeks."
+    assert result.status == ["emerging"]  # unchanged
+    assert "node:1" in result.anchors  # unchanged
 
 
 def test_update_theme_anchors_add_remove(graph: Graph) -> None:
@@ -77,8 +77,8 @@ def test_update_theme_anchors_add_remove(graph: Graph) -> None:
         graph, "mental-health", new_state=None, new_anchors=["node:2"], new_status=None
     )
     result = store_themes.get_theme(graph, "mental-health")
-    assert "node:1" not in result.theme.anchors
-    assert "node:2" in result.theme.anchors
+    assert "node:1" not in result.anchors
+    assert "node:2" in result.anchors
 
 
 def test_update_theme_status(graph: Graph) -> None:
@@ -91,7 +91,7 @@ def test_update_theme_status(graph: Graph) -> None:
         new_status=["deep", "active"],
     )
     result = store_themes.get_theme(graph, "pottery-class")
-    assert set(result.theme.status) == {"deep", "active"}
+    assert set(result.status) == {"deep", "active"}
 
 
 def test_update_theme_not_found(graph: Graph) -> None:
@@ -143,7 +143,7 @@ def test_list_all_themes_multiple(graph: Graph) -> None:
 
 
 def test_render_hot_themes_empty() -> None:
-    hot, cold = store_themes.render_hot_themes([], [], 250)
+    hot, cold = render_hot_themes([], [], 250)
     assert hot == ""
     assert cold == []
 
@@ -159,7 +159,7 @@ def test_render_hot_themes_budget_respected() -> None:
         for i in range(20)
     ]
     priority_order = [f"theme-{i}" for i in range(20)]
-    hot, cold = store_themes.render_hot_themes(themes, priority_order, 100)
+    hot, cold = render_hot_themes(themes, priority_order, 100)
     assert len(cold) > 0
     assert "HOT THEMES" in hot
 
@@ -174,7 +174,7 @@ def test_render_hot_themes_cold_index_in_output() -> None:
             anchors=[],
         ),
     ]
-    hot, cold = store_themes.render_hot_themes(themes, ["theme-a", "theme-b"], 20)
+    hot, cold = render_hot_themes(themes, ["theme-a", "theme-b"], 20)
     assert "theme-b" in cold
     assert "Other themes" in hot
 
@@ -182,4 +182,4 @@ def test_render_hot_themes_cold_index_in_output() -> None:
 def test_render_hot_themes_invalid_priority_order() -> None:
     theme = Theme(name="career", state="state", status=["active"], anchors=[])
     with pytest.raises(ValueError, match="unknown theme name"):
-        store_themes.render_hot_themes([theme], ["career", "unknown-name"], 250)
+        render_hot_themes([theme], ["career", "unknown-name"], 250)

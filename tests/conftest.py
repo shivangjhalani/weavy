@@ -44,14 +44,17 @@ def mock_run_tracer():
 def mock_fetch_prompt():
     """Mock prompt loading to avoid filesystem dependency in tests."""
     try:
-        from weavy.services import workflow
+        from weavy.application import prompts, theme_runs
     except ImportError:
         yield None
         return
 
-    with patch.object(
-        workflow, "fetch_prompt", return_value="(mocked system prompt)"
-    ) as mock:
+    with (
+        patch.object(prompts, "fetch_prompt", return_value="(mocked system prompt)"),
+        patch.object(
+            theme_runs, "fetch_prompt", return_value="(mocked system prompt)"
+        ) as mock,
+    ):
         yield mock
 
 

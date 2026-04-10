@@ -17,7 +17,7 @@ There is no web app or API layer. The main way to use the app is:
 ## What Works Right Now
 
 - Add any text into the memory graph via `add` — source-agnostic ingestion
-- Transcribe audio into text and pipe it through `add` in one step
+- Transcribe audio with the standalone `transcribe.py` utility as a separate pre-processing step
 - Steer ingestion with optional caller context (e.g., "These are chat logs between a user and an AI assistant")
 - Ingest text into the semantic graph with provenance-aware node writes
 - Ask grounded questions against the graph
@@ -31,6 +31,7 @@ There is no web app or API layer. The main way to use the app is:
 - Weavy is synchronous and explicit. If a dependency is missing, it fails loudly rather than silently degrading.
 - The graph is a derived memory layer, not the source of truth. Canonical sessions remain the primary records.
 - All sessions store their full message history. Ingestion sessions contain the input text + the agent's analysis. Query sessions contain the full conversation.
+- Pre-processing is external. Audio transcription, transcript cleanup, and document extraction happen before text reaches Weavy.
 - Any session can be continued in query mode — `continue s:N "question"` loads the prior messages as context and runs the query agent.
 - Query runs may mutate the graph if the agent decides a new statement should update memory.
 - Theme updates are manual via `update-themes`. The theme agent queries all sessions completed since its last run and reconciles themes.
@@ -174,30 +175,31 @@ uv run python -m weavy.cli add journal.txt --timestamp 2026-04-01T10:00:00+00:00
 
 ## Transcribe Audio
 
-Transcription is a pre-processing utility that converts audio to text, then pipes it through `add`:
+Transcription is a standalone pre-processing utility. It does not ingest into Weavy directly:
 
 ```bash
-uv run python -m weavy.cli transcribe /path/to/recording.m4a
+python transcribe.py /path/to/recording.m4a
 ```
 
 What happens:
 
 - The file is sent to Groq Whisper through LiteLLM
-- The response is normalized into indexed transcript lines
-- The text is passed to `add` — a session is created and ingestion runs automatically
+- The raw Whisper response is written to stdout as JSON, or to a file with `--output`
+- You decide how to extract or format the text before sending it to `weavy add`
 
 Supported audio extensions: `.mp3`, `.mp4`, `.mpeg`, `.mpga`, `.m4a`, `.wav`, `.webm`, `.ogg`
 
-Use `--context` to steer ingestion:
+Write JSON to a file:
 
 ```bash
-uv run python -m weavy.cli transcribe recording.m4a --context "A voice memo about project planning"
+python transcribe.py recording.m4a --output transcript.json
 ```
 
 Important behavior:
 
 - Missing files raise `FileNotFoundError`
 - Unsupported extensions raise `ValueError`
+- This script has no dependency on the memory graph or Weavy session model
 
 Whisper-related env vars:
 
@@ -207,6 +209,12 @@ WHISPER_LANGUAGE=
 WHISPER_PROMPT=
 WHISPER_TEMPERATURE=0
 ```
+
+Typical workflow:
+
+1. Transcribe audio with `transcribe.py`
+2. Extract or format the text you want to keep
+3. Pass that text to `uv run python -m weavy.cli add ...`
 
 ### List Stored Sessions
 
@@ -359,7 +367,6 @@ status
 list-sessions [--limit N]
 
 add <file_or_-> [--context "..."] [--timestamp ISO]
-transcribe <audio_path> [--context "..."]
 continue <session_id> <question>
 update-themes
 set-preface <preface>
@@ -401,6 +408,6 @@ uv run python -m weavy.cli add notes.txt --context "Personal journal entry"
 uv run python -m weavy.cli query "What has been on my mind recently?"
 uv run python -m weavy.cli continue s:1 "Tell me more about what I said about X"
 
-# or transcribe audio and ingest in one step:
-uv run python -m weavy.cli transcribe /path/to/recording.m4a
+# audio transcription is a separate preprocessing step:
+python transcribe.py /path/to/recording.m4a --output transcript.json
 ```

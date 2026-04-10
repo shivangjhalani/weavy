@@ -7,8 +7,8 @@ import argparse
 import sys
 from datetime import datetime
 
+from weavy.application import session_runs, theme_runs
 from weavy.models.traces import RunTrace
-from weavy.models.tools import ListSessionsInput
 from weavy.store.canonical import list_sessions
 from weavy.store.client import get_graph
 from weavy.store.system import (
@@ -72,7 +72,7 @@ def cmd_status(_args: argparse.Namespace) -> None:
 
 def cmd_list_sessions(args: argparse.Namespace) -> None:
     graph = get_graph()
-    output = list_sessions(graph, ListSessionsInput(limit=args.limit))
+    output = list_sessions(graph, limit=args.limit)
     if not output.sessions:
         print("No sessions found.")
         return
@@ -82,15 +82,13 @@ def cmd_list_sessions(args: argparse.Namespace) -> None:
 
 
 def cmd_add(args: argparse.Namespace) -> None:
-    from weavy.modes.session import run_add
-
     text = _read_text(args.source)
 
     if not text.strip():
         print("Error: empty input.", file=sys.stderr)
         sys.exit(1)
 
-    trace = run_add(
+    trace = session_runs.run_add(
         text, timestamp=_parse_timestamp(args.timestamp), context=args.context
     )
     if not _print_trace_status(trace):
@@ -102,9 +100,7 @@ def cmd_add(args: argparse.Namespace) -> None:
 
 
 def cmd_update_themes(_args: argparse.Namespace) -> None:
-    from weavy.modes.theme import run_theme_update
-
-    trace = run_theme_update()
+    trace = theme_runs.run_theme_update()
     if _print_trace_status(trace):
         print("Theme update complete.")
 
@@ -116,9 +112,7 @@ def cmd_set_preface(args: argparse.Namespace) -> None:
 
 
 def cmd_continue(args: argparse.Namespace) -> None:
-    from weavy.modes.session import run_session
-
-    trace = run_session(args.session_id, "query", args.question)
+    trace = session_runs.run_session(args.session_id, "query", args.question)
     if _print_trace_status(trace):
         print(f"\n{_completion_field(trace, 'answer')}")
 
@@ -130,9 +124,7 @@ def cmd_query(args: argparse.Namespace) -> None:
         run_chat_repl()
         return
 
-    from weavy.modes.session import run_query
-
-    trace = run_query(args.question)
+    trace = session_runs.run_query(args.question)
     if _print_trace_status(trace):
         print(f"\n{_completion_field(trace, 'answer')}")
 

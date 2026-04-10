@@ -1,4 +1,4 @@
-from weavy.services.workflow import _merge_graph_changes
+from weavy.application.session_runs import _merge_graph_changes
 
 
 def test_merge_graph_changes_deduplicates_existing_and_new_ids() -> None:

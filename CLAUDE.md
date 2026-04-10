@@ -68,26 +68,46 @@ transcribe.py          — standalone Whisper transcription script (not part of 
 weavy/
   config.py          — Settings from env (FALKORDB_*, GEMINI_MODEL, LANGFUSE_*)
   cli.py             — argparse entry point; thin command handlers
+  langfuse_client.py — lazy optional Langfuse client factory
+  application/
+    contracts.py     — app-level result DTOs shared across store/services/harness
+    prompts.py       — prompt loading and theme-context rendering
+    session_runs.py  — session creation, run orchestration, run finalization
+    theme_runs.py    — theme-update orchestration and finalization
   models/
     canonical.py     — Session, ChatMessage, conversation_to_chat_messages
     graph.py         — SemanticNode, SemanticEdge, ProvenanceInput
     themes.py        — Theme, ThemeStatus
-    tools.py         — Pydantic input/output contracts for every agent tool
     traces.py        — RunTrace, Turn, TurnUsage, TouchedNode/Edge
   store/             — FalkorDB reads/writes (canonical, graph, themes, system)
+    client.py        — FalkorDB client / graph access
   services/
     memory.py        — graph CRUD + provenance enforcement + touched-node tracking
-    workflow.py      — prompt loading, caller_context injection, run finalization
     embedding.py     — embedding generation for semantic nodes
   harness/
     runner.py        — single agentic loop (LiteLLM completion + tool dispatch)
     actions.py       — ACTIONS registry; SESSION_ACTIONS / THEME_ACTIONS lists
     tracing.py       — Langfuse span wrapping (RunTracer, ChatSessionTracer)
+    tool_models.py   — agent-only tool input contracts and completion schemas
   modes/
-    session.py       — run_add(), run_session(), run_ingest(), run_query(), run_chat_repl()
-    theme.py         — run_theme_update()
+    session.py       — thin interactive wrappers over application/session_runs.py
+    theme.py         — thin wrapper over application/theme_runs.py
   prompts/           — weavy-ingestion.md, weavy-query.md, weavy-theme.md
 ```
+
+### Boundary Rules
+
+- **Agent tool contracts belong only to the harness boundary.** Tool schemas live
+  in `weavy/harness/tool_models.py` and are not the general application
+  contract for `store/` or non-harness `services/`.
+- **`application/` owns orchestration and prompt assembly.** Session/theme run
+  setup, prompt rendering, and run finalization live there.
+- **`store/` means persistence.** FalkorDB reads/writes stay there; prompt
+  formatting and token-budget shaping do not.
+- **`modes/` are entrypoints.** They should stay thin and delegate to
+  `application/`.
+- **Docs must match code.** When module boundaries change, update this file in
+  the same refactor.
 
 ## Design Rules
 
@@ -98,4 +118,6 @@ weavy/
 - `System` node must be initialized before any operations (`init-system`)
 - Input boundary is text — pre-processing is the caller's responsibility
 - Sessions are source-agnostic — no origin, audio_path, or segment fields in `store/canonical.py`
+- Agent tool schemas are a harness concern — they should not be shared as the
+  general application contract for `store/` and non-harness services
 - Environment managed by `devenv.nix`; use `uv` for deps, `ruff` for linting
