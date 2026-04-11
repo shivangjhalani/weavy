@@ -4,6 +4,10 @@ private/
 # Benchmark
 benchmark/data/
 benchmark/results/
+
+# Eval harness state + data
+eval/.state/
+eval/data/
 .claude
 .chromadb/
 .neo4j/

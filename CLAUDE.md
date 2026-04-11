@@ -46,17 +46,32 @@ uv run python -m weavy.cli query [question]                 # omit question for 
 
 ### Core Contract
 
-The memory layer is source-agnostic. `WeavyMemory` is the public Python API:
+The memory layer is source-agnostic. `Weavy` in `weavy/client.py` is the public SDK:
 
 ```python
-from weavy import WeavyMemory
+import weavy
 
-mem = WeavyMemory()                           # or WeavyMemory("my_graph") for isolation
-mem.add(text, timestamp?, context?) -> str    # ingest text, return session_id
-mem.query(question, context?) -> str          # return answer string
-mem.continue_session(session_id, message)     # resume a session with a new query
-mem.update_themes()                           # run the theme agent
-mem.reset()                                   # drop graph and reinitialize
+w = weavy.Weavy()                                      # or Weavy("my_graph")
+trace = w.add(text, timestamp=..., context=...)        # -> RunTrace
+trace = w.query(question, context=..., query_time=...) # -> RunTrace
+trace = w.continue_session(session_id, message)        # -> RunTrace
+trace = w.update_themes()                              # -> RunTrace
+w.reset()                                              # drop + reinit (benchmarks)
+```
+
+`application/` is the direct programmatic interface for internal callers that need
+fine-grained control (pass explicit `graph: Graph`):
+
+```python
+from weavy.application.session_runs import run_add, run_query, run_session
+from weavy.application.theme_runs import run_theme_update
+from weavy.store.client import get_graph
+
+graph = get_graph()           # or get_graph("my_graph") for isolation
+run_add(text, graph, timestamp?, context?)           # -> RunTrace
+run_query(question, graph, context?, query_time?)    # -> RunTrace
+run_session(session_id, mode, graph, message?)       # -> RunTrace
+run_theme_update(graph)                              # -> RunTrace
 ```
 
 ### Key Design Decisions
@@ -73,8 +88,8 @@ mem.reset()                                   # drop graph and reinitialize
 ```
 transcribe.py          — standalone Whisper transcription script (not part of weavy package)
 weavy/
-  __init__.py        — exports WeavyMemory
-  api.py             — WeavyMemory: stable public Python API
+  __init__.py        — exports Weavy and RunTrace
+  client.py          — Weavy: graph resolution, init_system, method delegation
   config.py          — Settings from env (FALKORDB_*, GEMINI_MODEL, LANGFUSE_*)
   cli.py             — argparse entry point; thin command handlers + REPL
   langfuse_client.py — lazy optional Langfuse client factory
@@ -103,16 +118,15 @@ weavy/
 
 ### Boundary Rules
 
-- **`api.py` is the public interface.** External callers (benchmark harnesses,
-  scripts) import `WeavyMemory` from here. It returns simple values (str,
-  raises RuntimeError on failure) — no traces, no FalkorDB types.
+- **`client.py` is the public SDK interface.** Wraps `application/` with graph
+  resolution and `init_system`. No direct `store/` calls except `get_graph` and
+  `init_system`. External library users import `Weavy` from here.
 - **`cli.py` is the operational interface.** It imports from `application/`
-  directly for full trace visibility (touched nodes, summaries). It does not
-  go through `api.py`.
+  directly for full trace visibility and human-readable output.
 - **`application/` owns orchestration and prompt assembly.** Session/theme run
   setup, prompt rendering, and run finalization live there. All `run_*`
-  functions require an explicit `graph: Graph` argument — callers (`cli.py`,
-  `api.py`) resolve the graph via `get_graph()` and pass it in.
+  functions require an explicit `graph: Graph` argument — callers resolve the
+  graph via `get_graph()` and pass it in.
 - **Agent tool contracts belong only to the harness boundary.** Tool schemas live
   in `weavy/harness/tool_models.py` and are not the general application
   contract for `store/` or non-harness `services/`.
@@ -127,12 +141,11 @@ weavy/
 - Strict Pydantic validation on every tool input/output — invalid args fail immediately
 - Provenance required on every semantic node write
 - No silent fallbacks or hidden retries
-- `System` node must be initialized before any operations (`init-system`)
+- `Weavy` in `client.py` is the SDK entry point — self-bootstrapping, returns RunTrace
+- `Weavy(graph_name)` provides graph-level isolation for benchmark scenarios
 - Input boundary is text — pre-processing is the caller's responsibility
 - Sessions are source-agnostic — no origin, audio_path, or segment fields in `store/canonical.py`
 - Agent tool schemas are a harness concern — they should not be shared as the
   general application contract for `store/` and non-harness services
-- Public API returns simple values; internal `RunTrace` stays internal to `application/` and `cli.py`
-- `graph_name` in `WeavyMemory` provides full graph-level isolation — use it for
-  benchmark scenarios, not for per-user data within a single deployment
+- `RunTrace` is the standard return type from all agent runs — no hiding
 - Environment managed by `devenv.nix`; use `uv` for deps, `ruff` for linting

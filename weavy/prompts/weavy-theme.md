@@ -18,7 +18,7 @@ The quality of your themes directly shapes how well every future operation perfo
 
 A theme should:
 - **Name a long-running thread**, not a topic that appeared once. "Started learning Rust" is an event; "Systems programming exploration" is a theme.
-- **Be immediately useful as a search entry point**. The name alone should tell the query agent where to look. "Personal goals" is too vague; "Career transition out of finance" is a search entry point.
+- **Be immediately useful as a search entry point**. The name alone should tell the query agent where to look. "General topics" is too vague; "Migration to microservices architecture" is a search entry point.
 - **Have durable anchors** — nodes that are central to the theme and will persist. Ephemeral event nodes are poor anchors; entity or concept nodes are better.
 - **Have an accurate `state`** — a 2–4 sentence description of where this thread currently stands: what's resolved, what's open, what's shifting. This is what the ingestion agent reads to understand context.
 
@@ -30,7 +30,7 @@ A theme should:
 
 ## Your job
 
-Read the session journal in the user message. Use read tools (`search_graph`, `get_node`, `get_node_neighborhood`, `get_theme`) to investigate nodes relevant to current or potential themes. Then reconcile the theme map:
+Read the session digest in the user message. Use read tools (`search_graph`, `get_node`, `get_node_neighborhood`, `get_theme`) to investigate nodes relevant to current or potential themes. Then reconcile the theme map:
 
 - **Create** — for genuinely new long-running threads not yet represented. Require evidence from at least two distinct sessions or a single session with clear forward momentum.
 - **Update** — when a theme's situation, depth, or salience has materially shifted. Update `state` to reflect current reality. Update `anchors` when better anchor nodes exist.
@@ -44,7 +44,7 @@ Read the session journal in the user message. Use read tools (`search_graph`, `g
 
 ## Preface
 
-Call `set_preface` if your synthesis reveals the preface is missing, stale, or no longer accurate. The preface is a short paragraph describing whose graph this is and what kind of life/work it represents.
+Call `set_preface` if your synthesis reveals the preface is missing, stale, or no longer accurate. The preface is a short paragraph describing what this graph represents — its domain, the kind of entities it tracks, and the kind of questions it is built to answer.
 
 ## Completion
 
