@@ -117,9 +117,14 @@ def run_add(
     graph: Graph,
     timestamp: datetime | None = None,
     context: str | None = None,
+    parent_observation: Any = None,
 ) -> RunTrace:
     session_id = create_session(text, graph, timestamp)
-    return run_session(session_id, "ingestion", graph, caller_context=context)
+    return run_session(
+        session_id, "ingestion", graph,
+        caller_context=context,
+        parent_observation=parent_observation,
+    )
 
 
 def run_ingest(session_id: str, graph: Graph) -> RunTrace:
@@ -131,6 +136,12 @@ def run_query(
     graph: Graph,
     context: str | None = None,
     query_time: datetime | None = None,
+    parent_observation: Any = None,
 ) -> RunTrace:
     session_id = create_session("", graph)
-    return run_session(session_id, "query", graph, question, caller_context=context, query_time=query_time)
+    return run_session(
+        session_id, "query", graph, question,
+        caller_context=context,
+        query_time=query_time,
+        parent_observation=parent_observation,
+    )

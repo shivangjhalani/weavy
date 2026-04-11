@@ -2,7 +2,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from weavy.models.canonical import Session
 from weavy.models.graph import SemanticEdge, SemanticNode
 from weavy.models.themes import Theme
 
@@ -56,10 +55,6 @@ class SessionSummary(BaseModel):
 
 class ListSessionsOutput(BaseModel):
     sessions: list[SessionSummary]
-
-
-class GetSessionOutput(BaseModel):
-    session: Session
 
 
 class GetThemeOutput(BaseModel):

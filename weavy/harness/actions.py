@@ -7,7 +7,7 @@ from typing import Any, Callable
 from falkordb import Graph
 from pydantic import BaseModel
 
-from weavy.application.contracts import GetSessionOutput, GetThemeOutput, OperationResult
+from weavy.application.contracts import GetThemeOutput, OperationResult
 from weavy.harness.tool_models import (
     CompleteInput,
     CompleteThemeUpdateInput,
@@ -18,7 +18,6 @@ from weavy.harness.tool_models import (
     DeleteNodeInput,
     GetNodeInput,
     GetNodeNeighborhoodInput,
-    GetSessionInput,
     GetThemeInput,
     ListSessionsInput,
     RetireThemeInput,
@@ -85,16 +84,6 @@ ACTIONS: dict[str, Action] = {
         ListSessionsInput,
         lambda p, ctx: store_canonical.list_sessions(
             ctx.graph, limit=p.limit, date_range=p.date_range
-        ),
-    ),
-    "get_session": Action(
-        "get_session",
-        "Get a session's messages or a slice.",
-        GetSessionInput,
-        lambda p, ctx: GetSessionOutput(
-            session=store_canonical.get_session_messages(
-                ctx.graph, p.session_id, p.start_index, p.end_index
-            )
         ),
     ),
     "get_theme": Action(
@@ -220,7 +209,6 @@ GRAPH_READ_ACTIONS = [
     "get_node",
     "get_node_neighborhood",
     "list_sessions",
-    "get_session",
 ]
 
 GRAPH_WRITE_ACTIONS = [

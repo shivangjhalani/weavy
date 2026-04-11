@@ -75,12 +75,6 @@ class ListSessionsInput(BaseModel):
     limit: int = 20
 
 
-class GetSessionInput(BaseModel):
-    session_id: str
-    start_index: int | None = None
-    end_index: int | None = None
-
-
 class GetThemeInput(BaseModel):
     name: str
 

@@ -1,5 +1,9 @@
 private/
 .old/
+
+# Benchmark
+benchmark/data/
+benchmark/results/
 .claude
 .chromadb/
 .neo4j/

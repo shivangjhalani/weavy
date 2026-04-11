@@ -32,7 +32,6 @@ For questions involving "when", "how long ago", "what changed", "most recent", "
 1. Find the relevant node(s)
 2. Inspect their log via `get_node` — logs record every change with timestamps and provenance
 3. Use `search_graph` with `time_range` to scope retrieval to a specific period
-4. Use `get_session` if you need the original wording or need to verify a date exactly
 
 For relative time expressions in the question ("recently", "a few months back"), resolve them against `{{current_time}}` before reasoning.
 
