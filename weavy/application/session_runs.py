@@ -64,6 +64,7 @@ def run_session(
     append_message: str | None = None,
     parent_observation: Any = None,
     caller_context: str | None = None,
+    query_time: datetime | None = None,
 ) -> RunTrace:
     session = store_canonical.get_session(
         graph, session_id, check_completed=(mode == "ingestion")
@@ -75,13 +76,15 @@ def run_session(
         initial_messages.append({"role": "user", "content": append_message})
 
     # Ingestion prompt gets the session's event time so the agent knows
-    # *when* the events occurred. Query prompt gets wall-clock time for
-    # date arithmetic against "now".
-    current_time = (
-        session.timestamp.strftime("%Y-%m-%dT%H:%MZ")
-        if mode == "ingestion"
-        else None
-    )
+    # *when* the events occurred. Query prompt gets the caller-supplied
+    # query_time if provided (e.g. benchmark scenarios), otherwise falls
+    # back to wall-clock time via prompts.py.
+    if mode == "ingestion":
+        current_time = session.timestamp.strftime("%Y-%m-%dT%H:%MZ")
+    elif query_time is not None:
+        current_time = query_time.strftime("%Y-%m-%dT%H:%MZ")
+    else:
+        current_time = None
 
     system_prompt = build_themed_system_prompt(
         "weavy-ingestion" if mode == "ingestion" else "weavy-query",
@@ -123,6 +126,11 @@ def run_ingest(session_id: str, graph: Graph) -> RunTrace:
     return run_session(session_id, "ingestion", graph)
 
 
-def run_query(question: str, graph: Graph, context: str | None = None) -> RunTrace:
+def run_query(
+    question: str,
+    graph: Graph,
+    context: str | None = None,
+    query_time: datetime | None = None,
+) -> RunTrace:
     session_id = create_session("", graph)
-    return run_session(session_id, "query", graph, question, caller_context=context)
+    return run_session(session_id, "query", graph, question, caller_context=context, query_time=query_time)

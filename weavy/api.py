@@ -55,12 +55,21 @@ class WeavyMemory:
             raise RuntimeError(f"Ingestion failed: {trace.error}")
         return trace.session_id  # type: ignore[return-value]
 
-    def query(self, question: str, context: str | None = None) -> str:
+    def query(
+        self,
+        question: str,
+        context: str | None = None,
+        query_time: datetime | None = None,
+    ) -> str:
         """Query the memory graph. Returns the answer string.
+
+        query_time overrides the agent's sense of "now" — pass it when the
+        question logically belongs to a specific point in time (e.g. benchmark
+        scenarios where question_date != today).
 
         Raises RuntimeError if the query agent fails.
         """
-        trace = run_query(question, self._graph, context=context)
+        trace = run_query(question, self._graph, context=context, query_time=query_time)
         if trace.status == "failed":
             raise RuntimeError(f"Query failed: {trace.error}")
         return (trace.completion_payload or {}).get("answer", "")
