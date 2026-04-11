@@ -235,9 +235,8 @@ class RunTracer:
                 "input": usage.prompt_tokens,
                 "output": usage.completion_tokens,
                 "total": usage.total_tokens,
+                "cache_read_input_tokens": usage.cached_tokens,
             }
-            if usage.cached_tokens:
-                usage_info["cache_read_input_tokens"] = usage.cached_tokens
 
             self._current_generation.update(
                 input=input_messages,
@@ -323,10 +322,17 @@ class RunTracer:
         if self._root is not None:
             self._root.set_trace_io(output=trace.completion_payload)
             self._root.update(
+                usage_details={
+                    "input": trace.total_usage.prompt_tokens,
+                    "output": trace.total_usage.completion_tokens,
+                    "total": trace.total_usage.total_tokens,
+                    "cache_read_input_tokens": trace.total_usage.cached_tokens,
+                },
                 metadata={
                     "status": trace.status,
                     "total_turns": total_turns,
                     "error": trace.error,
+                    "reasoning_tokens": trace.total_usage.reasoning_tokens,
                     **delta,
                 },
             )

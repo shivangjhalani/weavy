@@ -15,7 +15,6 @@ from weavy.models.traces import RunTrace
 from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
 from weavy.store import themes as store_themes
-from weavy.store.client import get_graph
 
 
 def finalize_theme(graph: Graph, trace: RunTrace) -> RunTrace:
@@ -32,8 +31,7 @@ def finalize_theme(graph: Graph, trace: RunTrace) -> RunTrace:
     return trace
 
 
-def run_theme_update() -> RunTrace:
-    graph = get_graph()
+def run_theme_update(graph: Graph) -> RunTrace:
     system_state = store_system.get_system(graph)
     all_themes = store_themes.list_all_themes(graph)
 

@@ -10,7 +10,8 @@ from unittest.mock import patch
 import pytest
 from falkordb import Graph
 
-from weavy.application.session_runs import finalize_session
+from weavy.application.session_runs import finalize_session, run_ingest
+from weavy.application.theme_runs import run_theme_update
 from weavy.models.graph import ProvenanceInput
 from weavy.models.traces import RunTrace
 from weavy.store import canonical as store_canonical
@@ -52,13 +53,8 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
     create_resp = mock_tool_response("create_node", create_args, "tc-1", usage=usage)
     done_resp = mock_tool_response("complete", completion_args, "tc-2", usage=usage)
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch("litellm.completion", side_effect=[create_resp, done_resp]),
-    ):
-        from weavy.modes.session import run_ingest
-
-        trace = run_ingest(session_id)
+    with patch("litellm.completion", side_effect=[create_resp, done_resp]):
+        trace = run_ingest(session_id, graph)
 
     assert trace.status == "completed"
     assert len(trace.touched_nodes) == 1
@@ -94,13 +90,8 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
     update_resp = mock_tool_response("update_node", update_args, "tc-1", usage=usage)
     done_resp = mock_tool_response("complete", completion_args, "tc-2", usage=usage)
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch("litellm.completion", side_effect=[update_resp, done_resp]),
-    ):
-        from weavy.modes.session import run_ingest
-
-        trace = run_ingest(session_id)
+    with patch("litellm.completion", side_effect=[update_resp, done_resp]):
+        trace = run_ingest(session_id, graph)
 
     assert trace.status == "completed"
     assert len(trace.touched_nodes) == 1
@@ -125,13 +116,8 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
         usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
     )
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch("litellm.completion", return_value=bad_resp),
-    ):
-        from weavy.modes.session import run_ingest
-
-        trace = run_ingest(session_id)
+    with patch("litellm.completion", return_value=bad_resp):
+        trace = run_ingest(session_id, graph)
 
     assert trace.status == "failed"
     assert trace.touched_nodes == []
@@ -139,11 +125,8 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
 
 def test_ingest_missing_session_raises(graph: Graph) -> None:
     """run_ingest raises ValueError for a non-existent session id."""
-    with patch("weavy.application.session_runs.get_graph", return_value=graph):
-        from weavy.modes.session import run_ingest
-
-        with pytest.raises(ValueError, match="not found"):
-            run_ingest("s:999")
+    with pytest.raises(ValueError, match="not found"):
+        run_ingest("s:999", graph)
 
 
 # ---------------------------------------------------------------------------
@@ -187,13 +170,8 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
         "complete_theme_update", completion_args, "tc-2", usage=usage
     )
 
-    with (
-        patch("weavy.application.theme_runs.get_graph", return_value=graph),
-        patch("litellm.completion", side_effect=[create_resp, done_resp]),
-    ):
-        from weavy.modes.theme import run_theme_update
-
-        trace = run_theme_update()
+    with patch("litellm.completion", side_effect=[create_resp, done_resp]):
+        trace = run_theme_update(graph)
 
     assert trace.status == "completed"
 
@@ -214,13 +192,8 @@ def test_theme_update_empty_map_runs(graph: Graph) -> None:
         usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
     )
 
-    with (
-        patch("weavy.application.theme_runs.get_graph", return_value=graph),
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        from weavy.modes.theme import run_theme_update
-
-        trace = run_theme_update()
+    with patch("litellm.completion", return_value=done_resp):
+        trace = run_theme_update(graph)
 
     assert trace.status == "completed"
 
@@ -244,19 +217,14 @@ def test_ingest_writes_outcomes(graph: Graph) -> None:
     completion_args = {"summary": "Ingested career text."}
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch(
-            "litellm.completion",
-            side_effect=[
-                mock_tool_response("create_node", create_args, "tc-1", usage=usage),
-                mock_tool_response("complete", completion_args, "tc-2", usage=usage),
-            ],
-        ),
+    with patch(
+        "litellm.completion",
+        side_effect=[
+            mock_tool_response("create_node", create_args, "tc-1", usage=usage),
+            mock_tool_response("complete", completion_args, "tc-2", usage=usage),
+        ],
     ):
-        from weavy.modes.session import run_ingest
-
-        trace = run_ingest(session_id)
+        trace = run_ingest(session_id, graph)
 
     assert trace.status == "completed"
     assert store_canonical.is_session_completed(graph, session_id)
@@ -268,11 +236,8 @@ def test_reingest_blocked_when_completed(graph: Graph) -> None:
     store_canonical.persist_session_outcomes(
         graph, session_id, "done", {}, "2024-06-01T12:00:00Z"
     )
-    with patch("weavy.application.session_runs.get_graph", return_value=graph):
-        from weavy.modes.session import run_ingest
-
-        with pytest.raises(ValueError, match="already completed"):
-            run_ingest(session_id)
+    with pytest.raises(ValueError, match="already completed"):
+        run_ingest(session_id, graph)
 
 
 def test_finalize_session_persists_conversation(graph: Graph) -> None:

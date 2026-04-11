@@ -46,11 +46,18 @@ uv run python -m weavy.cli query [question]                 # omit question for 
 
 ### Core Contract
 
-The memory layer is source-agnostic. Three operations:
+The memory layer is source-agnostic. `WeavyMemory` is the public Python API:
 
-- **`add(text, timestamp?, context?)`** — create a session, run ingestion, return trace
-- **`query(question, context?)`** — create a session, run query agent, return answer
-- **`continue(session_id, message)`** — resume any session in any mode
+```python
+from weavy import WeavyMemory
+
+mem = WeavyMemory()                           # or WeavyMemory("my_graph") for isolation
+mem.add(text, timestamp?, context?) -> str    # ingest text, return session_id
+mem.query(question, context?) -> str          # return answer string
+mem.continue_session(session_id, message)     # resume a session with a new query
+mem.update_themes()                           # run the theme agent
+mem.reset()                                   # drop graph and reinitialize
+```
 
 ### Key Design Decisions
 
@@ -66,8 +73,10 @@ The memory layer is source-agnostic. Three operations:
 ```
 transcribe.py          — standalone Whisper transcription script (not part of weavy package)
 weavy/
+  __init__.py        — exports WeavyMemory
+  api.py             — WeavyMemory: stable public Python API
   config.py          — Settings from env (FALKORDB_*, GEMINI_MODEL, LANGFUSE_*)
-  cli.py             — argparse entry point; thin command handlers
+  cli.py             — argparse entry point; thin command handlers + REPL
   langfuse_client.py — lazy optional Langfuse client factory
   application/
     contracts.py     — app-level result DTOs shared across store/services/harness
@@ -89,23 +98,26 @@ weavy/
     actions.py       — ACTIONS registry; SESSION_ACTIONS / THEME_ACTIONS lists
     tracing.py       — Langfuse span wrapping (RunTracer, ChatSessionTracer)
     tool_models.py   — agent-only tool input contracts and completion schemas
-  modes/
-    session.py       — thin interactive wrappers over application/session_runs.py
-    theme.py         — thin wrapper over application/theme_runs.py
   prompts/           — weavy-ingestion.md, weavy-query.md, weavy-theme.md
 ```
 
 ### Boundary Rules
 
+- **`api.py` is the public interface.** External callers (benchmark harnesses,
+  scripts) import `WeavyMemory` from here. It returns simple values (str,
+  raises RuntimeError on failure) — no traces, no FalkorDB types.
+- **`cli.py` is the operational interface.** It imports from `application/`
+  directly for full trace visibility (touched nodes, summaries). It does not
+  go through `api.py`.
+- **`application/` owns orchestration and prompt assembly.** Session/theme run
+  setup, prompt rendering, and run finalization live there. All `run_*`
+  functions require an explicit `graph: Graph` argument — callers (`cli.py`,
+  `api.py`) resolve the graph via `get_graph()` and pass it in.
 - **Agent tool contracts belong only to the harness boundary.** Tool schemas live
   in `weavy/harness/tool_models.py` and are not the general application
   contract for `store/` or non-harness `services/`.
-- **`application/` owns orchestration and prompt assembly.** Session/theme run
-  setup, prompt rendering, and run finalization live there.
 - **`store/` means persistence.** FalkorDB reads/writes stay there; prompt
   formatting and token-budget shaping do not.
-- **`modes/` are entrypoints.** They should stay thin and delegate to
-  `application/`.
 - **Docs must match code.** When module boundaries change, update this file in
   the same refactor.
 
@@ -120,4 +132,7 @@ weavy/
 - Sessions are source-agnostic — no origin, audio_path, or segment fields in `store/canonical.py`
 - Agent tool schemas are a harness concern — they should not be shared as the
   general application contract for `store/` and non-harness services
+- Public API returns simple values; internal `RunTrace` stays internal to `application/` and `cli.py`
+- `graph_name` in `WeavyMemory` provides full graph-level isolation — use it for
+  benchmark scenarios, not for per-user data within a single deployment
 - Environment managed by `devenv.nix`; use `uv` for deps, `ruff` for linting

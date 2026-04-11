@@ -12,21 +12,18 @@ from weavy.models.canonical import ChatMessage, Session
 from weavy.models.traces import RunTrace, graph_changes as _graph_changes
 from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
-from weavy.store.client import get_graph
 
 
 def create_session(
     text: str,
+    graph: Graph,
     timestamp: datetime | None = None,
-    *,
-    graph: Graph | None = None,
 ) -> str:
-    active_graph = graph or get_graph()
-    session_id = store_system.increment_counter(active_graph, "session")
+    session_id = store_system.increment_counter(graph, "session")
     ts = timestamp or datetime.now(tz=timezone.utc)
     messages = [ChatMessage(role="user", content=text)] if text else []
     store_canonical.create_session(
-        active_graph, Session(id=session_id, timestamp=ts, messages=messages)
+        graph, Session(id=session_id, timestamp=ts, messages=messages)
     )
     return session_id
 
@@ -63,11 +60,11 @@ def finalize_session(
 def run_session(
     session_id: str,
     mode: Literal["ingestion", "query"],
+    graph: Graph,
     append_message: str | None = None,
     parent_observation: Any = None,
     caller_context: str | None = None,
 ) -> RunTrace:
-    graph = get_graph()
     session = store_canonical.get_session(
         graph, session_id, check_completed=(mode == "ingestion")
     )
@@ -107,24 +104,25 @@ def run_session(
         parent_observation=parent_observation,
         event_time=session.timestamp,
     )
-    return finalize_session(graph, session_id, trace)
+    trace = finalize_session(graph, session_id, trace)
+    trace.session_id = session_id
+    return trace
 
 
 def run_add(
     text: str,
+    graph: Graph,
     timestamp: datetime | None = None,
     context: str | None = None,
 ) -> RunTrace:
-    graph = get_graph()
-    session_id = create_session(text, timestamp, graph=graph)
-    return run_session(session_id, "ingestion", caller_context=context)
+    session_id = create_session(text, graph, timestamp)
+    return run_session(session_id, "ingestion", graph, caller_context=context)
 
 
-def run_ingest(session_id: str) -> RunTrace:
-    return run_session(session_id, "ingestion")
+def run_ingest(session_id: str, graph: Graph) -> RunTrace:
+    return run_session(session_id, "ingestion", graph)
 
 
-def run_query(question: str, context: str | None = None) -> RunTrace:
-    graph = get_graph()
-    session_id = create_session("", graph=graph)
-    return run_session(session_id, "query", question, caller_context=context)
+def run_query(question: str, graph: Graph, context: str | None = None) -> RunTrace:
+    session_id = create_session("", graph)
+    return run_session(session_id, "query", graph, question, caller_context=context)

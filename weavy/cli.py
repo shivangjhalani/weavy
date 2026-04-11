@@ -89,7 +89,10 @@ def cmd_add(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     trace = session_runs.run_add(
-        text, timestamp=_parse_timestamp(args.timestamp), context=args.context
+        text,
+        get_graph(),
+        timestamp=_parse_timestamp(args.timestamp),
+        context=args.context,
     )
     if not _print_trace_status(trace):
         return
@@ -100,7 +103,7 @@ def cmd_add(args: argparse.Namespace) -> None:
 
 
 def cmd_update_themes(_args: argparse.Namespace) -> None:
-    trace = theme_runs.run_theme_update()
+    trace = theme_runs.run_theme_update(get_graph())
     if _print_trace_status(trace):
         print("Theme update complete.")
 
@@ -112,21 +115,55 @@ def cmd_set_preface(args: argparse.Namespace) -> None:
 
 
 def cmd_continue(args: argparse.Namespace) -> None:
-    trace = session_runs.run_session(args.session_id, "query", args.question)
+    trace = session_runs.run_session(args.session_id, "query", get_graph(), args.question)
     if _print_trace_status(trace):
         print(f"\n{_completion_field(trace, 'answer')}")
 
 
 def cmd_query(args: argparse.Namespace) -> None:
     if args.question is None:
-        from weavy.modes.session import run_chat_repl
-
-        run_chat_repl()
+        _run_chat_repl()
         return
 
-    trace = session_runs.run_query(args.question)
+    trace = session_runs.run_query(args.question, get_graph())
     if _print_trace_status(trace):
         print(f"\n{_completion_field(trace, 'answer')}")
+
+
+def _run_chat_repl() -> None:
+    """Interactive REPL: each turn runs the query agent with full session history."""
+    from weavy.harness.tracing import ChatSessionTracer
+
+    graph = get_graph()
+    session_id = session_runs.create_session("", graph)
+    session_tracer = ChatSessionTracer(session_id)
+    message_count = 0
+
+    print("Weavy chat — type 'exit' or Ctrl-D to quit.\n")
+    while True:
+        try:
+            question = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not question:
+            continue
+        if question.lower() in ("exit", "quit"):
+            break
+
+        message_count += 1
+        trace = session_runs.run_session(
+            session_id, "query", graph, question,
+            parent_observation=session_tracer.root,
+        )
+
+        if trace.status == "failed":
+            print(f"[error] {trace.error}\n")
+        else:
+            answer = (trace.completion_payload or {}).get("answer", "")
+            print(f"\nWeavy: {answer}\n")
+
+    session_tracer.finalize(message_count)
 
 
 def main() -> None:

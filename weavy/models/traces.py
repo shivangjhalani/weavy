@@ -81,3 +81,4 @@ class RunTrace(BaseModel):
     status: Literal["running", "completed", "failed"] = "running"
     error: str | None = None
     conversation: list[dict] | None = None  # full messages excluding system prompt
+    session_id: str | None = None

@@ -22,27 +22,6 @@ _MAX_PLAINTEXT_RETRIES = 1  # times to re-prompt before failing when model retur
 _MAX_TOOL_RETRIES = 3  # total tool-error nudges across the run before hard-failing
 
 
-def _with_cache_control(message: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of a message with cache_control on the last content block.
-
-    Converts string content to the block-array format required by LiteLLM's
-    provider-agnostic cache_control support. LiteLLM translates this to each
-    provider's native caching API (Anthropic ephemeral blocks, Gemini context
-    caching, etc.) automatically.
-    """
-    msg = deepcopy(message)
-    content = msg.get("content")
-    if isinstance(content, str):
-        msg["content"] = [
-            {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
-        ]
-    elif isinstance(content, list) and content:
-        last = dict(content[-1])
-        last["cache_control"] = {"type": "ephemeral"}
-        msg["content"] = list(content[:-1]) + [last]
-    return msg
-
-
 def _sanitize_message_for_trace(message: dict[str, Any]) -> dict[str, Any]:
     sanitized = deepcopy(message)
     sanitized.pop("tool_call_id", None)
@@ -164,17 +143,10 @@ def run(
         graph=graph, trace=trace, event_time=event_time, session_id=session_id
     )
 
-    # Build static prefix. Mark the last message for prompt caching on
-    # providers that support it alongside tool use (e.g. Anthropic).
-    # Gemini's CachedContent cannot coexist with system_instruction/tools
-    # in the same request, so we skip the annotation for Gemini models.
-    static_messages: list[dict[str, Any]] = [
+    messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         *initial_messages,
     ]
-    if not settings.GEMINI_MODEL.startswith("gemini/"):
-        static_messages[-1] = _with_cache_control(static_messages[-1])
-    messages: list[dict[str, Any]] = static_messages
     tool_definitions = actions.get_action_definitions(allowed_actions)
     turn_number = 0
     plaintext_retries = 0

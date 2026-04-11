@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 from falkordb import Graph
 
+from weavy.application.session_runs import run_query
 from tests.helpers import (
     SAMPLE_TEXT,
     mock_tool_response,
@@ -39,13 +40,8 @@ def test_query_delivers_response(graph: Graph) -> None:
     }
     done_resp = mock_tool_response("complete", deliver_args)
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        from weavy.modes.session import run_query
-
-        trace = run_query("What have I been thinking about?")
+    with patch("litellm.completion", return_value=done_resp):
+        trace = run_query("What have I been thinking about?", graph)
 
     assert trace.status == "completed"
     assert (
@@ -66,13 +62,8 @@ def test_query_creates_session(graph: Graph) -> None:
     }
     done_resp = mock_tool_response("complete", deliver_args)
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        from weavy.modes.session import run_query
-
-        trace = run_query("What have I been thinking about?")
+    with patch("litellm.completion", return_value=done_resp):
+        trace = run_query("What have I been thinking about?", graph)
 
     assert trace.status == "completed"
 
@@ -94,13 +85,8 @@ def test_query_conversation_captured(graph: Graph) -> None:
     }
     done_resp = mock_tool_response("complete", deliver_args)
 
-    with (
-        patch("weavy.application.session_runs.get_graph", return_value=graph),
-        patch("litellm.completion", return_value=done_resp),
-    ):
-        from weavy.modes.session import run_query
-
-        trace = run_query("Am I anxious about my career?")
+    with patch("litellm.completion", return_value=done_resp):
+        trace = run_query("Am I anxious about my career?", graph)
 
     assert trace.conversation is not None
     roles = [m["role"] for m in trace.conversation]
