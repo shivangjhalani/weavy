@@ -20,7 +20,7 @@ from weavy.application.session_runs import run_add, run_query, run_session
 from weavy.application.theme_runs import run_theme_update
 from weavy.models.traces import RunTrace
 from weavy.services.embedding import get_dimension
-from weavy.store.client import get_graph
+from weavy.store.client import delete_graph_if_exists, get_graph
 from weavy.store.system import init_system
 
 
@@ -47,7 +47,7 @@ class Weavy:
         timestamp: datetime | None = None,
         context: str | None = None,
     ) -> RunTrace:
-        """Ingest *text* into the memory graph.
+        """Ingest *text* into the memory graph and refresh themes.
 
         Args:
             text: Raw text to ingest. Pre-processing (transcription, parsing)
@@ -59,7 +59,10 @@ class Weavy:
         Returns:
             RunTrace with ``mode="ingestion"``.
         """
-        return run_add(text, self._graph, timestamp=timestamp, context=context)
+        trace = run_add(text, self._graph, timestamp=timestamp, context=context)
+        if trace.status == "completed":
+            run_theme_update(self._graph)
+        return trace
 
     def query(
         self,
@@ -107,5 +110,5 @@ class Weavy:
         Deletes all graph data then recreates the System node and vector index.
         Intended for benchmark isolation — not for production use.
         """
-        self._graph.delete()
+        delete_graph_if_exists(self._graph)
         init_system(self._graph, embedding_dim=get_dimension())

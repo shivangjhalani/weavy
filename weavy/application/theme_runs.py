@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from falkordb import Graph
 
@@ -31,7 +32,10 @@ def finalize_theme(graph: Graph, trace: RunTrace) -> RunTrace:
     return trace
 
 
-def run_theme_update(graph: Graph) -> RunTrace:
+def run_theme_update(
+    graph: Graph,
+    parent_observation: Any = None,
+) -> RunTrace:
     system_state = store_system.get_system(graph)
     all_themes = store_themes.list_all_themes(graph)
 
@@ -61,5 +65,6 @@ def run_theme_update(graph: Graph) -> RunTrace:
         allowed_actions=THEME_ACTIONS,
         run_context={"input_summary": f"Theme update ({len(sessions)} sessions)"},
         graph=graph,
+        parent_observation=parent_observation,
     )
     return finalize_theme(graph, trace)

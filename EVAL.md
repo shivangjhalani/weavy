@@ -1,6 +1,6 @@
 # Weavy Evaluation — LongMemEval
 
-Weavy is evaluated against [LongMemEval](https://github.com/xiaowu0162/LongMemEval), a benchmark for long-term memory in chat assistants (ICLR 2025). This document covers everything you need to know to run evaluations, interpret results, and use Langfuse for observability.
+Weavy is evaluated against [LongMemEval](https://github.com/xiaowu0162/LongMemEval), a benchmark for long-term memory in chat assistants (ICLR 2025). The eval harness uses **Langfuse Datasets + Experiments** for full observability: dataset management, experiment comparison, built-in LLM-as-judge scoring, and aggregate metrics — all visible in the Langfuse UI.
 
 ---
 
@@ -8,24 +8,24 @@ Weavy is evaluated against [LongMemEval](https://github.com/xiaowu0162/LongMemEv
 
 LongMemEval presents a system with a history of timestamped chat sessions, then asks a question that requires recalling and reasoning over that history. It tests five core abilities:
 
-| Ability | Description |
-|---|---|
-| Information extraction | Recall a specific fact from a past session |
-| Multi-session reasoning | Synthesise information across multiple sessions |
-| Knowledge updates | Track when a piece of information changed over time |
-| Temporal reasoning | Answer questions about timing, duration, or sequence |
-| Abstention | Refuse to answer when the information was never stated |
+| Ability                 | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| Information extraction  | Recall a specific fact from a past session             |
+| Multi-session reasoning | Synthesise information across multiple sessions        |
+| Knowledge updates       | Track when a piece of information changed over time    |
+| Temporal reasoning      | Answer questions about timing, duration, or sequence   |
+| Abstention              | Refuse to answer when the information was never stated |
 
 These map to six **question types** that appear in the metrics output:
 
-| Question type | What it tests |
-|---|---|
-| `single-session-user` | User stated something in one session |
-| `single-session-assistant` | Assistant stated something in one session |
-| `single-session-preference` | User expressed a preference in one session |
-| `temporal-reasoning` | Time-based calculation across sessions |
-| `knowledge-update` | Information was updated; return the latest value |
-| `multi-session` | Answer requires combining facts from multiple sessions |
+| Question type               | What it tests                                          |
+| --------------------------- | ------------------------------------------------------ |
+| `single-session-user`       | User stated something in one session                   |
+| `single-session-assistant`  | Assistant stated something in one session              |
+| `single-session-preference` | User expressed a preference in one session             |
+| `temporal-reasoning`        | Time-based calculation across sessions                 |
+| `knowledge-update`          | Information was updated; return the latest value       |
+| `multi-session`             | Answer requires combining facts from multiple sessions |
 
 Questions whose IDs end in `_abs` are **abstention questions** — the correct answer is to say the information is not available.
 
@@ -35,11 +35,11 @@ Questions whose IDs end in `_abs` are **abstention questions** — the correct a
 
 Place data files in `eval/data/` (gitignored). Download from the [LongMemEval releases](https://github.com/xiaowu0162/LongMemEval).
 
-| Flag | File | Sessions per instance | What it tests |
-|---|---|---|---|
-| `--dataset oracle` | `longmemeval_oracle.json` | 3–5 (evidence only) | Can Weavy answer when given exactly the right sessions? |
-| `--dataset s` | `longmemeval_s.json` | ~40 (~115k tokens) | Can Weavy retrieve and answer from a small haystack? |
-| `--dataset m` | `longmemeval_m.json` | ~500 sessions | Can Weavy retrieve and answer from a large haystack? |
+| Flag               | File                      | Sessions per instance | What it tests                                           |
+| ------------------ | ------------------------- | --------------------- | ------------------------------------------------------- |
+| `--dataset oracle` | `longmemeval_oracle.json` | 3–5 (evidence only)   | Can Weavy answer when given exactly the right sessions? |
+| `--dataset s`      | `longmemeval_s.json`      | ~40 (~115k tokens)    | Can Weavy retrieve and answer from a small haystack?    |
+| `--dataset m`      | `longmemeval_m.json`      | ~500 sessions         | Can Weavy retrieve and answer from a large haystack?    |
 
 **Which to start with:** `oracle`. It removes retrieval from the equation and isolates answer quality. Run `s` and `m` once oracle scores are good — the gap between oracle and S/M tells you how much Weavy's semantic search is losing.
 
@@ -49,19 +49,25 @@ All three have 500 questions. Each question has the same ground truth answer reg
 
 ## What We Measure
 
-**Captured by this eval harness:**
+**Scores attached per item (via LLM-as-judge evaluator):**
 
-- QA accuracy per question type
-- Overall accuracy (all 500 instances)
-- Task-averaged accuracy (mean of per-category accuracies)
-- Abstention accuracy
+| Score name               | Type    | What it is                          |
+| ------------------------ | ------- | ----------------------------------- |
+| `longmemeval/correct`    | BOOLEAN | 1 = correct, 0 = incorrect          |
+| `longmemeval/{category}` | BOOLEAN | Same value, scoped to question type |
+
+**Aggregate scores (via run-level evaluator):**
+
+| Score name                           | What it is                                                  |
+| ------------------------------------ | ----------------------------------------------------------- |
+| `longmemeval/overall_accuracy`       | Correct / total                                             |
+| `longmemeval/task_averaged_accuracy` | Mean of per-category accuracies (primary comparable metric) |
+| `longmemeval/abstention_accuracy`    | Accuracy on abstention questions only                       |
 
 **Not captured** (would require instrumenting Weavy's query agent to record which graph nodes it accessed):
 
 - Session-level memory recall (did retrieval find the right sessions?)
 - Turn-level memory recall (did retrieval find the right turns?)
-
-For benchmarking Weavy's progress over time, QA accuracy is the primary signal.
 
 ---
 
@@ -69,27 +75,22 @@ For benchmarking Weavy's progress over time, QA accuracy is the primary signal.
 
 ```
 eval/
-  eval.py           — unified CLI: run / status / reset / judge / score / metrics
-  evaluate_qa.py    — patched LongMemEval judge (litellm instead of openai)
+  eval.py           — unified CLI: upload / run / status / metrics / reset
+  evaluate_qa.py    — LongMemEval judge prompts + litellm judge call
   data/             — gitignored; place dataset JSON files here
-  .state/           — gitignored; per-dataset checkpoint files
-    oracle/
-      results.jsonl       one line per answered instance
-      eval_results.jsonl  one line per judged instance
-    s/
-      results.jsonl
-      eval_results.jsonl
-    m/
-      ...
 ```
 
-**Zero changes to `weavy/`.** The harness is a pure consumer of the public SDK.
+State lives in **Langfuse**, not local files. Each LongMemEval instance is a Langfuse dataset item. Each `run` invocation creates a Langfuse experiment run with traces, scores, and aggregate metrics.
 
-**Per-instance flow:**
-1. `w.reset()` — drop and reinitialise the isolated `longmemeval` graph
-2. `w.add(session_text, timestamp=session_date)` — ingest each haystack session
-3. `w.query(question, query_time=question_date)` — query at the benchmark's fixed timestamp
-4. Record `hypothesis` + `trace_id` (the Langfuse trace ID) to `results.jsonl`
+The harness uses the `weavy.application` layer directly (`run_add`, `run_theme_update`, `run_query`). Themes are updated after every successful session ingestion — matching `Weavy.add()` behavior.
+
+**Per-instance flow (inside the experiment task function):**
+
+1. Reset the isolated `longmemeval` graph (drop + reinitialise)
+2. For each haystack session: `run_add(session_text, graph, timestamp=session_date)` then `run_theme_update(graph)`
+3. `run_query(question, graph, query_time=question_date)` — query at the benchmark's fixed timestamp
+4. LLM-as-judge evaluator scores the hypothesis against ground truth
+5. Run-level evaluator computes aggregate accuracy metrics
 
 The `longmemeval` graph is isolated from your main Weavy graph (`weavy`). It is wiped clean before each instance so sessions from one question never bleed into another.
 
@@ -97,109 +98,77 @@ The `longmemeval` graph is isolated from your main Weavy graph (`weavy`). It is 
 
 ## Commands
 
-All commands accept `--dataset oracle|s|m` (default: `oracle`) or `--data PATH` for a custom file. The two are mutually exclusive.
+### `upload` — push LongMemEval data to Langfuse
 
-### `run` — ingest and query
+```bash
+uv run eval/eval.py upload --dataset oracle
+uv run eval/eval.py upload --dataset s
+uv run eval/eval.py upload --dataset m
+```
+
+Creates a Langfuse dataset named `longmemeval/oracle` (or `/s`, `/m`) and uploads all 500 instances as dataset items. Each item contains:
+
+- **input**: `question_id`, `question`, `question_date`, `haystack_sessions`, `haystack_dates`
+- **expected_output**: `answer`, `question_type`, `abstention`
+- **metadata**: `question_type`, `num_sessions`
+
+This is a one-time setup step per dataset variant. Re-running upserts items by stable ID (`{variant}:{question_id}`).
+
+---
+
+### `run` — execute experiment (ingest + query + judge, all in one)
 
 ```bash
 uv run eval/eval.py run --dataset oracle
-uv run eval/eval.py run --dataset oracle --limit 10   # test with first 10 pending
-uv run eval/eval.py run --dataset s
+uv run eval/eval.py run --dataset oracle --limit 10
+uv run eval/eval.py run --dataset oracle --judge-model gpt-4o
+uv run eval/eval.py run --dataset oracle --concurrency 4
 ```
 
-Processes each pending instance: reset → ingest all sessions → query. Automatically resumes from the last checkpoint — if it crashes or is interrupted, just run it again. `--limit N` processes at most N pending instances in this invocation; run without it to continue.
+Runs eval items with configurable parallelism. Each worker gets its own isolated FalkorDB graph (`longmemeval:0`, `longmemeval:1`, ...) so items never collide. Default is `--concurrency 1` (sequential). For each item:
+
+1. Resets the isolated FalkorDB graph
+2. Ingests each haystack session via `run_add`, with `run_theme_update` after each
+3. Runs `run_query` with the question
+4. Runs the LLM-as-judge and posts `longmemeval/correct` and `longmemeval/{category}` scores to the query trace in Langfuse
+5. After all items, prints aggregate metrics (overall, per-category, task-averaged, abstention)
+
+Each run gets a unique name like `weavy-oracle-20260412T140000`. Scores are attached to Langfuse traces for filtering and analysis in the UI.
 
 **Output per instance:**
-```
-[42/500] q123_temporal  (temporal-reasoning)  — 4 session(s)
-  ingest [1/4] 2024-01-15  ✓
-  ingest [2/4] 2024-03-02  ✓
-  ingest [3/4] 2024-06-10  ✓
-  ingest [4/4] 2024-09-20  ✓
-  query  ✓  trace=a3f7c1b2e509
-  → The user mentioned switching from Python to Go in March 2024…
-```
-
-Each `w.add()` and `w.query()` call emits a Langfuse trace automatically (if Langfuse is configured). The `trace=` prefix shows the first 12 characters of the Langfuse trace ID.
-
----
-
-### `status` — progress overview
-
-```bash
-uv run eval/eval.py status --dataset oracle
-uv run eval/eval.py status --dataset s
-```
-
-Shows answered/judged counts, overall accuracy, per-category accuracy with progress bars, and the Langfuse host URL.
 
 ```
-────────────────────────────────────────────────────────
-  Weavy / LongMemEval  [oracle]
-────────────────────────────────────────────────────────
-  Answered :  500 / 500  (100.0%)
-  Judged   :  500 / 500  (100.0%)
-  Correct  :  347 / 500  (69.4%)  ██████████████░░░░░░
-
-  By category:
-    knowledge-update              ████████████████░░░░   81/100   81.0%
-    multi-session                 ██████████████░░░░░░   72/100   72.0%
-    single-session-assistant      ████████████████████   83/ 83  100.0%
-    ...
-
-  Langfuse :  http://localhost:3100
-             score names: longmemeval/correct, longmemeval/<category>
-────────────────────────────────────────────────────────
+  [q123_temporal] 4 session(s) — reset graph
+    ingest [1/4] 2024-01-15 ✓
+    ingest [2/4] 2024-03-02 ✓
+    ingest [3/4] 2024-06-10 ✓
+    ingest [4/4] 2024-09-20 ✓
+    themes ✓
+    query  ✓  trace=a3f7c1b2e509
+    → The user mentioned switching from Python to Go in March 2024…
 ```
-
-Works without a live FalkorDB connection — reads from `.state/` only.
-
----
-
-### `judge` — run LLM-as-judge
-
-```bash
-uv run eval/eval.py judge --dataset oracle
-uv run eval/eval.py judge --dataset oracle --model gemini/gemini-2.5-flash-lite
-uv run eval/eval.py judge --dataset oracle --model gpt-4o
-```
-
-Runs the LLM judge over all un-judged hypotheses and appends to `eval_results.jsonl`. Also auto-resumes — already-judged instances are skipped.
-
-The judge model can be any [LiteLLM-supported model string](https://docs.litellm.ai/docs/providers). Default is `gemini/gemini-2.5-flash-lite`.
 
 **Comparability note:** Published LongMemEval leaderboard scores use `gpt-4o` as judge. Results with a different judge are not directly comparable to published numbers, but are fully valid for tracking Weavy's own progress across runs. Pick one model and keep it consistent between runs.
 
-The judge prompt logic is unchanged from the original LongMemEval `evaluate_qa.py` — only the model call was patched from `openai` SDK to `litellm`.
-
 ---
 
-### `score` — post to Langfuse
+### `status` — show dataset and experiment runs
 
 ```bash
-uv run eval/eval.py score --dataset oracle
+uv run eval/eval.py status --dataset oracle
 ```
 
-Posts two Langfuse scores to each query trace:
-
-| Score name | Type | What it is |
-|---|---|---|
-| `longmemeval/correct` | BOOLEAN | 1 = correct, 0 = incorrect |
-| `longmemeval/{category}` | BOOLEAN | Same value, scoped to question type |
-
-The per-category scores let Langfuse's Scores page aggregate each question type independently. In the Langfuse UI you get separate charts for `longmemeval/temporal-reasoning`, `longmemeval/multi-session`, etc. — the exact breakdown LongMemEval reports.
-
-Requires Langfuse credentials in `.env` (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`).
+Shows the Langfuse dataset info, item count, and lists all experiment runs with their timestamps. Links to the Langfuse host URL.
 
 ---
 
-### `metrics` — accuracy table
+### `metrics` — print accuracy table from Langfuse scores
 
 ```bash
 uv run eval/eval.py metrics --dataset oracle
 ```
 
-Prints the full LongMemEval metrics table locally — no Langfuse needed:
+Fetches `longmemeval/*` scores from Langfuse and prints the full accuracy breakdown:
 
 ```
 ────────────────────────────────────────────────────────
@@ -214,7 +183,6 @@ Prints the full LongMemEval metrics table locally — no Langfuse needed:
 ────────────────────────────────────────────────────────
   Task-averaged accuracy : 0.7300
   Overall accuracy       : 0.6940  (500 instances)
-  Abstention accuracy    : 0.8200  (50)
 ────────────────────────────────────────────────────────
 ```
 
@@ -222,15 +190,15 @@ Prints the full LongMemEval metrics table locally — no Langfuse needed:
 
 ---
 
-### `reset` — clear state
+### `reset` — delete Langfuse dataset and experiment history
 
 ```bash
-uv run eval/eval.py reset --dataset oracle          # reset oracle state only
-uv run eval/eval.py reset --all                     # reset all datasets
-uv run eval/eval.py reset --dataset oracle --force  # skip confirmation
+uv run eval/eval.py reset --dataset oracle
+uv run eval/eval.py reset --all
+uv run eval/eval.py reset --dataset oracle --force
 ```
 
-Deletes `results.jsonl` and `eval_results.jsonl` for the specified dataset. Does not touch the FalkorDB graph (it is wiped per-instance during `run` anyway).
+Deletes the Langfuse dataset and all associated experiment runs and scores. After reset, you need to `upload` again before running experiments.
 
 ---
 
@@ -242,47 +210,44 @@ Deletes `results.jsonl` and `eval_results.jsonl` for the specified dataset. Does
 #    eval/data/longmemeval_s.json     (optional)
 #    eval/data/longmemeval_m.json     (optional)
 
-# 2. Run eval — oracle first
+# 2. Upload to Langfuse (one-time per dataset variant)
+uv run eval/eval.py upload --dataset oracle
+
+# 3. Run experiment — oracle first
 uv run eval/eval.py run --dataset oracle
 
-# 3. Check progress mid-run (separate terminal)
+# 4. Check experiment runs
 uv run eval/eval.py status --dataset oracle
 
-# 4. Judge answers
-uv run eval/eval.py judge --dataset oracle --model gemini/gemini-2.5-flash-lite
-
-# 5. Push scores to Langfuse
-uv run eval/eval.py score --dataset oracle
-
-# 6. Print metrics table
+# 5. Print metrics table
 uv run eval/eval.py metrics --dataset oracle
 
-# 7. Iterate on Weavy, then reset and re-run to measure improvement
-uv run eval/eval.py reset --dataset oracle
+# 6. Iterate on Weavy, then run again — each run creates a new experiment
 uv run eval/eval.py run --dataset oracle
 ```
 
-For quick iteration while developing, use `--limit` to test on a small slice:
+For quick iteration while developing, use `--limit` and `--concurrency`:
 
 ```bash
 uv run eval/eval.py run --dataset oracle --limit 20
-uv run eval/eval.py judge --dataset oracle
+uv run eval/eval.py run --dataset oracle --concurrency 4   # 4x faster
 uv run eval/eval.py metrics --dataset oracle
 ```
+
+To compare runs, open the Langfuse Datasets UI → select `longmemeval/oracle` → compare experiment runs side by side.
 
 ---
 
 ## Using Langfuse for Observability
 
-Every `w.add()` and `w.query()` call during `run` creates a Langfuse trace automatically. After `score`, each query trace has correctness scores attached.
+Every ingestion and query call during an experiment creates a Langfuse trace automatically. Traces are linked to dataset items, and scores are attached by the evaluators.
 
 **In the Langfuse UI:**
 
+- **Datasets page** → `longmemeval/oracle` → **Runs tab** — see all experiment runs with aggregate scores. Click any run to see per-item results. Compare runs side by side.
 - **Traces page** — filter by `longmemeval/correct = 0` to see every failing question. Drill into any trace to inspect the full agent reasoning: which tool calls were made, what the search queries looked like, what was retrieved.
 - **Scores page** — aggregated pass rate per score name. `longmemeval/correct` shows overall, `longmemeval/temporal-reasoning` shows just that category.
-- **Comparing runs** — run Weavy v1 → score → run Weavy v2 → score. Filter traces by date range to compare score distributions between the two runs.
-
-The `comment` field on each score includes `dataset=oracle category=temporal-reasoning` for additional filtering context.
+- **Experiment comparison** — each `run` invocation is a distinct experiment run. The Langfuse UI shows score distributions, per-item diffs, and aggregates across runs.
 
 ---
 
@@ -302,12 +267,30 @@ Input `hyp.jsonl`: one JSON object per line with at least `question_id` and `hyp
 
 The eval harness inherits all of Weavy's environment variables. Relevant ones:
 
-| Variable | Purpose |
-|---|---|
-| `GEMINI_MODEL` | Weavy agent model (default: `gemini/gemini-2.5-flash`) |
-| `LANGFUSE_PUBLIC_KEY` | Required for `score` command |
-| `LANGFUSE_SECRET_KEY` | Required for `score` command |
-| `LANGFUSE_HOST` | Langfuse server URL (default: `http://localhost:3100`) |
-| `FALKORDB_HOST` / `PORT` | FalkorDB connection |
+| Variable                 | Purpose                                                |
+| ------------------------ | ------------------------------------------------------ |
+| `GEMINI_MODEL`           | Weavy agent model (default: `gemini/gemini-2.5-flash`) |
+| `LANGFUSE_PUBLIC_KEY`    | Required for all commands                              |
+| `LANGFUSE_SECRET_KEY`    | Required for all commands                              |
+| `LANGFUSE_HOST`          | Langfuse server URL (default: `http://localhost:3100`) |
+| `FALKORDB_HOST` / `PORT` | FalkorDB connection                                    |
 
-The judge model (`--model`) is set at the CLI, not via environment variable, so you can switch judge models between runs without touching `.env`.
+The judge model (`--judge-model`) is set at the CLI, not via environment variable, so you can switch judge models between runs.
+
+---
+
+## Migration from Legacy Eval
+
+The previous eval harness used local `.state/` JSONL files and separate `judge` / `score` CLI commands. The new harness replaces all of that with Langfuse Datasets + Experiments:
+
+| Old                                                    | New                                             |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| `run` (ingest + query, save to `.state/results.jsonl`) | `upload` + `run` (experiment with auto-tracing) |
+| `judge` (LLM judge → `.state/eval_results.jsonl`)      | Built into `run` as item-level evaluator        |
+| `score` (post scores to Langfuse traces)               | Built into `run` as evaluator output            |
+| `metrics` (read from local `.state/`)                  | `metrics` (read from Langfuse scores)           |
+| `status` (read from local `.state/`)                   | `status` (read from Langfuse dataset runs)      |
+| `reset` (delete local `.state/` files)                 | `reset` (delete Langfuse dataset)               |
+| Comparing runs by date-range filtering                 | Langfuse experiment comparison UI               |
+
+The new harness calls `run_add` + `run_theme_update` directly (matching `Weavy.add()` behavior) instead of going through the SDK client.

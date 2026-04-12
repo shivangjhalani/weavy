@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Weavy / LongMemEval evaluation harness.
+Weavy / LongMemEval evaluation harness — Langfuse Datasets + Experiments.
 
-    uv run eval/eval.py run     --dataset oracle  [--limit N]
+    uv run eval/eval.py upload  --dataset oracle
+    uv run eval/eval.py run     --dataset oracle  [--limit N] [--judge-model MODEL]
     uv run eval/eval.py status  --dataset oracle
-    uv run eval/eval.py reset   --dataset oracle  [--all] [--force]
-    uv run eval/eval.py judge   --dataset oracle  [--model MODEL]
-    uv run eval/eval.py score   --dataset oracle
     uv run eval/eval.py metrics --dataset oracle
+    uv run eval/eval.py reset   --dataset oracle  [--all] [--force]
 
 Datasets (place in eval/data/):
     oracle  — evidence sessions only (~3-5 sessions/instance)   easiest
     s       — ~40 sessions / ~115k tokens per instance          medium
     m       — ~500 sessions per instance                        hardest
 
-State is scoped per dataset under eval/.state/{dataset}/ so all three can
-run concurrently. Use --data PATH to point at any custom file.
+Upload pushes LongMemEval instances into Langfuse as dataset items.
+Run executes experiments via Langfuse's experiment runner, with built-in
+LLM-as-judge evaluation and aggregate metrics.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 EVAL_DIR = Path(__file__).parent
-STATE_DIR = EVAL_DIR / ".state"
 
 DATASET_FILES: dict[str, Path] = {
     "oracle": EVAL_DIR / "data" / "longmemeval_oracle.json",
@@ -39,21 +38,17 @@ DATASET_FILES: dict[str, Path] = {
     "m":      EVAL_DIR / "data" / "longmemeval_m.json",
 }
 
-EVAL_GRAPH = "longmemeval"   # isolated FalkorDB graph; never touches your main graph
+EVAL_GRAPH = "longmemeval"
 
 SEP = "─" * 54
+DEFAULT_JUDGE_MODEL = "gemini/gemini-2.5-flash-lite"
+
 
 # ---------------------------------------------------------------------------
-# Dataset / state resolution
+# Helpers
 # ---------------------------------------------------------------------------
 
 def _resolve_dataset(args: argparse.Namespace) -> tuple[Path, str]:
-    """Return (data_path, dataset_name) from CLI args.
-
-    --dataset oracle|s|m  uses the predefined path in eval/data/
-    --data PATH           explicit path; name derived from the file stem
-    The two flags are never used together (argparse mutual-exclusion group).
-    """
     data_override = getattr(args, "data", None)
     if data_override:
         p = Path(data_override)
@@ -63,26 +58,8 @@ def _resolve_dataset(args: argparse.Namespace) -> tuple[Path, str]:
     return DATASET_FILES[ds], ds
 
 
-def _state_files(name: str) -> tuple[Path, Path]:
-    """Return (results_file, eval_results_file) for the given dataset name."""
-    d = STATE_DIR / name
-    return d / "results.jsonl", d / "eval_results.jsonl"
-
-
-# ---------------------------------------------------------------------------
-# State I/O helpers
-# ---------------------------------------------------------------------------
-
-def _load_jsonl(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-
-
-def _append_jsonl(path: Path, entry: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+def _langfuse_dataset_name(ds_name: str) -> str:
+    return f"longmemeval/{ds_name}"
 
 
 def _load_data(path: Path) -> list[dict]:
@@ -97,12 +74,8 @@ def _load_data(path: Path) -> list[dict]:
         return json.load(f)
 
 
-# ---------------------------------------------------------------------------
-# Text / display helpers
-# ---------------------------------------------------------------------------
-
 def _parse_date(s: str) -> datetime:
-    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%Y/%m/%d (%a) %H:%M"):
         try:
             return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
@@ -111,7 +84,6 @@ def _parse_date(s: str) -> datetime:
 
 
 def _format_session(turns: list[dict], date: str) -> str:
-    """Flatten a LongMemEval session to plain text for Weavy ingestion."""
     lines = [f"[{date}]"]
     for turn in turns:
         role = "User" if turn["role"] == "user" else "Assistant"
@@ -129,7 +101,6 @@ def _bar(ratio: float, width: int = 20) -> str:
 
 
 def _add_dataset_args(p: argparse.ArgumentParser, *, need_data_file: bool = False) -> None:
-    """Add --dataset / --data flags to a subcommand parser."""
     group = p.add_mutually_exclusive_group()
     group.add_argument(
         "--dataset", choices=["oracle", "s", "m"], default="oracle", metavar="{oracle,s,m}",
@@ -142,366 +113,448 @@ def _add_dataset_args(p: argparse.ArgumentParser, *, need_data_file: bool = Fals
         )
 
 
+def _get_langfuse():
+    from weavy.langfuse_client import get_langfuse
+    return get_langfuse()
+
+
 # ---------------------------------------------------------------------------
-# run
+# upload — push LongMemEval instances into Langfuse as dataset items
 # ---------------------------------------------------------------------------
 
-def cmd_run(args: argparse.Namespace) -> None:
-    import weavy
-
+def cmd_upload(args: argparse.Namespace) -> None:
     data_path, ds_name = _resolve_dataset(args)
     data = _load_data(data_path)
-    results_file, _ = _state_files(ds_name)
+    lf_ds_name = _langfuse_dataset_name(ds_name)
+    lf = _get_langfuse()
 
-    done_ids = {r["question_id"] for r in _load_jsonl(results_file)}
-    pending = [x for x in data if x["question_id"] not in done_ids]
-    if args.limit:
-        pending = pending[: args.limit]
+    lf.create_dataset(
+        name=lf_ds_name,
+        description=f"LongMemEval {ds_name} — {len(data)} instances",
+        metadata={
+            "benchmark": "longmemeval",
+            "variant": ds_name,
+            "source_file": data_path.name,
+            "instance_count": len(data),
+        },
+    )
 
-    if not pending:
-        print(f"Nothing to run — {len(done_ids)}/{len(data)} already answered for dataset '{ds_name}'.")
-        print("Use 'reset' to start over or 'judge' to score existing results.")
-        return
-
-    total_done = len(done_ids)
-    total_all = len(data)
     print(f"{SEP}")
-    print(f"  Weavy / LongMemEval — run  [{ds_name}]")
+    print(f"  Upload LongMemEval → Langfuse  [{ds_name}]")
     print(f"{SEP}")
-    print(f"  Dataset      : {ds_name}  ({data_path.name})")
-    print(f"  Already done : {total_done} / {total_all}")
-    print(f"  This batch   : {len(pending)}" + (f"  (--limit {args.limit})" if args.limit else ""))
-    print(f"  Graph        : {EVAL_GRAPH!r}  (isolated, reset per instance)")
-    print(f"  State        : {results_file.parent}")
+    print(f"  Dataset    : {lf_ds_name}")
+    print(f"  Instances  : {len(data)}")
+    print(f"  Source     : {data_path}")
     print(f"{SEP}\n")
 
-    w = weavy.Weavy(EVAL_GRAPH)
-
-    for i, instance in enumerate(pending, 1):
+    for i, instance in enumerate(data, 1):
         qid = instance["question_id"]
         qtype = instance["question_type"]
-        sessions = instance["haystack_sessions"]
-        dates = instance["haystack_dates"]
-        n_sessions = len(sessions)
 
-        global_idx = total_done + i
-        print(f"[{global_idx}/{total_all}] {qid}  ({qtype})  — {n_sessions} session(s)")
-
-        w.reset()
-
-        for j, (turns, date) in enumerate(zip(sessions, dates), 1):
-            text = _format_session(turns, date)
-            ts = _parse_date(date)
-            ingest_trace = w.add(text, timestamp=ts)
-            ok = "✓" if ingest_trace.status == "completed" else "✗"
-            width = len(str(n_sessions))
-            print(f"  ingest [{j:>{width}}/{n_sessions}] {date}  {ok}")
-
-        question_dt = _parse_date(instance["question_date"])
-        query_trace = w.query(instance["question"], query_time=question_dt)
-
-        hypothesis = (query_trace.completion_payload or {}).get("answer", "")
-        ok = "✓" if query_trace.status == "completed" else "✗"
-        print(f"  query  {ok}  trace={query_trace.run_id[:12]}")
-        if hypothesis:
-            preview = hypothesis[:120].replace("\n", " ")
-            print(f"  → {preview}{'…' if len(hypothesis) > 120 else ''}")
-        print()
-
-        _append_jsonl(results_file, {
-            "question_id": qid,
-            "question_type": qtype,
-            "hypothesis": hypothesis,
-            "trace_id": query_trace.run_id,
-            "answered_at": datetime.now(tz=timezone.utc).isoformat(),
-        })
-
-    total_now = total_done + len(pending)
-    print(f"{SEP}")
-    print(f"  Done: {total_now}/{total_all} answered  [{ds_name}]")
-    if total_now < total_all:
-        print(f"  Run again (no --limit) to continue, or 'judge' to score what's done.")
-    else:
-        print(f"  All answered. Next: eval/eval.py judge --dataset {ds_name}")
-    print(f"{SEP}")
-
-
-# ---------------------------------------------------------------------------
-# status
-# ---------------------------------------------------------------------------
-
-def cmd_status(args: argparse.Namespace) -> None:
-    data_path, ds_name = _resolve_dataset(args)
-    results_file, eval_results_file = _state_files(ds_name)
-
-    results = _load_jsonl(results_file)
-    eval_results = _load_jsonl(eval_results_file)
-
-    total: int | str = "?"
-    if data_path.exists():
-        total = len(_load_data(data_path))
-
-    answered = len(results)
-    judged = len(eval_results)
-    correct = sum(1 for r in eval_results if r.get("autoeval_label", {}).get("label", False))
-
-    print(f"\n{SEP}")
-    print(f"  Weavy / LongMemEval  [{ds_name}]")
-    print(f"{SEP}")
-    print(f"  Answered :  {answered} / {total}  ({_pct(answered, total if isinstance(total, int) else 0)})")
-    print(f"  Judged   :  {judged} / {answered}  ({_pct(judged, answered)})")
-    if judged:
-        ratio = correct / judged
-        print(f"  Correct  :  {correct} / {judged}  ({_pct(correct, judged)})  {_bar(ratio)}")
-    else:
-        print(f"  Correct  :  — (run 'judge --dataset {ds_name}' first)")
-
-    if judged:
-        print()
-        print("  By category:")
-        type2items: dict[str, list[dict]] = {}
-        for r in eval_results:
-            type2items.setdefault(r.get("question_type", "unknown"), []).append(r)
-
-        for qtype in sorted(type2items):
-            items = type2items[qtype]
-            n = len(items)
-            c = sum(1 for x in items if x.get("autoeval_label", {}).get("label", False))
-            print(f"    {qtype:<38}  {_bar(c/n if n else 0)}  {c:>3}/{n:<3}  {_pct(c, n)}")
-
-    try:
-        from weavy.config import settings  # noqa: PLC0415
-        print()
-        print(f"  Langfuse :  {settings.LANGFUSE_HOST}")
-        print(f"             score names: longmemeval/correct, longmemeval/<category>")
-    except Exception:
-        pass
-
-    print(f"{SEP}\n")
-
-
-# ---------------------------------------------------------------------------
-# reset
-# ---------------------------------------------------------------------------
-
-def cmd_reset(args: argparse.Namespace) -> None:
-    if args.all:
-        # collect all dataset state dirs
-        targets: list[tuple[str, Path, Path]] = []
-        for ds_name in (list(DATASET_FILES) + [
-            p.name for p in STATE_DIR.iterdir() if p.is_dir()
-        ] if STATE_DIR.exists() else []):
-            rf, ef = _state_files(ds_name)
-            if rf.exists() or ef.exists():
-                targets.append((ds_name, rf, ef))
-        # deduplicate
-        seen: set[str] = set()
-        targets = [t for t in targets if not (t[0] in seen or seen.add(t[0]))]  # type: ignore[func-returns-value]
-    else:
-        _, ds_name = _resolve_dataset(args)
-        rf, ef = _state_files(ds_name)
-        targets = [(ds_name, rf, ef)] if (rf.exists() or ef.exists()) else []
-
-    if not targets:
-        print("No state to reset.")
-        return
-
-    print(f"{SEP}")
-    print("  This will permanently delete:")
-    for ds_name, rf, ef in targets:
-        r_count = len(_load_jsonl(rf))
-        e_count = len(_load_jsonl(ef))
-        print(f"    [{ds_name}]  {r_count} answered,  {e_count} judged")
-    print(f"{SEP}")
-
-    if not args.force:
-        try:
-            confirm = input("  Type 'yes' to confirm: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nAborted.")
-            return
-        if confirm.lower() != "yes":
-            print("Aborted.")
-            return
-
-    for _, rf, ef in targets:
-        if rf.exists():
-            rf.unlink()
-        if ef.exists():
-            ef.unlink()
-    print("State cleared.")
-
-
-# ---------------------------------------------------------------------------
-# judge
-# ---------------------------------------------------------------------------
-
-def cmd_judge(args: argparse.Namespace) -> None:
-    import tempfile
-
-    sys.path.insert(0, str(EVAL_DIR))
-    from evaluate_qa import run_judge  # noqa: PLC0415
-
-    data_path, ds_name = _resolve_dataset(args)
-    results_file, eval_results_file = _state_files(ds_name)
-
-    results = _load_jsonl(results_file)
-    if not results:
-        print(f"No hypotheses to judge for dataset '{ds_name}'. Run 'run' first.")
-        return
-
-    already_judged = {r["question_id"] for r in _load_jsonl(eval_results_file)}
-    to_judge = [r for r in results if r["question_id"] not in already_judged]
-
-    if not to_judge:
-        print(f"All {len(results)} hypotheses already judged for '{ds_name}'. Use 'reset' to start over.")
-        return
-
-    print(f"{SEP}")
-    print(f"  Judge  [{ds_name}]")
-    print(f"{SEP}")
-    print(f"  Pending  : {len(to_judge)} / {len(results)}")
-    print(f"  Model    : {args.model}")
-    print(f"  Ref file : {data_path.name}")
-    print(f"{SEP}\n")
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-        tmp = Path(f.name)
-        for r in to_judge:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-
-    try:
-        judged = run_judge(
-            hyp_file=tmp,
-            ref_file=data_path,
-            model=args.model,
-            out_file=eval_results_file,
-            append=True,
-            verbose=False,
+        lf.create_dataset_item(
+            dataset_name=lf_ds_name,
+            id=f"{ds_name}:{qid}",
+            input={
+                "question_id": qid,
+                "question": instance["question"],
+                "question_date": instance["question_date"],
+                "haystack_sessions": instance["haystack_sessions"],
+                "haystack_dates": instance["haystack_dates"],
+            },
+            expected_output={
+                "answer": instance["answer"],
+                "question_type": qtype,
+                "abstention": "_abs" in qid,
+            },
+            metadata={
+                "question_type": qtype,
+                "num_sessions": len(instance["haystack_sessions"]),
+            },
         )
-    finally:
-        tmp.unlink(missing_ok=True)
 
-    correct = sum(1 for r in judged if r.get("autoeval_label", {}).get("label", False))
-    total_now = len(_load_jsonl(eval_results_file))
-    print(f"\n  This batch : {correct}/{len(judged)} correct")
-    print(f"  Total judged : {total_now} / {len(results)}")
-    print(f"\n  Next: eval/eval.py score --dataset {ds_name}")
+        if i % 50 == 0 or i == len(data):
+            print(f"  uploaded {i}/{len(data)}")
+
+    lf.flush()
+    print(f"\n  Done. Dataset '{lf_ds_name}' ready in Langfuse.")
 
 
 # ---------------------------------------------------------------------------
-# score  (post to Langfuse)
+# run — execute experiment via Langfuse experiment runner
 # ---------------------------------------------------------------------------
 
-def cmd_score(args: argparse.Namespace) -> None:
-    _, ds_name = _resolve_dataset(args)
-    _, eval_results_file = _state_files(ds_name)
+def _run_single_item(
+    item,
+    idx: int,
+    total: int,
+    graph_name: str,
+    ds_name: str,
+    judge_model: str,
+    print_lock,
+) -> dict:
+    """Execute one eval instance on a dedicated graph. Thread-safe."""
+    from weavy.application.session_runs import run_add, run_query
+    from weavy.application.theme_runs import run_theme_update
+    from weavy.services.embedding import get_dimension
+    from weavy.store.client import delete_graph_if_exists, get_graph
+    from weavy.store.system import init_system
 
-    eval_results = _load_jsonl(eval_results_file)
-    if not eval_results:
-        print(f"No judged results for '{ds_name}'. Run 'judge' first.")
-        return
+    from evaluate_qa import get_anscheck_prompt, _judge_call
 
-    try:
-        from weavy.config import settings          # noqa: PLC0415
-        from weavy.langfuse_client import get_langfuse  # noqa: PLC0415
-    except ImportError as e:
-        print(f"[error] {e}")
-        sys.exit(1)
+    inp = item.input
+    expected = item.expected_output
+    qid = inp["question_id"]
+    qtype = expected["question_type"]
+    sessions = inp["haystack_sessions"]
+    dates = inp["haystack_dates"]
+    n_sessions = len(sessions)
+    abstention = expected.get("abstention", False)
 
-    if not settings.LANGFUSE_PUBLIC_KEY:
-        print("[error] Langfuse not configured — set LANGFUSE_PUBLIC_KEY in your .env")
-        return
+    graph = get_graph(graph_name)
+    delete_graph_if_exists(graph)
+    init_system(graph, embedding_dim=get_dimension())
 
-    lf = get_langfuse()
-    posted = 0
+    # ---- Ingest sessions + theme update after each ----
+    for turns, date in zip(sessions, dates):
+        text = _format_session(turns, date)
+        ts = _parse_date(date)
+        ingest_trace = run_add(text, graph, timestamp=ts)
+        if ingest_trace.status == "completed":
+            run_theme_update(graph)
 
-    for entry in eval_results:
-        trace_id = entry.get("trace_id")
-        if not trace_id:
-            continue
-        label = entry.get("autoeval_label", {}).get("label", False)
-        value = 1.0 if label else 0.0
-        qtype = entry.get("question_type", "")
+    # ---- Query ----
+    question_dt = _parse_date(inp["question_date"])
+    query_trace = run_query(inp["question"], graph, query_time=question_dt)
+    hypothesis = (query_trace.completion_payload or {}).get("answer", "")
+    trace_id = query_trace.run_id
 
-        # Overall correctness — one score per trace, queryable across all categories
+    # ---- LLM-as-judge ----
+    if hypothesis:
+        prompt = get_anscheck_prompt(
+            qtype, inp["question"], expected["answer"], hypothesis, abstention,
+        )
+        raw = _judge_call(judge_model, prompt)
+        correct = "yes" in raw.lower()
+    else:
+        raw = "no hypothesis"
+        correct = False
+
+    # ---- Post scores to Langfuse ----
+    lf = _get_langfuse()
+    lf.create_score(
+        trace_id=trace_id,
+        name="longmemeval/correct",
+        value=1.0 if correct else 0.0,
+        data_type="BOOLEAN",
+        comment=f"dataset={ds_name} category={qtype} judge={judge_model} raw={raw}",
+    )
+    if qtype:
         lf.create_score(
             trace_id=trace_id,
-            name="longmemeval/correct",
-            value=value,
+            name=f"longmemeval/{qtype}",
+            value=1.0 if correct else 0.0,
             data_type="BOOLEAN",
-            comment=f"dataset={ds_name} category={qtype}",
+            comment=f"dataset={ds_name} judge={judge_model}",
         )
 
-        # Per-category score — lets Langfuse aggregate each category independently
-        if qtype:
-            lf.create_score(
-                trace_id=trace_id,
-                name=f"longmemeval/{qtype}",
-                value=value,
-                data_type="BOOLEAN",
-                comment=f"dataset={ds_name}",
-            )
+    # ---- Thread-safe output ----
+    preview = ""
+    if hypothesis:
+        preview = hypothesis[:100].replace("\n", " ")
+        if len(hypothesis) > 100:
+            preview += "…"
+    judge_icon = "✓" if correct else "✗"
+    query_icon = "✓" if query_trace.status == "completed" else "✗"
 
-        posted += 1
+    with print_lock:
+        print(
+            f"[{idx}/{total}] {qid}  ({qtype})  {n_sessions} sess  "
+            f"query={query_icon}  judge={judge_icon} ({raw.strip()})  "
+            f"trace={trace_id[:12]}"
+        )
+        if preview:
+            print(f"  → {preview}")
+
+    # ---- Cleanup graph ----
+    delete_graph_if_exists(graph)
+
+    return {
+        "question_id": qid,
+        "question_type": qtype,
+        "correct": correct,
+        "abstention": abstention,
+    }
+
+
+def cmd_run(args: argparse.Namespace) -> None:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from weavy.config import settings
+
+    sys.path.insert(0, str(EVAL_DIR))
+
+    _, ds_name = _resolve_dataset(args)
+    lf_ds_name = _langfuse_dataset_name(ds_name)
+    lf = _get_langfuse()
+    judge_model = args.judge_model
+    concurrency = args.concurrency
+
+    try:
+        dataset = lf.get_dataset(lf_ds_name)
+    except Exception:
+        print(f"[error] Dataset '{lf_ds_name}' not found in Langfuse.")
+        print(f"        Run: uv run eval/eval.py upload --dataset {ds_name}")
+        sys.exit(1)
+
+    items = list(dataset.items)
+    if args.limit:
+        items = items[: args.limit]
+
+    if not items:
+        print(f"No items in dataset '{lf_ds_name}'.")
+        return
+
+    total = len(items)
+    print(f"{SEP}")
+    print(f"  Weavy / LongMemEval — experiment  [{ds_name}]")
+    print(f"{SEP}")
+    print(f"  Dataset      : {lf_ds_name}  ({total} items)")
+    print(f"  Judge model  : {judge_model}")
+    print(f"  Weavy model  : {settings.GEMINI_MODEL}")
+    print(f"  Concurrency  : {concurrency}  (graph per worker)")
+    print(f"{SEP}\n")
+
+    run_name = f"weavy-{ds_name}-{datetime.now(tz=timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+    print_lock = threading.Lock()
+
+    # Each worker slot gets its own graph: longmemeval_0, longmemeval_1, ...
+    graph_names = [f"{EVAL_GRAPH}_{slot}" for slot in range(concurrency)]
+
+    results: list[dict] = []
+
+    # Partition items into per-slot queues so each graph is used sequentially
+    slot_queues: list[list[tuple[int, object]]] = [[] for _ in range(concurrency)]
+    for i, item in enumerate(items):
+        slot_queues[i % concurrency].append((i, item))
+
+    def _run_slot(slot: int) -> list[dict]:
+        slot_results = []
+        for i, item in slot_queues[slot]:
+            try:
+                r = _run_single_item(
+                    item=item,
+                    idx=i + 1,
+                    total=total,
+                    graph_name=graph_names[slot],
+                    ds_name=ds_name,
+                    judge_model=judge_model,
+                    print_lock=print_lock,
+                )
+                slot_results.append(r)
+            except Exception as e:
+                with print_lock:
+                    print(f"[{i + 1}/{total}] FAILED: {e}")
+        return slot_results
+
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [pool.submit(_run_slot, slot) for slot in range(concurrency)]
+        for future in as_completed(futures):
+            results.extend(future.result())
 
     lf.flush()
 
-    correct = sum(1 for e in eval_results if e.get("autoeval_label", {}).get("label", False))
-    print(f"Posted scores for {posted} trace(s)  [{ds_name}]")
-    print(f"  Overall : {correct}/{posted}  ({_pct(correct, posted)})")
-    print(f"  Host    : {settings.LANGFUSE_HOST}")
-    print(f"  Scores  : longmemeval/correct  +  longmemeval/<category>")
+    # ---- Print summary ----
+    type2correct: dict[str, list[int]] = {}
+    all_correct: list[int] = []
+    abstention_correct: list[int] = []
+
+    for r in results:
+        val = 1 if r["correct"] else 0
+        type2correct.setdefault(r["question_type"], []).append(val)
+        all_correct.append(val)
+        if r["abstention"]:
+            abstention_correct.append(val)
+
+    print(f"\n{SEP}")
+    print(f"  Experiment complete  [{ds_name}]")
+    print(f"{SEP}")
+    print(f"  Run name     : {run_name}")
+    print(f"  Items        : {len(all_correct)}")
+
+    if all_correct:
+        print(f"  Overall      : {sum(all_correct)}/{len(all_correct)}  ({_pct(sum(all_correct), len(all_correct))})")
+
+    task_means: list[float] = []
+    for qtype in sorted(type2correct):
+        acc = type2correct[qtype]
+        mean = sum(acc) / len(acc) if acc else 0
+        print(f"    {qtype:<36}  {_bar(mean)}  {mean:.4f}  ({len(acc)})")
+        task_means.append(mean)
+
+    if task_means:
+        task_avg = sum(task_means) / len(task_means)
+        print(f"  Task-averaged: {task_avg:.4f}")
+
+    if abstention_correct:
+        print(f"  Abstention   : {sum(abstention_correct)}/{len(abstention_correct)}  ({_pct(sum(abstention_correct), len(abstention_correct))})")
+
+    print(f"  Langfuse     : {settings.LANGFUSE_HOST}")
+    print(f"{SEP}")
 
 
 # ---------------------------------------------------------------------------
-# metrics
+# status — show experiment runs for a dataset
+# ---------------------------------------------------------------------------
+
+def cmd_status(args: argparse.Namespace) -> None:
+    _, ds_name = _resolve_dataset(args)
+    lf_ds_name = _langfuse_dataset_name(ds_name)
+    lf = _get_langfuse()
+
+    try:
+        dataset = lf.get_dataset(lf_ds_name)
+    except Exception:
+        print(f"Dataset '{lf_ds_name}' not found in Langfuse.")
+        print(f"Run: uv run eval/eval.py upload --dataset {ds_name}")
+        return
+
+    print(f"{SEP}")
+    print(f"  Weavy / LongMemEval  [{ds_name}]")
+    print(f"{SEP}")
+    print(f"  Dataset  : {lf_ds_name}")
+    print(f"  Items    : {len(dataset.items)}")
+
+    from weavy.config import settings
+    print(f"  Langfuse : {settings.LANGFUSE_HOST}")
+
+    runs = lf.api.dataset_runs.list(dataset_name=lf_ds_name)
+    if hasattr(runs, "data") and runs.data:
+        print(f"\n  Experiment runs ({len(runs.data)}):")
+        for r in runs.data:
+            name = r.name if hasattr(r, "name") else str(r)
+            created = r.created_at.strftime("%Y-%m-%d %H:%M") if hasattr(r, "created_at") and r.created_at else "?"
+            print(f"    {name}  ({created})")
+    else:
+        print("\n  No experiment runs yet.")
+        print(f"  Run: uv run eval/eval.py run --dataset {ds_name}")
+
+    print(f"{SEP}")
+
+
+# ---------------------------------------------------------------------------
+# metrics — print accuracy table from Langfuse scores
 # ---------------------------------------------------------------------------
 
 def cmd_metrics(args: argparse.Namespace) -> None:
     _, ds_name = _resolve_dataset(args)
-    _, eval_results_file = _state_files(ds_name)
+    lf_ds_name = _langfuse_dataset_name(ds_name)
+    lf = _get_langfuse()
 
-    eval_results = _load_jsonl(eval_results_file)
-    if not eval_results:
-        print(f"No judged results for '{ds_name}'. Run 'judge' first.")
+    try:
+        lf.get_dataset(lf_ds_name)
+    except Exception:
+        print(f"Dataset '{lf_ds_name}' not found.")
         return
 
-    type2acc: dict[str, list[int]] = {}
-    for r in eval_results:
-        qtype = r.get("question_type", "unknown")
-        label = 1 if r.get("autoeval_label", {}).get("label", False) else 0
-        type2acc.setdefault(qtype, []).append(label)
+    # Fetch scores for traces linked to this dataset
+    all_scores = []
+    page = 1
+    while True:
+        scores_page = lf.api.scores.list(
+            page=page,
+            limit=100,
+        )
+        if not hasattr(scores_page, "data") or not scores_page.data:
+            break
+        all_scores.extend(scores_page.data)
+        if len(scores_page.data) < 100:
+            break
+        page += 1
 
-    all_acc: list[int] = []
-    task_means: list[float] = []
-    abstention_acc: list[int] = []
+    # Filter to longmemeval scores
+    lme_scores = [s for s in all_scores if hasattr(s, "name") and s.name.startswith("longmemeval/")]
+
+    if not lme_scores:
+        print("No longmemeval scores found in Langfuse.")
+        print(f"Run an experiment first: uv run eval/eval.py run --dataset {ds_name}")
+        return
+
+    # Group by category
+    type2acc: dict[str, list[int]] = {}
+    overall: list[int] = []
+
+    for s in lme_scores:
+        val = 1 if (hasattr(s, "value") and s.value and s.value >= 0.5) else 0
+        if s.name == "longmemeval/correct":
+            overall.append(val)
+        elif s.name.startswith("longmemeval/") and s.name not in (
+            "longmemeval/overall_accuracy",
+            "longmemeval/task_averaged_accuracy",
+            "longmemeval/abstention_accuracy",
+        ):
+            category = s.name.removeprefix("longmemeval/")
+            type2acc.setdefault(category, []).append(val)
 
     print(f"\n{SEP}")
     print(f"  LongMemEval accuracy  [{ds_name}]")
     print(f"{SEP}")
+
+    task_means: list[float] = []
     for qtype in sorted(type2acc):
         acc = type2acc[qtype]
-        mean = sum(acc) / len(acc)
+        mean = sum(acc) / len(acc) if acc else 0
         print(f"  {qtype:<38}  {_bar(mean)}  {mean:.4f}  ({len(acc)})")
-        all_acc.extend(acc)
         task_means.append(mean)
-
-    for r in eval_results:
-        if "_abs" in r.get("question_id", ""):
-            abstention_acc.append(1 if r.get("autoeval_label", {}).get("label", False) else 0)
 
     print(f"{SEP}")
     if task_means:
         task_avg = sum(task_means) / len(task_means)
         print(f"  Task-averaged accuracy : {task_avg:.4f}")
-    if all_acc:
-        overall = sum(all_acc) / len(all_acc)
-        print(f"  Overall accuracy       : {overall:.4f}  ({len(all_acc)} instances)")
-    if abstention_acc:
-        abs_acc = sum(abstention_acc) / len(abstention_acc)
-        print(f"  Abstention accuracy    : {abs_acc:.4f}  ({len(abstention_acc)})")
+    if overall:
+        ov = sum(overall) / len(overall)
+        print(f"  Overall accuracy       : {ov:.4f}  ({len(overall)} instances)")
     print(f"{SEP}\n")
+
+
+# ---------------------------------------------------------------------------
+# reset — delete Langfuse dataset
+# ---------------------------------------------------------------------------
+
+def cmd_reset(args: argparse.Namespace) -> None:
+    if args.all:
+        targets = list(DATASET_FILES.keys())
+    else:
+        _, ds_name = _resolve_dataset(args)
+        targets = [ds_name]
+
+    if not args.force:
+        names = ", ".join(targets)
+        confirm = input(f"Delete Langfuse datasets for [{names}]? This removes all experiment history. [y/N] ")
+        if confirm.strip().lower() != "y":
+            print("Cancelled.")
+            return
+
+    lf = _get_langfuse()
+    for ds in targets:
+        lf_name = _langfuse_dataset_name(ds)
+        try:
+            lf.api.datasets.delete(dataset_name=lf_name)
+            print(f"  Deleted dataset '{lf_name}'")
+        except Exception:
+            print(f"  Dataset '{lf_name}' not found (already clean)")
+
+    # Also clean up legacy .state/ if present
+    state_dir = EVAL_DIR / ".state"
+    for ds in targets:
+        ds_dir = state_dir / ds
+        if ds_dir.exists():
+            for f in ds_dir.iterdir():
+                f.unlink()
+            ds_dir.rmdir()
+            print(f"  Cleaned legacy .state/{ds}/")
+
+    print("Done.")
 
 
 # ---------------------------------------------------------------------------
@@ -511,61 +564,57 @@ def cmd_metrics(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="eval",
-        description="Weavy / LongMemEval evaluation harness",
+        description="Weavy / LongMemEval evaluation harness (Langfuse Experiments)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
+            "  uv run eval/eval.py upload --dataset oracle\n"
             "  uv run eval/eval.py run --dataset oracle --limit 10\n"
-            "  uv run eval/eval.py run --dataset s\n"
+            "  uv run eval/eval.py run --dataset oracle --judge-model gpt-4o\n"
+            "  uv run eval/eval.py run --dataset oracle --concurrency 4\n"
             "  uv run eval/eval.py status --dataset oracle\n"
-            "  uv run eval/eval.py judge --dataset oracle --model gemini/gemini-2.5-flash-lite\n"
-            "  uv run eval/eval.py score --dataset oracle\n"
             "  uv run eval/eval.py metrics --dataset oracle\n"
             "  uv run eval/eval.py reset --dataset oracle\n"
-            "  uv run eval/eval.py reset --all\n"
-            "  uv run eval/eval.py run --data path/to/custom.json\n"
+            "  uv run eval/eval.py reset --all --force\n"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # upload
+    p = sub.add_parser("upload", help="Upload LongMemEval data to Langfuse as a dataset")
+    _add_dataset_args(p, need_data_file=True)
+
     # run
-    p = sub.add_parser("run", help="Ingest + query instances (auto-resumes)")
+    p = sub.add_parser("run", help="Run experiment: ingest + query + judge (all in one)")
     _add_dataset_args(p, need_data_file=True)
     p.add_argument("--limit", type=int, default=None, metavar="N",
-                   help="Process at most N pending instances in this invocation")
+                   help="Process at most N items")
+    p.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, metavar="MODEL",
+                   help=f"LiteLLM judge model (default: {DEFAULT_JUDGE_MODEL})")
+    p.add_argument("--concurrency", type=int, default=1, metavar="N",
+                   help="Number of parallel workers, each with its own graph (default: 1)")
 
     # status
-    p = sub.add_parser("status", help="Show progress, accuracy, and Langfuse link")
-    _add_dataset_args(p, need_data_file=True)
-
-    # reset
-    p = sub.add_parser("reset", help="Delete eval state for a dataset (or all)")
-    _add_dataset_args(p)
-    p.add_argument("--all", action="store_true", help="Reset state for all datasets")
-    p.add_argument("--force", action="store_true", help="Skip confirmation prompt")
-
-    # judge
-    p = sub.add_parser("judge", help="Run LLM-as-judge on completed hypotheses")
-    _add_dataset_args(p, need_data_file=True)
-    p.add_argument("--model", default="gemini/gemini-2.5-flash-lite", metavar="MODEL",
-                   help="LiteLLM judge model (default: gemini/gemini-2.5-flash-lite)")
-
-    # score
-    p = sub.add_parser("score", help="Post judge labels as Langfuse scores on query traces")
+    p = sub.add_parser("status", help="Show dataset info and experiment runs")
     _add_dataset_args(p)
 
     # metrics
-    p = sub.add_parser("metrics", help="Print per-category accuracy table")
+    p = sub.add_parser("metrics", help="Print per-category accuracy from Langfuse scores")
     _add_dataset_args(p)
+
+    # reset
+    p = sub.add_parser("reset", help="Delete Langfuse dataset and experiment history")
+    _add_dataset_args(p)
+    p.add_argument("--all", action="store_true", help="Reset all datasets")
+    p.add_argument("--force", action="store_true", help="Skip confirmation prompt")
 
     args = parser.parse_args()
     dispatch = {
+        "upload": cmd_upload,
         "run": cmd_run,
         "status": cmd_status,
-        "reset": cmd_reset,
-        "judge": cmd_judge,
-        "score": cmd_score,
         "metrics": cmd_metrics,
+        "reset": cmd_reset,
     }
     dispatch[args.command](args)
 

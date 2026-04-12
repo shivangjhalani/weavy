@@ -23,7 +23,7 @@ There is no web app or API layer. The main way to use the app is:
 - Ask grounded questions against the graph
 - Continue any prior session — ingestion or query — to ask follow-up questions with full context
 - A single unified agent handles both ingestion and query, sharing the same tool set and message history model
-- Run theme maintenance manually — the theme agent self-discovers changes since its last run
+- Automatic theme maintenance after every `add` — the theme agent self-discovers changes since its last run
 - Track agent runs in Langfuse
 
 ## What To Expect
@@ -34,7 +34,7 @@ There is no web app or API layer. The main way to use the app is:
 - Pre-processing is external. Audio transcription, transcript cleanup, and document extraction happen before text reaches Weavy.
 - Any session can be continued in query mode — `continue s:N "question"` loads the prior messages as context and runs the query agent.
 - Query runs may mutate the graph if the agent decides a new statement should update memory.
-- Theme updates are manual via `update-themes`. The theme agent queries all sessions completed since its last run and reconciles themes.
+- Theme updates run automatically after every `add`. The theme agent queries all sessions completed since its last run and reconciles themes. `update-themes` is available for explicit invocation when needed.
 - Run traces are not written to disk. Langfuse is the trace store.
 
 ## Prerequisites
@@ -153,7 +153,8 @@ What happens:
 
 1. A canonical `Session` is created with the text as the first user message
 2. The ingestion agent reads the text, searches the existing graph, and creates/updates semantic nodes and edges
-3. The CLI prints the session status, touched node IDs, and the ingestion summary
+3. The theme agent runs automatically to reconcile themes against the updated graph
+4. The CLI prints the session status, touched node IDs, and the ingestion summary
 
 ### Caller Context
 
@@ -284,11 +285,7 @@ Behavior to expect:
 
 ## Themes
 
-Theme maintenance is a top-level CLI command you run manually:
-
-```bash
-uv run python -m weavy.cli update-themes
-```
+Theme maintenance runs automatically after every `add` call. You do not need to invoke it manually.
 
 The theme agent is self-discovering. It queries all sessions completed since its last run (tracked via `last_theme_run_at` on the System node) and builds a journal of recent activity.
 

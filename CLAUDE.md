@@ -77,6 +77,7 @@ run_theme_update(graph)                              # -> RunTrace
 ### Key Design Decisions
 
 - **Session is state, mode is behavior.** A `Session` is just a message history — no mode attached. Mode (`ingestion`/`query`) selects system prompt and tool set at call time. Any session can be continued in any mode.
+- **Themes are automatic at the SDK boundary.** `Weavy.add()` in `client.py` runs `run_theme_update` after every successful ingestion — the caller never manages it. `application/run_add` does not; internal callers (eval, CLI) own theme timing explicitly.
 - **Source-agnostic ingestion.** The ingestion prompt has no source-specific framing. The agent reads the text and determines what it is. Optional `caller_context` (e.g., "These are chat logs") is injected into the `{{caller_context}}` prompt slot to steer interpretation.
 - **Pre-processing is external.** `transcribe` converts audio to Whisper JSON — it has no dependency on the memory layer. The caller pipes its output to `add` when ready.
 - **Single harness, three modes.** `run()` in `harness/runner.py` is the one agent loop — LiteLLM completion + tool dispatch. Terminates on `is_completion=True`. Shared by ingestion, query, and theme.
