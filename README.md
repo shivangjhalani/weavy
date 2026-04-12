@@ -1,9 +1,5 @@
 # Weavy
 
-> Build a garden for your life
-
-From carved stone and clay tablets to paper journals and digital notes, humans have always externalized memory and the way they capture life. **Weavy** is the next evolution: an AI-native digital garden that captures your thoughts.
-
 ## Contributing
 
 By submitting a pull request or other contribution to Weavy, you agree
