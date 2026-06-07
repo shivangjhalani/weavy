@@ -18,14 +18,15 @@ Weavy is a CLI-first personal memory layer. It accepts any text, runs an agent t
 ## Commands
 
 ```bash
-devenv up          # start FalkorDB
-devenv shell       # enter dev environment
+docker compose --profile falkordb up -d   # start FalkorDB
+docker compose --profile langfuse up -d   # start Langfuse (optional)
+docker compose --profile falkordb --profile langfuse up -d  # start both
 
-devenv shell -- uv run pytest                        # all tests
-devenv shell -- uv run pytest tests/test_graph.py    # single file
-devenv shell -- uv run pytest -k "test_create_node"  # single test by name
-devenv shell -- ruff check .
-devenv shell -- ruff format .
+uv run pytest                        # all tests
+uv run pytest tests/test_graph.py    # single file
+uv run pytest -k "test_create_node"  # single test by name
+uv run ruff check .
+uv run ruff format .
 ```
 
 Tests auto-mock `RunTracer` (Langfuse) and `fetch_prompt` (prompt files) — no real services needed.

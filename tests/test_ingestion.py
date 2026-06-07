@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from falkordb import Graph
 
-from weavy.application.session_runs import finalize_session, run_ingest
+from weavy.application.session_runs import finalize_session, run_session
 from weavy.application.theme_runs import run_theme_update
 from weavy.models.graph import ProvenanceInput
 from weavy.models.traces import RunTrace
@@ -32,7 +32,7 @@ def graph() -> Graph:
 
 
 # ---------------------------------------------------------------------------
-# run_ingest
+# ingestion runs
 # ---------------------------------------------------------------------------
 
 
@@ -54,7 +54,7 @@ def test_ingest_into_empty_graph(graph: Graph) -> None:
     done_resp = mock_tool_response("complete", completion_args, "tc-2", usage=usage)
 
     with patch("litellm.completion", side_effect=[create_resp, done_resp]):
-        trace = run_ingest(session_id, graph)
+        trace = run_session(session_id, "ingestion", graph)
 
     assert trace.status == "completed"
     assert len(trace.touched_nodes) == 1
@@ -91,7 +91,7 @@ def test_ingest_updates_existing_node(graph: Graph) -> None:
     done_resp = mock_tool_response("complete", completion_args, "tc-2", usage=usage)
 
     with patch("litellm.completion", side_effect=[update_resp, done_resp]):
-        trace = run_ingest(session_id, graph)
+        trace = run_session(session_id, "ingestion", graph)
 
     assert trace.status == "completed"
     assert len(trace.touched_nodes) == 1
@@ -117,16 +117,16 @@ def test_ingest_invalid_provenance_fails(graph: Graph) -> None:
     )
 
     with patch("litellm.completion", return_value=bad_resp):
-        trace = run_ingest(session_id, graph)
+        trace = run_session(session_id, "ingestion", graph)
 
     assert trace.status == "failed"
     assert trace.touched_nodes == []
 
 
 def test_ingest_missing_session_raises(graph: Graph) -> None:
-    """run_ingest raises ValueError for a non-existent session id."""
+    """Ingestion raises ValueError for a non-existent session id."""
     with pytest.raises(ValueError, match="not found"):
-        run_ingest("s:999", graph)
+        run_session("s:999", "ingestion", graph)
 
 
 # ---------------------------------------------------------------------------
@@ -224,20 +224,20 @@ def test_ingest_writes_outcomes(graph: Graph) -> None:
             mock_tool_response("complete", completion_args, "tc-2", usage=usage),
         ],
     ):
-        trace = run_ingest(session_id, graph)
+        trace = run_session(session_id, "ingestion", graph)
 
     assert trace.status == "completed"
     assert store_canonical.is_session_completed(graph, session_id)
 
 
 def test_reingest_blocked_when_completed(graph: Graph) -> None:
-    """Second call to run_ingest raises ValueError when already completed."""
+    """Second ingestion run raises ValueError when already completed."""
     session_id = store_test_session(graph, SAMPLE_TEXT)
     store_canonical.persist_session_outcomes(
         graph, session_id, "done", {}, "2024-06-01T12:00:00Z"
     )
     with pytest.raises(ValueError, match="already completed"):
-        run_ingest(session_id, graph)
+        run_session(session_id, "ingestion", graph)
 
 
 def test_finalize_session_persists_conversation(graph: Graph) -> None:

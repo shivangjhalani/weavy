@@ -127,10 +127,6 @@ def run_add(
     )
 
 
-def run_ingest(session_id: str, graph: Graph) -> RunTrace:
-    return run_session(session_id, "ingestion", graph)
-
-
 def run_query(
     question: str,
     graph: Graph,

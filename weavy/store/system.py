@@ -8,6 +8,8 @@ from typing import Any, Literal
 from falkordb import Graph
 from pydantic import BaseModel, field_validator
 
+from weavy.config import settings
+
 CounterName = Literal["node", "edge", "session"]
 
 _COUNTER_FIELD: dict[str, str] = {
@@ -34,12 +36,26 @@ class SystemState(BaseModel):
         return list(v) if v else []
 
 
-def init_system(graph: Graph, embedding_dim: int | None = None) -> SystemState:
+def init_system(
+    graph: Graph,
+    embedding_dim: int | None = None,
+    hot_theme_token_budget: int | None = None,
+) -> SystemState:
     """Create the System node if it does not exist; return current state.
 
     When *embedding_dim* is provided, a vector index is created (or verified)
     on SemanticNode.embedding for hybrid search.
+
+    *hot_theme_token_budget* seeds the budget on first creation; it defaults to
+    ``settings.HOT_THEME_TOKEN_BUDGET``. Once the node exists, the persisted
+    value is the runtime source of truth (``MERGE`` only sets it ``ON CREATE``),
+    so re-running init never overwrites a budget tuned per-graph.
     """
+    budget = (
+        hot_theme_token_budget
+        if hot_theme_token_budget is not None
+        else settings.HOT_THEME_TOKEN_BUDGET
+    )
     result = graph.query(
         """
         MERGE (s:System)
@@ -49,10 +65,11 @@ def init_system(graph: Graph, embedding_dim: int | None = None) -> SystemState:
             s.next_edge_id = 1,
             s.next_session_id = 1,
             s.theme_priority_order  = [],
-            s.hot_theme_token_budget = 2000,
+            s.hot_theme_token_budget = $budget,
             s.last_theme_run_at = '1970-01-01T00:00:00+00:00'
         RETURN s
-        """
+        """,
+        {"budget": budget},
     )
 
     if embedding_dim is not None:

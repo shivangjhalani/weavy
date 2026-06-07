@@ -48,7 +48,7 @@ class Settings:
     )
     REASONING_EFFORT: str = _getenv("REASONING_EFFORT", "medium")
 
-    HOT_THEME_TOKEN_BUDGET: int = int(_getenv("HOT_THEME_TOKEN_BUDGET", "250"))
+    HOT_THEME_TOKEN_BUDGET: int = int(_getenv("HOT_THEME_TOKEN_BUDGET", "2000"))
 
     LANGFUSE_HOST: str = _langfuse_host()
     LANGFUSE_PUBLIC_KEY: str = _getenv("LANGFUSE_PUBLIC_KEY", "")

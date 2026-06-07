@@ -41,8 +41,8 @@ There is no web app or API layer. The main way to use the app is:
 
 You need:
 
-- `devenv`
-- Docker
+- `uv` — manages Python and dependencies (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Docker Desktop
 - a Gemini API key
 - a Groq API key if you want to use `transcribe`
 - a running Langfuse stack if you want tracing
@@ -78,21 +78,7 @@ Notes:
 The project expects FalkorDB to be available before you use the CLI:
 
 ```bash
-devenv up
-```
-
-Keep that running in one terminal. Open another for commands.
-
-Then enter the environment:
-
-```bash
-devenv shell
-```
-
-Or prefix a single command:
-
-```bash
-devenv shell -- uv run python -m weavy.cli status
+docker compose --profile falkordb up -d
 ```
 
 ### Langfuse
@@ -105,7 +91,7 @@ Langfuse is used for run tracing. To avoid browser session collisions between th
 Start the included local stack with:
 
 ```bash
-docker compose -f docker-compose.langfuse.yml up -d
+docker compose --profile langfuse up -d
 ```
 
 After Langfuse is up, create or copy your API keys into `.env`.
@@ -396,10 +382,8 @@ Check that `GEMINI_API_KEY` is set and the graph is reachable.
 cp .example.env .env
 # fill in GEMINI_API_KEY, GROQ_API_KEY, LANGFUSE_* as needed
 
-devenv up
-docker compose -f docker-compose.langfuse.yml up -d
+docker compose --profile falkordb --profile langfuse up -d
 
-devenv shell
 uv run python -m weavy.cli init-system
 uv run python -m weavy.cli add notes.txt --context "Personal journal entry"
 uv run python -m weavy.cli query "What has been on my mind recently?"
