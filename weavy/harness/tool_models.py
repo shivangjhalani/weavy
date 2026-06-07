@@ -35,13 +35,16 @@ class UpdateNodeInput(BaseModel):
 class CreateEdgeInput(BaseModel):
     from_node_id: NodeId
     to_node_id: NodeId
-    label: str
-    note: str
+    label: str  # short directional relationship type, e.g. "works at"
+    fact: str  # natural-language statement of the relationship; searchable
+    note: str  # why this edge is being written now (logged)
 
 
 class UpdateEdgeInput(BaseModel):
     edge_id: EdgeId
-    new_label: str
+    note: str  # why this edge is changing (logged)
+    new_label: str | None = None
+    new_fact: str | None = None
 
 
 class DeleteNodeInput(BaseModel):
@@ -57,7 +60,9 @@ class DeleteEdgeInput(BaseModel):
 class SearchGraphInput(BaseModel):
     query: str
     limit: int = 10
-    time_range: list[datetime] | None = None  # [start, end] — filter nodes by log timestamps
+    time_range: list[datetime] | None = (
+        None  # [start, end] — filter nodes by log timestamps
+    )
 
 
 class GetNodeNeighborhoodInput(BaseModel):
@@ -66,6 +71,10 @@ class GetNodeNeighborhoodInput(BaseModel):
 
 class GetNodeInput(BaseModel):
     node_ids: list[NodeId]
+
+
+class GetSessionInput(BaseModel):
+    session_id: Annotated[str, StringConstraints(pattern=r"^s:\d+$")]
 
 
 class ListSessionsInput(BaseModel):

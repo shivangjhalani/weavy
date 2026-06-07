@@ -114,9 +114,9 @@ def build_themed_system_prompt(
     caller_context: str | None = None,
 ) -> str:
     prompt_variables = dict(variables or {})
-    prompt_variables["current_time"] = (
-        current_time or datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
-    )
+    prompt_variables["current_time"] = current_time or datetime.now(
+        tz=timezone.utc
+    ).strftime("%Y-%m-%dT%H:%MZ")
     prompt_variables["preface"] = (
         system_state.preface or "(not set — call set_preface to describe this graph)"
     )

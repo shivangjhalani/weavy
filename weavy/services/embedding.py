@@ -29,3 +29,7 @@ def embed(text: str) -> list[float]:
 def embed_node(aliases: list[str], summary: str) -> list[float]:
     text = " | ".join(aliases) + " — " + summary
     return embed(text)
+
+
+def embed_edge(label: str, fact: str) -> list[float]:
+    return embed(f"{label} — {fact}")

@@ -91,22 +91,27 @@ def _node_from_props(
 
 def _build_outgoing_edges(
     node_id: str,
-    raw_edges: list[list[str | None] | None],
+    raw_edges: list[list[Any] | None],
+    log_tail: int | None = None,
 ) -> list[SemanticEdge]:
     edges: list[SemanticEdge] = []
     for edge_data in raw_edges:
         if edge_data is None:
             continue
-        edge_id, label, to_id, note, source_id = edge_data
+        edge_id, label, to_id, fact, raw_log, total_log_count, source_id = edge_data
         if edge_id is None or to_id is None:
             continue
+        full_log = raw_log or []
+        tail = full_log[-log_tail:] if log_tail is not None else full_log
         edges.append(
             SemanticEdge(
                 id=edge_id,
                 from_node_id=node_id,
                 to_node_id=to_id,
                 label=label,
-                note=note,
+                fact=fact or "",
+                total_log_count=total_log_count or 0,
+                log=[_deserialize_log_entry(s) for s in tail],
                 source_id=source_id,
             )
         )
@@ -203,6 +208,20 @@ def update_node(
     return OperationResult(ok=True, id=node_id)
 
 
+def link_mention(graph: Graph, session_id: str, node_id: str) -> None:
+    """Record that an episode touched a node: (:Session)-[:MENTIONS]->(:SemanticNode).
+
+    Idempotent via MERGE — repeated touches in the same session do not duplicate.
+    """
+    graph.query(
+        """
+        MATCH (s:Session {id: $sid}), (n:SemanticNode {id: $nid})
+        MERGE (s)-[:MENTIONS]->(n)
+        """,
+        {"sid": session_id, "nid": node_id},
+    )
+
+
 def delete_node(graph: Graph, node_id: str) -> OperationResult:
     result = graph.query(
         "MATCH (n:SemanticNode {id: $id}) DETACH DELETE n RETURN count(n)",
@@ -224,14 +243,30 @@ def create_edge(
     from_node_id: str,
     to_node_id: str,
     label: str,
+    fact: str,
     note: str,
     edge_id: str,
+    provenance: ProvenanceInput | None,
+    embedding: list[float] | None = None,
+    event_time: datetime | None = None,
     source_id: str | None = None,
 ) -> OperationResult:
+    entry = _make_log_entry(provenance, note, event_time)
+    entry_json = _serialize_log_entry(entry)
+    embedding_clause = (
+        f", embedding: {_vecf32_literal(embedding)}" if embedding is not None else ""
+    )
     result = graph.query(
-        """
-        MATCH (a:SemanticNode {id: $from_id}), (b:SemanticNode {id: $to_id})
-        CREATE (a)-[r:RELATES {id: $edge_id, label: $label, note: $note, source_id: $source_id}]->(b)
+        f"""
+        MATCH (a:SemanticNode {{id: $from_id}}), (b:SemanticNode {{id: $to_id}})
+        CREATE (a)-[r:RELATES {{
+            id: $edge_id,
+            label: $label,
+            fact: $fact,
+            total_log_count: 1,
+            log: [$entry_json],
+            source_id: $source_id{embedding_clause}
+        }}]->(b)
         RETURN r
         """,
         {
@@ -239,7 +274,8 @@ def create_edge(
             "to_id": to_node_id,
             "edge_id": edge_id,
             "label": label,
-            "note": note,
+            "fact": fact,
+            "entry_json": entry_json,
             "source_id": source_id,
         },
     )
@@ -251,14 +287,66 @@ def create_edge(
     return OperationResult(ok=True, id=edge_id)
 
 
-def update_edge(graph: Graph, edge_id: str, new_label: str) -> OperationResult:
+def update_edge(
+    graph: Graph,
+    edge_id: str,
+    note: str,
+    new_label: str | None = None,
+    new_fact: str | None = None,
+    provenance: ProvenanceInput | None = None,
+    embedding: list[float] | None = None,
+    event_time: datetime | None = None,
+) -> OperationResult:
+    entry = _make_log_entry(provenance, note, event_time)
+    entry_json = _serialize_log_entry(entry)
+
+    set_parts = [
+        "r.log = r.log + [$entry_json]",
+        "r.total_log_count = r.total_log_count + 1",
+    ]
+    params: dict[str, Any] = {"id": edge_id, "entry_json": entry_json}
+
+    if new_label is not None:
+        set_parts.append("r.label = $new_label")
+        params["new_label"] = new_label
+    if new_fact is not None:
+        set_parts.append("r.fact = $new_fact")
+        params["new_fact"] = new_fact
+    if embedding is not None:
+        set_parts.append(f"r.embedding = {_vecf32_literal(embedding)}")
+
     result = graph.query(
-        "MATCH ()-[r:RELATES {id: $id}]->() SET r.label = $label RETURN r",
-        {"id": edge_id, "label": new_label},
+        f"MATCH ()-[r:RELATES {{id: $id}}]->() SET {', '.join(set_parts)} RETURN r",
+        params,
     )
     if not result.result_set:
         raise ValueError(f"Edge '{edge_id}' not found.")
     return OperationResult(ok=True, id=edge_id)
+
+
+def get_edge(graph: Graph, edge_id: str) -> SemanticEdge:
+    result = graph.query(
+        """
+        MATCH (a:SemanticNode)-[r:RELATES {id: $id}]->(b:SemanticNode)
+        RETURN r.id, r.label, r.fact, r.log, r.total_log_count, r.source_id, a.id, b.id
+        """,
+        {"id": edge_id},
+    )
+    if not result.result_set:
+        raise ValueError(f"Edge '{edge_id}' not found.")
+    eid, label, fact, raw_log, total_log_count, source_id, from_id, to_id = (
+        result.result_set[0]
+    )
+    return SemanticEdge(
+        id=eid,
+        from_node_id=from_id,
+        to_node_id=to_id,
+        label=label,
+        fact=fact or "",
+        total_log_count=total_log_count or 0,
+        log=[_deserialize_log_entry(s) for s in (raw_log or [])],
+        source_id=source_id,
+    )
 
 
 def delete_edge(graph: Graph, edge_id: str) -> OperationResult:
@@ -277,19 +365,33 @@ def delete_edge(graph: Graph, edge_id: str) -> OperationResult:
 # ---------------------------------------------------------------------------
 
 
-def _parse_search_rows(rows: list) -> list[SearchResult]:
-    results: list[SearchResult] = []
-    for row in rows:
-        node_id, aliases, summary, edge_count = row
-        results.append(
-            SearchResult(
-                id=node_id,
-                canonical_alias=aliases[0] if aliases else node_id,
-                summary_line=summary.splitlines()[0] if summary else "",
-                edge_count=int(edge_count),
-            )
-        )
-    return results
+def _node_row(node_id, aliases, summary, edge_count, score: float) -> SearchResult:
+    return SearchResult(
+        kind="node",
+        id=node_id,
+        label=aliases[0] if aliases else node_id,
+        text=summary.splitlines()[0] if summary else "",
+        score=score,
+        edge_count=int(edge_count),
+    )
+
+
+def _edge_row(edge_id, label, fact, from_id, to_id, score: float) -> SearchResult:
+    return SearchResult(
+        kind="edge",
+        id=edge_id,
+        label=label or "",
+        text=(fact or "").splitlines()[0] if fact else "",
+        score=score,
+        endpoints=[from_id, to_id],
+    )
+
+
+def _log_in_range(raw_log, start: datetime, end: datetime) -> bool:
+    for entry_str in raw_log or []:
+        if start <= _deserialize_log_entry(entry_str).timestamp <= end:
+            return True
+    return False
 
 
 def _filter_by_time_range(
@@ -297,23 +399,38 @@ def _filter_by_time_range(
     results: list[SearchResult],
     time_range: list[datetime],
 ) -> list[SearchResult]:
-    """Keep only nodes that have at least one log entry within [start, end]."""
+    """Keep only nodes/edges with at least one log entry within [start, end]."""
     if not results:
         return results
     start, end = time_range[0], time_range[1]
-    node_ids = [r.id for r in results]
-    rows = graph.query(
-        "MATCH (n:SemanticNode) WHERE n.id IN $ids RETURN n.id, n.log",
-        {"ids": node_ids},
-    )
+    node_ids = [r.id for r in results if r.kind == "node"]
+    edge_ids = [r.id for r in results if r.kind == "edge"]
     passing: set[str] = set()
-    for node_id, raw_log in rows.result_set:
-        for entry_str in raw_log or []:
-            entry = _deserialize_log_entry(entry_str)
-            if start <= entry.timestamp <= end:
+
+    if node_ids:
+        rows = graph.query(
+            "MATCH (n:SemanticNode) WHERE n.id IN $ids RETURN n.id, n.log",
+            {"ids": node_ids},
+        )
+        for node_id, raw_log in rows.result_set:
+            if _log_in_range(raw_log, start, end):
                 passing.add(node_id)
-                break
+
+    if edge_ids:
+        rows = graph.query(
+            "MATCH ()-[r:RELATES]->() WHERE r.id IN $ids RETURN r.id, r.log",
+            {"ids": edge_ids},
+        )
+        for edge_id, raw_log in rows.result_set:
+            if _log_in_range(raw_log, start, end):
+                passing.add(edge_id)
+
     return [r for r in results if r.id in passing]
+
+
+_KEYWORD_SCORE = (
+    1.0  # sort keyword-only hits after vector hits (which carry true distances)
+)
 
 
 def search_graph(
@@ -326,23 +443,46 @@ def search_graph(
 ) -> SearchGraphOutput:
     seen: dict[str, SearchResult] = {}
 
+    def _keep(result: SearchResult, score: float) -> None:
+        existing = seen.get(result.id)
+        if existing is None or score < existing.score:
+            seen[result.id] = result
+
     if query_embedding is not None:
         vec_literal = _vecf32_literal(query_embedding)
-        vec_result = graph.query(
+        node_vec = graph.query(
             f"""
             CALL db.idx.vector.queryNodes(
                 'SemanticNode', 'embedding', $limit, {vec_literal}
             ) YIELD node, score
             OPTIONAL MATCH (node)-[r:RELATES]-()
-            WITH node, count(r) AS edge_count
-            RETURN node.id, node.aliases, node.summary, edge_count
+            WITH node, score, count(r) AS edge_count
+            RETURN node.id, node.aliases, node.summary, edge_count, score
             """,
             {"limit": limit},
         )
-        for r in _parse_search_rows(vec_result.result_set):
-            seen[r.id] = r
+        for nid, aliases, summary, edge_count, score in node_vec.result_set:
+            _keep(
+                _node_row(nid, aliases, summary, edge_count, float(score)), float(score)
+            )
 
-    kw_result = graph.query(
+        # FalkorDB indexes relationships separately; surface edge-facts in the same ranking.
+        edge_vec = graph.query(
+            f"""
+            CALL db.idx.vector.queryRelationships(
+                'RELATES', 'embedding', $limit, {vec_literal}
+            ) YIELD relationship, score
+            MATCH (a:SemanticNode)-[relationship]->(b:SemanticNode)
+            RETURN relationship.id, relationship.label, relationship.fact, a.id, b.id, score
+            """,
+            {"limit": limit},
+        )
+        for eid, label, fact, from_id, to_id, score in edge_vec.result_set:
+            _keep(
+                _edge_row(eid, label, fact, from_id, to_id, float(score)), float(score)
+            )
+
+    node_kw = graph.query(
         """
         MATCH (n:SemanticNode)
         WHERE ANY(a IN n.aliases WHERE toLower(a) CONTAINS toLower($query))
@@ -355,11 +495,25 @@ def search_graph(
         """,
         {"query": query, "limit": limit},
     )
-    for r in _parse_search_rows(kw_result.result_set):
-        if r.id not in seen:
-            seen[r.id] = r
+    for nid, aliases, summary, edge_count in node_kw.result_set:
+        if nid not in seen:
+            seen[nid] = _node_row(nid, aliases, summary, edge_count, _KEYWORD_SCORE)
 
-    results = list(seen.values())[:limit]
+    edge_kw = graph.query(
+        """
+        MATCH (a:SemanticNode)-[r:RELATES]->(b:SemanticNode)
+        WHERE toLower(r.label) CONTAINS toLower($query)
+           OR toLower(r.fact) CONTAINS toLower($query)
+        RETURN r.id, r.label, r.fact, a.id, b.id
+        LIMIT $limit
+        """,
+        {"query": query, "limit": limit},
+    )
+    for eid, label, fact, from_id, to_id in edge_kw.result_set:
+        if eid not in seen:
+            seen[eid] = _edge_row(eid, label, fact, from_id, to_id, _KEYWORD_SCORE)
+
+    results = sorted(seen.values(), key=lambda r: r.score)[:limit]
     if time_range:
         results = _filter_by_time_range(graph, results, time_range)
     return SearchGraphOutput(results=results)
@@ -377,24 +531,26 @@ def get_nodes(graph: Graph, node_ids: list[str]) -> dict[str, GetNodeResult]:
     if not node_ids:
         return {}
 
-    # Fetch node properties and outgoing edges for all requested nodes in one query.
+    # Fetch node properties, outgoing edges, and source episodes in one query.
     result = graph.query(
         """
         MATCH (n:SemanticNode)
         WHERE n.id IN $ids
         OPTIONAL MATCH (n)-[r:RELATES]->(m:SemanticNode)
-        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, r.note, r.source_id] ELSE null END) AS edges
-        RETURN n.id, n, edges
+        WITH n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, r.fact, r.log, r.total_log_count, r.source_id] ELSE null END) AS edges
+        OPTIONAL MATCH (s:Session)-[:MENTIONS]->(n)
+        RETURN n.id, n, edges, collect(DISTINCT s.id) AS mentioned_by
         """,
         {"ids": node_ids},
     )
 
     nodes_by_id: dict[str, GetNodeResult] = {}
-    for found_node_id, raw_node, raw_edges in result.result_set:
+    for found_node_id, raw_node, raw_edges, mentioned_by in result.result_set:
         node_props = raw_node.properties
         nodes_by_id[found_node_id] = GetNodeResult(
             node=_node_from_props(node_props),
-            edges=_build_outgoing_edges(found_node_id, raw_edges or []),
+            edges=_build_outgoing_edges(found_node_id, raw_edges or [], log_tail=2),
+            mentioned_by=[sid for sid in (mentioned_by or []) if sid is not None],
         )
     return nodes_by_id
 
@@ -404,7 +560,7 @@ def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutp
         """
         MATCH (n:SemanticNode {id: $id})
         OPTIONAL MATCH (n)-[r:RELATES]-(m:SemanticNode)
-        RETURN n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, m.aliases, m.summary, r.note] ELSE null END) AS neighbor_data
+        RETURN n, collect(CASE WHEN r IS NOT NULL THEN [r.id, r.label, m.id, m.aliases, m.summary, r.fact] ELSE null END) AS neighbor_data
         """,
         {"id": node_id},
     )
@@ -428,7 +584,7 @@ def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutp
             neighbor_id,
             neighbor_aliases,
             neighbor_summary,
-            edge_note,
+            edge_fact,
         ) = nd
         if edge_id is None or edge_id in seen_edge_ids:
             continue
@@ -439,7 +595,7 @@ def get_node_neighborhood(graph: Graph, node_id: str) -> GetNodeNeighborhoodOutp
             NeighborSummary(
                 edge_id=edge_id,
                 edge_label=edge_label,
-                edge_note=edge_note,
+                edge_fact=edge_fact,
                 node_id=neighbor_id,
                 canonical_alias=canonical,
                 summary_line=summary_line,

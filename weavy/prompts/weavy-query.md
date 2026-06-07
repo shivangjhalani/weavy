@@ -21,17 +21,19 @@ The themes above are orientation, not answers — use them to identify which gra
 
 ### Execute with multiple angles
 
-For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph.
+For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`). Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved.
 
 After finding candidate nodes, use `get_node_neighborhood` to follow edges. **The graph's structure encodes relationships that direct search cannot surface** — a neighbor's neighbor may hold the answer. Key nodes are hubs; traverse them.
+
+To read the **original source** behind a fact, call `get_session` with one of the `s:N` ids in a node's `mentioned_by` list — useful when a summary is ambiguous and you need the verbatim episode.
 
 ### Temporal questions
 
 For questions involving "when", "how long ago", "what changed", "most recent", "what was true at time T":
 
 1. Find the relevant node(s)
-2. Inspect their log via `get_node` — logs record every change with timestamps and provenance
-3. Use `search_graph` with `time_range` to scope retrieval to a specific period
+2. Inspect their log via `get_node` — logs record every change with timestamps and provenance. **Edges have logs too**: a relationship that changed (a job change, a reversed belief) keeps its prior states in the edge's log, with the `fact` holding the current truth.
+3. Use `search_graph` with `time_range` to scope retrieval to a specific period (filters both nodes and edges by log timestamps)
 
 For relative time expressions in the question ("recently", "a few months back"), resolve them against `{{current_time}}` before reasoning.
 

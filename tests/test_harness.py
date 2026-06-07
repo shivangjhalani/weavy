@@ -155,6 +155,7 @@ def test_actions_contains_all_expected_entries() -> None:
         "search_graph",
         "get_node",
         "get_node_neighborhood",
+        "get_session",
         "list_sessions",
         "get_theme",
         "create_node",

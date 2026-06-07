@@ -71,6 +71,7 @@ def mock_embeddings():
     with (
         patch.object(embedding, "embed", return_value=dummy_vec),
         patch.object(embedding, "embed_node", return_value=dummy_vec),
+        patch.object(embedding, "embed_edge", return_value=dummy_vec),
         patch.object(embedding, "get_dimension", return_value=TEST_EMBEDDING_DIM),
     ):
         yield

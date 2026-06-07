@@ -30,9 +30,7 @@ def graph() -> Graph:
     g.query("MATCH (n:Session) DELETE n")
 
 
-def _make_session(
-    graph: Graph, messages: list[ChatMessage] | None = None
-) -> Session:
+def _make_session(graph: Graph, messages: list[ChatMessage] | None = None) -> Session:
     if messages is None:
         messages = [
             ChatMessage(role="user", content="Hello"),

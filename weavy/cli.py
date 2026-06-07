@@ -115,7 +115,9 @@ def cmd_set_preface(args: argparse.Namespace) -> None:
 
 
 def cmd_continue(args: argparse.Namespace) -> None:
-    trace = session_runs.run_session(args.session_id, "query", get_graph(), args.question)
+    trace = session_runs.run_session(
+        args.session_id, "query", get_graph(), args.question
+    )
     if _print_trace_status(trace):
         print(f"\n{_completion_field(trace, 'answer')}")
 
@@ -153,7 +155,10 @@ def _run_chat_repl() -> None:
 
         message_count += 1
         trace = session_runs.run_session(
-            session_id, "query", graph, question,
+            session_id,
+            "query",
+            graph,
+            question,
             parent_observation=session_tracer.root,
         )
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -13,10 +14,21 @@ class OperationResult(BaseModel):
 
 
 class SearchResult(BaseModel):
+    """A single hit in the unified ranked search.
+
+    ``kind="node"`` rows describe an entity (``id`` is ``node:N``, ``text`` is
+    the entity's summary line). ``kind="edge"`` rows describe a relationship fact
+    (``id`` is ``edge:N``, ``text`` is the fact, and ``endpoints`` names the two
+    nodes it connects so the agent can traverse from a fact to its entities).
+    """
+
+    kind: Literal["node", "edge"]
     id: str
-    canonical_alias: str
-    summary_line: str
-    edge_count: int
+    label: str  # node: canonical alias; edge: relationship label
+    text: str  # node: summary line; edge: the fact
+    score: float  # vector distance (lower = closer); keyword hits use 0.0
+    edge_count: int | None = None  # node only: degree, for hub identification
+    endpoints: list[str] | None = None  # edge only: [from_node_id, to_node_id]
 
 
 class SearchGraphOutput(BaseModel):
@@ -26,7 +38,7 @@ class SearchGraphOutput(BaseModel):
 class NeighborSummary(BaseModel):
     edge_id: str
     edge_label: str
-    edge_note: str | None = None
+    edge_fact: str | None = None
     node_id: str
     canonical_alias: str
     summary_line: str
@@ -40,6 +52,16 @@ class GetNodeNeighborhoodOutput(BaseModel):
 class GetNodeResult(BaseModel):
     node: SemanticNode
     edges: list[SemanticEdge] = Field(default_factory=list)
+    mentioned_by: list[str] = Field(
+        default_factory=list
+    )  # s:N episodes that touched this node
+
+
+class GetSessionOutput(BaseModel):
+    id: str
+    timestamp: datetime
+    text: str  # raw episode content (concatenated user messages)
+    summary: str | None = None
 
 
 class GetNodeOutput(BaseModel):

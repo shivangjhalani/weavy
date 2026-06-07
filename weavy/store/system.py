@@ -79,16 +79,21 @@ def init_system(
 
 
 def _ensure_vector_index(graph: Graph, dim: int) -> None:
-    try:
-        graph.query(
-            f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
-            f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}"
-        )
-    except Exception as e:
-        msg = str(e).lower()
-        if "already" in msg or "exists" in msg or "equivalent" in msg:
-            return
-        raise
+    """Create vector indexes for entity nodes and relationship facts (idempotent)."""
+    statements = (
+        f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
+        f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
+        f"CREATE VECTOR INDEX FOR ()-[r:RELATES]->() ON (r.embedding) "
+        f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
+    )
+    for stmt in statements:
+        try:
+            graph.query(stmt)
+        except Exception as e:
+            msg = str(e).lower()
+            if "already" in msg or "exists" in msg or "equivalent" in msg:
+                continue
+            raise
 
 
 def get_system(graph: Graph) -> SystemState:

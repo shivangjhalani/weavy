@@ -37,7 +37,7 @@ Read the **full input** before touching any tool. Inventory: what entities appea
 
 ### Step 2 — Search before creating
 
-For each entity or fact, search with **3+ different phrasings** — exact name, synonyms, abbreviations, related terms. Hybrid search combines vector similarity and keyword matching; different phrasings surface different graph regions.
+For each entity or fact, search with **3+ different phrasings** — exact name, synonyms, abbreviations, related terms. Hybrid search combines vector similarity and keyword matching; different phrasings surface different graph regions. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`, with its `endpoints`). An edge hit is a direct route to two already-connected nodes — follow its endpoints rather than recreating them.
 
 - Found a match → `update_node` to integrate new information. Do **not** create a duplicate.
 - No match → `create_node` with a complete, searchable representation.
@@ -53,10 +53,13 @@ This is the most common ingestion failure. Old stale facts layered under new one
 
 ### Step 4 — Build edges
 
-After confirming or creating nodes, wire relationships:
-- Use precise, directional **verb-phrase labels**: "works at", "reports to", "married to", "believes", "authored", "lives in", "studies under", "opposed to"
-- The `note` on each edge explains why this relationship is worth recording
-- Connect new nodes to the rest of the graph; traverse `get_node_neighborhood` on key hubs to find natural connection points
+After confirming or creating nodes, wire relationships. **Edges are first-class, searchable facts** — they carry their own embedding and surface directly in search, so write them as completely as nodes:
+- `label` — a precise, directional **verb-phrase**: "works at", "reports to", "married to", "believes", "authored", "lives in", "studies under", "opposed to"
+- `fact` — a **complete natural-language statement** of the relationship, naming both entities and any salient qualifier ("Ada works at Acme as a staff engineer since 2021"). This is what gets embedded and retrieved, so make it self-contained and specific — not just a restatement of the label.
+- `note` — one sentence on why this edge is being written now (this is logged).
+- Connect new nodes to the rest of the graph; traverse `get_node_neighborhood` on key hubs to find natural connection points.
+
+**When a relationship changes** (someone changes jobs, a belief reverses, a project ends): do **not** create a parallel edge. Call `update_edge` — rewrite `fact` to the current truth, optionally revise `label`, and record what changed in `note`. The edge's log preserves the prior states with their timestamps, exactly like a node's log. One edge per relationship, always its most current state.
 
 ### Step 5 — Capture temporal information
 

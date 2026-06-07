@@ -20,7 +20,11 @@ from weavy.harness.tool_models import (
 from weavy.models.graph import LogEntry, ProvenanceInput
 from weavy.services import memory
 from weavy.store import graph as store_graph
-from tests.helpers import make_test_trace, reset_test_graph
+from tests.helpers import (
+    make_test_trace,
+    reset_test_graph,
+    store_test_session_with_id,
+)
 
 
 @pytest.fixture
@@ -226,7 +230,9 @@ def test_delete_node_removes_node_and_edges(graph: Graph) -> None:
         from_node_id=a,
         to_node_id=b,
         label="related",
+        fact="A is related to B",
         note="A relates to B",
+        provenance=prov,
         trace=make_test_trace(),
     )
 
@@ -278,7 +284,9 @@ def test_create_edge(graph: Graph) -> None:
         from_node_id=a,
         to_node_id=b,
         label="causes",
+        fact="A causes B",
         note="A causes B",
+        provenance=prov,
         trace=trace,
     )
     assert result.ok
@@ -288,6 +296,9 @@ def test_create_edge(graph: Graph) -> None:
     out = store_graph.get_node(graph, a)
     assert len(out.edges) == 1
     assert out.edges[0].label == "causes"
+    assert out.edges[0].fact == "A causes B"
+    assert out.edges[0].total_log_count == 1
+    assert out.edges[0].log[0].note == "A causes B"
 
 
 def test_update_edge_label(graph: Graph) -> None:
@@ -313,14 +324,27 @@ def test_update_edge_label(graph: Graph) -> None:
         from_node_id=a,
         to_node_id=b,
         label="old label",
+        fact="A had old relationship to B",
         note="initial relationship",
+        provenance=prov,
         trace=make_test_trace(),
     ).id
 
-    memory.update_edge(graph, edge_id=edge_id, new_label="new label", trace=make_test_trace())
+    memory.update_edge(
+        graph,
+        edge_id=edge_id,
+        note="relationship changed",
+        new_label="new label",
+        new_fact="A now has new relationship to B",
+        provenance=ProvenanceInput(source_id="s:2"),
+        trace=make_test_trace(),
+    )
 
     out = store_graph.get_node(graph, a)
     assert out.edges[0].label == "new label"
+    assert out.edges[0].fact == "A now has new relationship to B"
+    assert out.edges[0].total_log_count == 2
+    assert out.edges[0].log[-1].note == "relationship changed"
 
 
 def test_delete_edge(graph: Graph) -> None:
@@ -346,7 +370,9 @@ def test_delete_edge(graph: Graph) -> None:
         from_node_id=a,
         to_node_id=b,
         label="linked",
+        fact="A is linked to B",
         note="A linked to B",
+        provenance=prov,
         trace=make_test_trace(),
     ).id
 
@@ -376,7 +402,7 @@ def test_search_graph_alias_match(graph: Graph) -> None:
     )
     out = store_graph.search_graph(graph, query="career")
     assert len(out.results) >= 1
-    assert any("career" in r.canonical_alias.lower() for r in out.results)
+    assert any(r.kind == "node" and "career" in r.label.lower() for r in out.results)
 
 
 def test_search_graph_summary_match(graph: Graph) -> None:
@@ -426,13 +452,16 @@ def test_get_node_returns_edges(graph: Graph) -> None:
         from_node_id=a,
         to_node_id=b,
         label="test edge",
+        fact="A has a test edge to B",
         note="A test edge from A to B",
+        provenance=prov,
         trace=make_test_trace(),
     )
 
     out = memory.get_node(graph, node_ids=[a])
     assert len(out.results[0].edges) == 1
     assert out.results[0].edges[0].label == "test edge"
+    assert out.results[0].edges[0].fact == "A has a test edge to B"
 
 
 def test_get_node_returns_multiple_results_and_not_found(graph: Graph) -> None:
@@ -513,7 +542,9 @@ def test_get_node_neighborhood(graph: Graph) -> None:
         from_node_id=a,
         to_node_id=b,
         label="causes",
+        fact="Career anxiety causes persistent anxiety",
         note="Career anxiety causes persistent anxiety",
+        provenance=prov,
         trace=make_test_trace(),
     )
     memory.create_edge(
@@ -521,7 +552,9 @@ def test_get_node_neighborhood(graph: Graph) -> None:
         from_node_id=c,
         to_node_id=a,
         label="influences",
+        fact="Mentor influences career direction",
         note="Mentor influences career direction",
+        provenance=prov,
         trace=make_test_trace(),
     )
 
@@ -531,3 +564,64 @@ def test_get_node_neighborhood(graph: Graph) -> None:
     neighbor_ids = {n.node_id for n in out.neighbors}
     assert b in neighbor_ids
     assert c in neighbor_ids
+    # Neighbors expose the edge fact, not a bare note.
+    assert any(n.edge_fact for n in out.neighbors)
+
+
+# ---------------------------------------------------------------------------
+# Edge-fact search (unified ranked results) and MENTIONS provenance
+# ---------------------------------------------------------------------------
+
+
+def test_search_returns_edge_facts(graph: Graph) -> None:
+    """Keyword search surfaces edge facts as kind='edge' rows alongside nodes."""
+    prov = ProvenanceInput(source_id="s:1")
+    a = memory.create_node(
+        graph,
+        aliases=["Ada"],
+        summary="A person.",
+        note="x",
+        provenance=prov,
+        trace=make_test_trace(),
+    ).id
+    b = memory.create_node(
+        graph,
+        aliases=["Acme"],
+        summary="A company.",
+        note="x",
+        provenance=prov,
+        trace=make_test_trace(),
+    ).id
+    memory.create_edge(
+        graph,
+        from_node_id=a,
+        to_node_id=b,
+        label="works at",
+        fact="Ada works at Acme as a staff engineer",
+        note="employment",
+        provenance=prov,
+        trace=make_test_trace(),
+    )
+
+    out = store_graph.search_graph(graph, query="staff engineer")
+    edge_hits = [r for r in out.results if r.kind == "edge"]
+    assert len(edge_hits) >= 1
+    assert "staff engineer" in edge_hits[0].text
+    assert edge_hits[0].endpoints == [a, b]
+
+
+def test_create_node_links_mention(graph: Graph) -> None:
+    """A node written during a session is reachable from that session via MENTIONS."""
+    store_test_session_with_id(graph, "s:1")
+    node_id = memory.create_node(
+        graph,
+        aliases=["focus"],
+        summary="Deep focus.",
+        note="x",
+        provenance=ProvenanceInput(source_id="s:1"),
+        trace=make_test_trace(),
+        session_id="s:1",
+    ).id
+
+    out = memory.get_node(graph, node_ids=[node_id])
+    assert out.results[0].mentioned_by == ["s:1"]

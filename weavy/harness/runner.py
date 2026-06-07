@@ -40,8 +40,6 @@ def _sanitize_message_for_trace(message: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
-
-
 @lru_cache(maxsize=None)
 def _get_context_limit(model: str) -> int | None:
     try:
@@ -81,7 +79,15 @@ def _handle_tool_error(
     context_limit: int | None,
 ) -> tuple[int, RunTrace | None]:
     tracer.record_tool_error(turn.turn_number, tool_name, args, error)
-    turn.tool_calls.append(ToolCall(tool_name=tool_name, args=args, result=None, error=error, called_at=called_at))
+    turn.tool_calls.append(
+        ToolCall(
+            tool_name=tool_name,
+            args=args,
+            result=None,
+            error=error,
+            called_at=called_at,
+        )
+    )
     if tool_error_retries >= _MAX_TOOL_RETRIES:
         return tool_error_retries, _finalize_failed_run(
             trace, tracer, error, context_limit, turn=turn
@@ -110,8 +116,12 @@ def _build_turn_usage(usage_raw: Any) -> TurnUsage:
         prompt_tokens=getattr(usage_raw, "prompt_tokens", 0) or 0,
         completion_tokens=getattr(usage_raw, "completion_tokens", 0) or 0,
         total_tokens=getattr(usage_raw, "total_tokens", 0) or 0,
-        cached_tokens=_get_attr(getattr(usage_raw, "prompt_tokens_details", None), "cached_tokens"),
-        reasoning_tokens=_get_attr(getattr(usage_raw, "completion_tokens_details", None), "reasoning_tokens"),
+        cached_tokens=_get_attr(
+            getattr(usage_raw, "prompt_tokens_details", None), "cached_tokens"
+        ),
+        reasoning_tokens=_get_attr(
+            getattr(usage_raw, "completion_tokens_details", None), "reasoning_tokens"
+        ),
     )
 
 

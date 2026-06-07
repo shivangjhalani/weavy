@@ -9,6 +9,7 @@ from falkordb import Graph
 
 from weavy.application.contracts import (
     CompletedSessionRow,
+    GetSessionOutput,
     ListSessionsOutput,
     SessionSummary,
 )
@@ -64,6 +65,19 @@ def get_session(
         id=props["id"],
         timestamp=datetime.fromisoformat(props["timestamp"]),
         messages=conversation_to_chat_messages(raw),
+    )
+
+
+def get_session_output(graph: Graph, session_id: str) -> GetSessionOutput:
+    """Return an episode's raw text + metadata for agent traversal from a node."""
+    session = get_session(graph, session_id)
+    text = "\n\n".join(m.content for m in session.messages if m.role == "user")
+    props = _get_session_props(graph, session_id)
+    return GetSessionOutput(
+        id=session.id,
+        timestamp=session.timestamp,
+        text=text,
+        summary=props.get("summary"),
     )
 
 

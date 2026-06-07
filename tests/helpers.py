@@ -50,6 +50,21 @@ def store_test_session(graph: Any, text: str) -> str:
     return session_id
 
 
+def store_test_session_with_id(
+    graph: Any, session_id: str, text: str = SAMPLE_TEXT
+) -> str:
+    """Create a Session node with an explicit id (for MENTIONS / provenance tests)."""
+    store_canonical.create_session(
+        graph,
+        Session(
+            id=session_id,
+            timestamp=datetime.now(tz=timezone.utc),
+            messages=[ChatMessage(role="user", content=text)],
+        ),
+    )
+    return session_id
+
+
 def mock_tool_response(
     tool_name: str,
     args: dict[str, Any],

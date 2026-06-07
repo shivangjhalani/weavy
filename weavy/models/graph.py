@@ -41,6 +41,8 @@ class SemanticEdge(BaseModel):
     id: str  # edge:N
     from_node_id: str
     to_node_id: str
-    label: str
-    note: str | None = None  # why this relationship exists
-    source_id: str | None = None  # s:N — which session created this edge
+    label: str  # short directional relationship type, e.g. "works at"
+    fact: str  # natural-language statement of the relationship; embedded & searchable
+    total_log_count: int = 0
+    log: list[LogEntry] = Field(default_factory=list)
+    source_id: str | None = None  # s:N — which session first created this edge

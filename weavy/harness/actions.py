@@ -8,6 +8,7 @@ from falkordb import Graph
 from pydantic import BaseModel
 
 from weavy.application.contracts import GetThemeOutput, OperationResult
+from weavy.models.graph import ProvenanceInput
 from weavy.harness.tool_models import (
     CompleteInput,
     CompleteThemeUpdateInput,
@@ -18,6 +19,7 @@ from weavy.harness.tool_models import (
     DeleteNodeInput,
     GetNodeInput,
     GetNodeNeighborhoodInput,
+    GetSessionInput,
     GetThemeInput,
     ListSessionsInput,
     RetireThemeInput,
@@ -52,6 +54,13 @@ class Action:
     is_completion: bool = False
 
 
+def _edge_provenance(ctx: ActionContext) -> ProvenanceInput:
+    """Provenance for an edge log entry, sourced from the running session."""
+    if ctx.session_id is None:
+        raise ValueError("Edge write requires a session_id for provenance.")
+    return ProvenanceInput(source_id=ctx.session_id)
+
+
 def _complete(params: Any, ctx: ActionContext) -> OperationResult:
     ctx.trace.completion_payload = params.model_dump()
     return OperationResult(ok=True)
@@ -68,9 +77,15 @@ ACTIONS: dict[str, Action] = {
     ),
     "get_node": Action(
         "get_node",
-        "Get one or more semantic nodes by id.",
+        "Get one or more semantic nodes by id — returns each node's summary, log, outgoing edges (with their facts), and `mentioned_by` (the s:N episodes that touched it).",
         GetNodeInput,
         lambda p, ctx: memory.get_node(ctx.graph, node_ids=p.node_ids),
+    ),
+    "get_session": Action(
+        "get_session",
+        "Get an episode (session) by s:N id — returns its raw text and metadata. Use this to re-read the original source behind a node's facts; reach a node's source ids via get_node's `mentioned_by`.",
+        GetSessionInput,
+        lambda p, ctx: store_canonical.get_session_output(ctx.graph, p.session_id),
     ),
     "get_node_neighborhood": Action(
         "get_node_neighborhood",
@@ -104,6 +119,7 @@ ACTIONS: dict[str, Action] = {
             provenance=p.provenance,
             trace=ctx.trace,
             event_time=ctx.event_time,
+            session_id=ctx.session_id,
         ),
     ),
     "update_node": Action(
@@ -119,6 +135,7 @@ ACTIONS: dict[str, Action] = {
             new_summary=p.new_summary,
             new_aliases=p.new_aliases,
             event_time=ctx.event_time,
+            session_id=ctx.session_id,
         ),
     ),
     "delete_node": Action(
@@ -131,24 +148,34 @@ ACTIONS: dict[str, Action] = {
     ),
     "create_edge": Action(
         "create_edge",
-        "Create a semantic edge between two nodes. Both node IDs must already exist in the graph — use only IDs returned by prior create_node calls, never IDs of nodes being created in the same batch. Requires a label (short relationship type) and a note (why this relationship exists).",
+        "Create a semantic edge between two nodes. Both node IDs must already exist in the graph — use only IDs returned by prior create_node calls, never IDs of nodes being created in the same batch. Requires a label (short directional relationship type), a fact (natural-language statement of the relationship — this is embedded and directly searchable), and a note (why this edge is written now — logged).",
         CreateEdgeInput,
         lambda p, ctx: memory.create_edge(
             ctx.graph,
             from_node_id=p.from_node_id,
             to_node_id=p.to_node_id,
             label=p.label,
+            fact=p.fact,
             note=p.note,
+            provenance=_edge_provenance(ctx),
             trace=ctx.trace,
+            event_time=ctx.event_time,
             source_id=ctx.session_id,
         ),
     ),
     "update_edge": Action(
         "update_edge",
-        "Update a semantic edge.",
+        "Update a semantic edge — append a log entry and optionally revise its label and/or fact. Use this when a relationship changes instead of creating a parallel edge; the fact should state the current truth and the note records what changed.",
         UpdateEdgeInput,
         lambda p, ctx: memory.update_edge(
-            ctx.graph, edge_id=p.edge_id, new_label=p.new_label, trace=ctx.trace
+            ctx.graph,
+            edge_id=p.edge_id,
+            note=p.note,
+            provenance=_edge_provenance(ctx),
+            trace=ctx.trace,
+            new_label=p.new_label,
+            new_fact=p.new_fact,
+            event_time=ctx.event_time,
         ),
     ),
     "delete_edge": Action(
@@ -185,8 +212,9 @@ ACTIONS: dict[str, Action] = {
         "set_preface",
         "Set or update the graph preface — a short description of what this graph is about and whose it is.",
         SetPrefaceInput,
-        lambda p, ctx: store_system.set_preface(ctx.graph, p.preface)
-        or OperationResult(ok=True),
+        lambda p, ctx: (
+            store_system.set_preface(ctx.graph, p.preface) or OperationResult(ok=True)
+        ),
     ),
     "complete": Action(
         "complete",
@@ -208,6 +236,7 @@ GRAPH_READ_ACTIONS = [
     "search_graph",
     "get_node",
     "get_node_neighborhood",
+    "get_session",
     "list_sessions",
 ]
 

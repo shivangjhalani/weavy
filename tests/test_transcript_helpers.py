@@ -35,14 +35,19 @@ def test_extract_segment_range_returns_text_by_index() -> None:
     )
 
     assert extract_segment_range(segments, 1, 2) == "Second line."
-    assert extract_segment_range(segments, 0, 3) == "First line. Second line. Third line."
+    assert (
+        extract_segment_range(segments, 0, 3) == "First line. Second line. Third line."
+    )
     assert extract_segment_range(segments, 0, 1) == "First line."
 
 
 def test_extract_segment_range_plain_text() -> None:
     segments = parse_transcript_text("This transcript has no inline timestamps.")
 
-    assert extract_segment_range(segments, 0, 1) == "This transcript has no inline timestamps."
+    assert (
+        extract_segment_range(segments, 0, 1)
+        == "This transcript has no inline timestamps."
+    )
 
 
 def test_extract_segment_range_empty_on_out_of_bounds() -> None:
