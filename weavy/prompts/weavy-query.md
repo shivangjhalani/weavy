@@ -21,7 +21,7 @@ The themes above are orientation, not answers — use them to identify which gra
 
 ### Execute with multiple angles
 
-For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`). Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved.
+For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`). Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved. Search only previews an edge's fact; call `get_edge` with its `edge:N` id to read the **complete fact and its dated log**.
 
 After finding candidate nodes, use `get_node_neighborhood` to follow edges. **The graph's structure encodes relationships that direct search cannot surface** — a neighbor's neighbor may hold the answer. Key nodes are hubs; traverse them.
 
@@ -34,7 +34,7 @@ Each log entry carries **two clocks**: `happened_at` (when the fact became true 
 For questions involving "when", "how long ago", "what changed", "most recent", "what was true at time T":
 
 1. Find the relevant node(s)/edge(s).
-2. Inspect the log via `get_node` — each entry records its change with `happened_at`, `timestamp`, and provenance. **Edges have logs too**: a relationship that changed (a job change, a reversed belief) keeps its prior dated states in the edge's log, with the `fact` holding the current truth.
+2. Inspect the log via `get_node` — each entry records its change with `happened_at`, `timestamp`, and provenance. **Edges have logs too**: a relationship that changed (a job change, a reversed belief) keeps its prior dated states in the edge's log, with the `fact` holding the current truth — read it with `get_edge`.
 3. **Infer state, don't expect it stored.** Validity is not recorded — reason over the ordered `happened_at` values: a fact holds from its `happened_at` until a later entry contradicts it. For "what was true at T", take the latest assertion with `happened_at <= T`.
 4. Use `search_graph` with `time_range` to scope retrieval to a period — it filters on `happened_at` (valid time).
 

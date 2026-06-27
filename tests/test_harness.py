@@ -154,6 +154,7 @@ def test_actions_contains_all_expected_entries() -> None:
     expected = {
         "search_graph",
         "get_node",
+        "get_edge",
         "get_node_neighborhood",
         "get_session",
         "list_sessions",

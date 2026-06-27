@@ -82,6 +82,10 @@ class GetNodeInput(BaseModel):
     node_ids: list[NodeId]
 
 
+class GetEdgeInput(BaseModel):
+    edge_id: EdgeId
+
+
 class GetSessionInput(BaseModel):
     session_id: Annotated[str, StringConstraints(pattern=r"^s:\d+$")]
 

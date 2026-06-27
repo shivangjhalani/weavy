@@ -17,6 +17,7 @@ from weavy.harness.tool_models import (
     CreateThemeInput,
     DeleteEdgeInput,
     DeleteNodeInput,
+    GetEdgeInput,
     GetNodeInput,
     GetNodeNeighborhoodInput,
     GetSessionInput,
@@ -86,6 +87,12 @@ ACTIONS: dict[str, Action] = {
         "Get an episode (session) by s:N id — returns its raw text and metadata. Use this to re-read the original source behind a node's facts; reach a node's source ids via get_node's `mentioned_by`.",
         GetSessionInput,
         lambda p, ctx: store_canonical.get_session_output(ctx.graph, p.session_id),
+    ),
+    "get_edge": Action(
+        "get_edge",
+        "Get one semantic edge by its edge:N id — returns its label, fact, endpoints, and full log. Use this to read a relationship's complete fact and its dated log entries (e.g. for 'when did this relationship change' / temporal questions), which search only previews.",
+        GetEdgeInput,
+        lambda p, ctx: store_graph.get_edge(ctx.graph, p.edge_id),
     ),
     "get_node_neighborhood": Action(
         "get_node_neighborhood",
@@ -239,6 +246,7 @@ ACTIONS: dict[str, Action] = {
 GRAPH_READ_ACTIONS = [
     "search_graph",
     "get_node",
+    "get_edge",
     "get_node_neighborhood",
     "get_session",
     "list_sessions",
