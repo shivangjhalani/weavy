@@ -1,8 +1,18 @@
 import os
 
+import litellm
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Single API key for all LiteLLM provider calls.
+_api_key = os.getenv("LITELLM_API_KEY")
+if _api_key:
+    litellm.api_key = _api_key.strip()
+
+_api_base = os.getenv("LITELLM_API_BASE")
+if _api_base:
+    litellm.api_base = _api_base.strip()
 
 
 def _clean_env_value(value: str | None) -> str | None:
@@ -42,10 +52,8 @@ class Settings:
     FALKORDB_PORT: int = int(_getenv("FALKORDB_PORT", "6379"))
     GRAPH_NAME: str = _getenv("GRAPH_NAME", "weavy")
 
-    GEMINI_MODEL: str = _getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
-    GEMINI_EMBEDDING_MODEL: str = _getenv(
-        "GEMINI_EMBEDDING_MODEL", "gemini/gemini-embedding-001"
-    )
+    LLM_MODEL: str = _getenv("LLM_MODEL", "gemini/gemini-2.5-flash")
+    EMBEDDING_MODEL: str = _getenv("EMBEDDING_MODEL", "gemini/gemini-embedding-001")
     REASONING_EFFORT: str = _getenv("REASONING_EFFORT", "medium")
 
     HOT_THEME_TOKEN_BUDGET: int = int(_getenv("HOT_THEME_TOKEN_BUDGET", "2000"))

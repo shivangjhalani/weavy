@@ -6,14 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "falkordb>=1.6.0",
-    "google-genai>=1.14.0",
     "langfuse>=4.0.6",
     "litellm>=1.82.1",
     "pydantic>=2.12.5",
     "pytest>=9.0.2",
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0.3",
-    "ragas>=0.4.3",
     "tiktoken>=0.12.0",
 ]
 

@@ -204,7 +204,7 @@ class RunTracer:
         self._current_generation = self._current_turn_span.start_observation(
             name="llm",
             as_type="generation",
-            model=settings.GEMINI_MODEL,
+            model=settings.LLM_MODEL,
             model_parameters={"reasoning_effort": settings.REASONING_EFFORT},
         )
 
@@ -227,7 +227,7 @@ class RunTracer:
             if tool_calls:
                 output["tool_calls"] = tool_calls
 
-            input_cpt, output_cpt = _model_cost_per_token(settings.GEMINI_MODEL)
+            input_cpt, output_cpt = _model_cost_per_token(settings.LLM_MODEL)
             input_cost = input_cpt * usage.prompt_tokens
             output_cost = output_cpt * usage.completion_tokens
 

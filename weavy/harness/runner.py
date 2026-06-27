@@ -163,7 +163,7 @@ def run(
     tool_error_retries = 0
     sanitized_cache: list[dict[str, Any]] = []
 
-    context_limit = _get_context_limit(settings.GEMINI_MODEL)
+    context_limit = _get_context_limit(settings.LLM_MODEL)
 
     while True:
         turn_number += 1
@@ -178,7 +178,7 @@ def run(
         tracer.prepare_llm_call()
         try:
             response = litellm.completion(
-                model=settings.GEMINI_MODEL,
+                model=settings.LLM_MODEL,
                 messages=messages,
                 tools=tool_definitions,
                 tool_choice="auto",

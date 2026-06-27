@@ -1,3 +1,35 @@
+# ============================================================
+# Weavy local stack
+# ============================================================
+# Start everything:
+#   docker compose --profile falkordb --profile langfuse up -d
+#
+# Start individually:
+#   docker compose --profile falkordb up -d            # FalkorDB only
+#   docker compose --profile langfuse up -d            # Langfuse only
+#
+# Pick up changed ports/config on an already-running service:
+#   docker compose --profile falkordb up -d --force-recreate falkordb
+#
+# Status / logs / stop:
+#   docker compose --profile falkordb --profile langfuse ps
+#   docker compose logs -f falkordb
+#   docker compose --profile falkordb --profile langfuse down   # add -v to wipe data volumes
+#
+# Web UIs / endpoints:
+#   FalkorDB Browser   http://127.0.0.1:3000        (use 127.0.0.1, NOT localhost)
+#   FalkorDB (redis)   localhost:6379               (app / redis-cli)
+#   Langfuse           http://localhost:3100
+#   MinIO console      http://localhost:9190
+#
+# NOTE: FalkorDB Browser and Langfuse are both NextAuth/Auth.js apps. Cookies are
+# scoped by host (NOT port), so opening both on `localhost` puts their auth cookies
+# in one shared jar. Today their prefixes differ (authjs.* vs next-auth.*) so they
+# don't collide, but to keep the cookie jars fully isolated, open FalkorDB Browser
+# on 127.0.0.1 and Langfuse on localhost — the browser treats those as different
+# hosts. (localStorage is already isolated, since it keys on host+port.)
+# ============================================================
+
 services:
 
   # ============================================================

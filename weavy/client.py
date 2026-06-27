@@ -46,6 +46,7 @@ class Weavy:
         *,
         timestamp: datetime | None = None,
         context: str | None = None,
+        update_themes: bool = True,
     ) -> RunTrace:
         """Ingest *text* into the memory graph and refresh themes.
 
@@ -55,12 +56,15 @@ class Weavy:
             timestamp: Event time for the session. Defaults to wall-clock now.
             context: Optional hint for the ingestion agent, e.g. ``"These are
                 Slack chat logs"``.
+            update_themes: Refresh themes after a successful ingestion (default).
+                Set ``False`` to skip the theme pass — useful for bulk backfills
+                or benchmark ablations that isolate raw retrieval from themes.
 
         Returns:
             RunTrace with ``mode="ingestion"``.
         """
         trace = run_add(text, self._graph, timestamp=timestamp, context=context)
-        if trace.status == "completed":
+        if update_themes and trace.status == "completed":
             run_theme_update(self._graph)
         return trace
 

@@ -9,18 +9,18 @@ from weavy.config import settings
 
 @lru_cache(maxsize=1)
 def get_dimension() -> int:
-    info = litellm.get_model_info(settings.GEMINI_EMBEDDING_MODEL)
+    info = litellm.get_model_info(settings.EMBEDDING_MODEL)
     dim = info.get("output_vector_size")
     if dim is None:
         raise RuntimeError(
-            f"litellm has no output_vector_size for {settings.GEMINI_EMBEDDING_MODEL!r}"
+            f"litellm has no output_vector_size for {settings.EMBEDDING_MODEL!r}"
         )
     return int(dim)
 
 
 def embed(text: str) -> list[float]:
     response = litellm.embedding(
-        model=settings.GEMINI_EMBEDDING_MODEL,
+        model=settings.EMBEDDING_MODEL,
         input=[text],
     )
     return response.data[0]["embedding"]

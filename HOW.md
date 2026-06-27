@@ -3,8 +3,7 @@
 Weavy is a local, CLI-first memory system built on top of:
 
 - FalkorDB for canonical records, semantic graph state, themes, and system counters
-- Gemini via LiteLLM for the session agent and theme agent
-- Groq Whisper via LiteLLM for audio transcription
+- LiteLLM for all model calls — completions (`LLM_MODEL`) and embeddings (`EMBEDDING_MODEL`)
 - Langfuse for run traces and eval visibility
 
 There is no web app or API layer. The main way to use the app is:
@@ -17,7 +16,6 @@ There is no web app or API layer. The main way to use the app is:
 ## What Works Right Now
 
 - Add any text into the memory graph via `add` — source-agnostic ingestion
-- Transcribe audio with the standalone `transcribe.py` utility as a separate pre-processing step
 - Steer ingestion with optional caller context (e.g., "These are chat logs between a user and an AI assistant")
 - Ingest text into the semantic graph with provenance-aware node writes
 - Ask grounded questions against the graph
@@ -31,7 +29,7 @@ There is no web app or API layer. The main way to use the app is:
 - Weavy is synchronous and explicit. If a dependency is missing, it fails loudly rather than silently degrading.
 - The graph is a derived memory layer, not the source of truth. Canonical sessions remain the primary records.
 - All sessions store their full message history. Ingestion sessions contain the input text + the agent's analysis. Query sessions contain the full conversation.
-- Pre-processing is external. Audio transcription, transcript cleanup, and document extraction happen before text reaches Weavy.
+- Pre-processing is external. Document extraction, audio transcription, and chat formatting happen before text reaches Weavy.
 - Any session can be continued in query mode — `continue s:N "question"` loads the prior messages as context and runs the query agent.
 - Query runs may mutate the graph if the agent decides a new statement should update memory.
 - Theme updates run automatically after every `add`. The theme agent queries all sessions completed since its last run and reconciles themes. `update-themes` is available for explicit invocation when needed.
@@ -43,8 +41,7 @@ You need:
 
 - `uv` — manages Python and dependencies (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - Docker Desktop
-- a Gemini API key
-- a Groq API key if you want to use `transcribe`
+- a Gemini API key (or any provider supported by LiteLLM — set `LLM_MODEL` and `EMBEDDING_MODEL` accordingly)
 - a running Langfuse stack if you want tracing
 
 At minimum, copy the example env file:
@@ -56,8 +53,7 @@ cp .example.env .env
 Then set the values you need:
 
 ```env
-GEMINI_API_KEY=...
-GROQ_API_KEY=...
+LITELLM_API_KEY=...
 
 LANGFUSE_HOST=http://localhost:3100
 LANGFUSE_PUBLIC_KEY=...
@@ -66,7 +62,6 @@ LANGFUSE_SECRET_KEY=...
 
 Notes:
 
-- `GROQ_API_KEY` is only required for audio transcription.
 - `LANGFUSE_*` is required for tracing. The agent runs without it but you lose observability.
 - FalkorDB defaults to `localhost:6379`.
 - The default graph name is `weavy`.
@@ -159,49 +154,6 @@ Use `--timestamp` to set the session timestamp (defaults to now):
 ```bash
 uv run python -m weavy.cli add journal.txt --timestamp 2026-04-01T10:00:00+00:00
 ```
-
-## Transcribe Audio
-
-Transcription is a standalone pre-processing utility. It does not ingest into Weavy directly:
-
-```bash
-python transcribe.py /path/to/recording.m4a
-```
-
-What happens:
-
-- The file is sent to Groq Whisper through LiteLLM
-- The raw Whisper response is written to stdout as JSON, or to a file with `--output`
-- You decide how to extract or format the text before sending it to `weavy add`
-
-Supported audio extensions: `.mp3`, `.mp4`, `.mpeg`, `.mpga`, `.m4a`, `.wav`, `.webm`, `.ogg`
-
-Write JSON to a file:
-
-```bash
-python transcribe.py recording.m4a --output transcript.json
-```
-
-Important behavior:
-
-- Missing files raise `FileNotFoundError`
-- Unsupported extensions raise `ValueError`
-- This script has no dependency on the memory graph or Weavy session model
-
-Whisper-related env vars:
-
-```env
-WHISPER_MODEL=groq/whisper-large-v3-turbo
-WHISPER_LANGUAGE=
-WHISPER_PROMPT=
-WHISPER_TEMPERATURE=0
-```
-
-Typical workflow:
-
-1. Transcribe audio with `transcribe.py`
-2. Extract or format the text you want to keep
-3. Pass that text to `uv run python -m weavy.cli add ...`
 
 ### List Stored Sessions
 
@@ -352,7 +304,6 @@ list-sessions [--limit N]
 add <file_or_-> [--context "..."] [--timestamp ISO]
 continue <session_id> <question>
 update-themes
-set-preface <preface>
 query [question]
 ```
 
@@ -368,19 +319,15 @@ uv run python -m weavy.cli init-system
 
 Check that Langfuse is running and `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` are set.
 
-### Transcription failures
-
-Check that `GROQ_API_KEY` is set, the file exists, and the extension is supported.
-
 ### LLM or query failures
 
-Check that `GEMINI_API_KEY` is set and the graph is reachable.
+Check that your API key (e.g. `LITELLM_API_KEY`) is set and the graph is reachable.
 
 ## Shortest Happy Path
 
 ```bash
 cp .example.env .env
-# fill in GEMINI_API_KEY, GROQ_API_KEY, LANGFUSE_* as needed
+# fill in LITELLM_API_KEY and LANGFUSE_* as needed
 
 docker compose --profile falkordb --profile langfuse up -d
 
@@ -388,7 +335,4 @@ uv run python -m weavy.cli init-system
 uv run python -m weavy.cli add notes.txt --context "Personal journal entry"
 uv run python -m weavy.cli query "What has been on my mind recently?"
 uv run python -m weavy.cli continue s:1 "Tell me more about what I said about X"
-
-# audio transcription is a separate preprocessing step:
-python transcribe.py /path/to/recording.m4a --output transcript.json
 ```
