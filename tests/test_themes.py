@@ -143,7 +143,7 @@ def test_list_all_themes_multiple(graph: Graph) -> None:
 
 
 def test_render_hot_themes_empty() -> None:
-    hot, cold = render_hot_themes([], [], 250)
+    hot, cold = render_hot_themes([], 250)
     assert hot == ""
     assert cold == []
 
@@ -158,8 +158,7 @@ def test_render_hot_themes_budget_respected() -> None:
         )
         for i in range(20)
     ]
-    priority_order = [f"theme-{i}" for i in range(20)]
-    hot, cold = render_hot_themes(themes, priority_order, 100)
+    hot, cold = render_hot_themes(themes, 100)
     assert len(cold) > 0
     assert "HOT THEMES" in hot
 
@@ -174,12 +173,53 @@ def test_render_hot_themes_cold_index_in_output() -> None:
             anchors=[],
         ),
     ]
-    hot, cold = render_hot_themes(themes, ["theme-a", "theme-b"], 20)
+    hot, cold = render_hot_themes(themes, 20)
     assert "theme-b" in cold
     assert "Other themes" in hot
 
 
-def test_render_hot_themes_invalid_priority_order() -> None:
-    theme = Theme(name="career", state="state", status=["active"], anchors=[])
-    with pytest.raises(ValueError, match="unknown theme name"):
-        render_hot_themes([theme], ["career", "unknown-name"], 250)
+# ---------------------------------------------------------------------------
+# priority ordering — order is intrinsic to themes, reconciled from the agent hint
+# ---------------------------------------------------------------------------
+
+
+def test_list_all_themes_orders_by_priority(graph: Graph) -> None:
+    for name in ("a", "b", "c"):
+        store_themes.create_theme(graph, name, f"state {name}", [], ["active"])
+    store_themes.set_theme_priority(graph, ["c", "a", "b"])
+    assert [t.name for t in store_themes.list_all_themes(graph)] == ["c", "a", "b"]
+
+
+def test_set_theme_priority_ignores_unknown_names(graph: Graph) -> None:
+    """A stale/unknown name in the ordering hint matches nothing — no error, no crash."""
+    store_themes.create_theme(graph, "real", "state", [], ["active"])
+    store_themes.set_theme_priority(graph, ["ghost", "real"])  # 'ghost' does not exist
+    themes = store_themes.list_all_themes(graph)
+    assert [t.name for t in themes] == ["real"]
+    # render path must never raise on a stale name (the original crash)
+    hot, _ = render_hot_themes(themes, 250)
+    assert "real" in hot
+
+
+def test_reconcile_priority_appends_omitted_themes(graph: Graph) -> None:
+    from weavy.application.theme_runs import _reconcile_priority
+
+    for name in ("x", "y", "z"):
+        store_themes.create_theme(graph, name, f"state {name}", [], ["active"])
+    # Agent hint names one unknown theme and omits 'z' entirely.
+    _reconcile_priority(graph, ["y", "bogus", "x"])
+    order = [t.name for t in store_themes.list_all_themes(graph)]
+    assert order[:2] == ["y", "x"]  # agent order honoured for real themes
+    assert "z" in order  # omitted theme still present, appended
+    assert "bogus" not in order
+
+
+def test_retire_theme_leaves_no_dangling_order(graph: Graph) -> None:
+    for name in ("a", "b"):
+        store_themes.create_theme(graph, name, f"state {name}", [], ["active"])
+    store_themes.set_theme_priority(graph, ["a", "b"])
+    store_themes.retire_theme(graph, "a")
+    themes = store_themes.list_all_themes(graph)
+    assert [t.name for t in themes] == ["b"]
+    hot, _ = render_hot_themes(themes, 250)  # no reference to retired 'a'
+    assert "a [" not in hot

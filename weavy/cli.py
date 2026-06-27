@@ -7,8 +7,11 @@ import argparse
 import sys
 from datetime import datetime
 
+from falkordb import Graph
+
 from weavy.application import session_runs, theme_runs
 from weavy.models.traces import RunTrace
+from weavy.store import themes as store_themes
 from weavy.store.canonical import list_sessions
 from weavy.store.client import get_graph
 from weavy.store.system import (
@@ -19,14 +22,15 @@ from weavy.store.system import (
 )
 
 
-def _print_system_state(header: str, state: SystemState) -> None:
+def _print_system_state(header: str, state: SystemState, graph: Graph) -> None:
+    theme_order = [t.name for t in store_themes.list_all_themes(graph)]
     print(f"{header}:")
     print(f"  preface               = {state.preface or '(not set)'}")
     print(f"  next_node_id          = {state.next_node_id}")
     print(f"  next_edge_id          = {state.next_edge_id}")
     print(f"  next_session_id       = {state.next_session_id}")
     print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
-    print(f"  theme_priority_order  = {state.theme_priority_order}")
+    print(f"  theme_priority_order  = {theme_order}")
     print(f"  last_theme_run_at     = {state.last_theme_run_at}")
 
 
@@ -61,13 +65,13 @@ def cmd_init_system(_args: argparse.Namespace) -> None:
 
     graph = get_graph()
     state = init_system(graph, embedding_dim=get_dimension())
-    _print_system_state("System node initialised", state)
+    _print_system_state("System node initialised", state, graph)
 
 
 def cmd_status(_args: argparse.Namespace) -> None:
     graph = get_graph()
     state = get_system(graph)
-    _print_system_state("System state", state)
+    _print_system_state("System state", state, graph)
 
 
 def cmd_list_sessions(args: argparse.Namespace) -> None:

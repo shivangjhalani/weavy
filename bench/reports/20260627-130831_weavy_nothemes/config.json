@@ -1,0 +1,16 @@
+{
+  "run_id": "20260627-130831",
+  "system": "weavy",
+  "dataset": "locomo",
+  "n_conversations": 1,
+  "n_questions": 5,
+  "granularity": "session",
+  "themes": false,
+  "caller_context": true,
+  "langfuse": false,
+  "llm_model": "gpt-4o-mini",
+  "embedding_model": "text-embedding-3-small",
+  "judge_model": "gpt-4o-mini",
+  "ingest_workers": 10,
+  "query_workers": 16
+}

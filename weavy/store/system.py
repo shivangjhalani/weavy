@@ -2,11 +2,10 @@
 System node — singleton node in FalkorDB that holds global counters and config.
 """
 
-import json
-from typing import Any, Literal
+from typing import Literal
 
 from falkordb import Graph
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from weavy.config import settings
 
@@ -23,17 +22,9 @@ class SystemState(BaseModel):
     next_node_id: int
     next_edge_id: int
     next_session_id: int
-    theme_priority_order: list[str]
     hot_theme_token_budget: int
     last_theme_run_at: str
     preface: str | None = None  # what this graph is about
-
-    @field_validator("theme_priority_order", mode="before")
-    @classmethod
-    def parse_json_string(cls, v: Any) -> list:
-        if isinstance(v, str):
-            return json.loads(v)
-        return list(v) if v else []
 
 
 def init_system(
@@ -64,7 +55,6 @@ def init_system(
             s.next_node_id = 1,
             s.next_edge_id = 1,
             s.next_session_id = 1,
-            s.theme_priority_order  = [],
             s.hot_theme_token_budget = $budget,
             s.last_theme_run_at = '1970-01-01T00:00:00+00:00'
         RETURN s
@@ -104,15 +94,6 @@ def get_system(graph: Graph) -> SystemState:
             "System node not found. Run init_system() or `python -m weavy.cli init-system` first."
         )
     return SystemState(**result.result_set[0][0].properties)
-
-
-def update_theme_priority_order(graph: Graph, priority_order: list[str]) -> None:
-    result = graph.query(
-        "MATCH (s:System) SET s.theme_priority_order = $order RETURN s",
-        {"order": priority_order},
-    )
-    if not result.result_set:
-        raise RuntimeError("System node not found. Cannot update theme_priority_order.")
 
 
 def set_preface(graph: Graph, preface: str) -> None:

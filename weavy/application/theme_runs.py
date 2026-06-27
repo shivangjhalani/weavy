@@ -22,14 +22,38 @@ def finalize_theme(graph: Graph, trace: RunTrace) -> RunTrace:
     if trace.status != "completed":
         return trace
 
-    priority_order = (trace.completion_payload or {}).get("priority_order")
-    if priority_order is not None:
-        store_system.update_theme_priority_order(graph, priority_order)
+    _reconcile_priority(graph, (trace.completion_payload or {}).get("priority_order"))
 
     store_system.update_last_theme_run_at(
         graph, datetime.now(tz=timezone.utc).isoformat()
     )
     return trace
+
+
+def _reconcile_priority(graph: Graph, agent_order: list[str] | None) -> None:
+    """Project the agent's salience hint onto the real theme set, then persist it.
+
+    The agent's ``priority_order`` is a *hint*, not authoritative state: we keep only
+    names that correspond to real themes (in the agent's order), then append any theme
+    the agent omitted (stable by current rank, then name). The result is written as a
+    rank on each theme, so the stored order can never reference a theme that does not
+    exist. This is the single point where the LLM's output meets ground truth.
+    """
+    themes = store_themes.list_all_themes(graph)  # ground truth
+    if not themes:
+        return
+
+    seen: set[str] = set()
+    existing = {t.name for t in themes}
+    ordered = [
+        name
+        for name in (agent_order or [])
+        if name in existing and not (name in seen or seen.add(name))
+    ]
+    leftovers = sorted(
+        (t for t in themes if t.name not in seen), key=lambda t: (t.priority, t.name)
+    )
+    store_themes.set_theme_priority(graph, ordered + [t.name for t in leftovers])
 
 
 def run_theme_update(
@@ -42,9 +66,7 @@ def run_theme_update(
     system_prompt = fetch_prompt(
         "weavy-theme",
         {
-            "theme_map": render_full_theme_map(
-                all_themes, system_state.theme_priority_order
-            ),
+            "theme_map": render_full_theme_map(all_themes),
             "preface": system_state.preface or "(not set)",
         },
     )

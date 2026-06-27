@@ -17,11 +17,17 @@ NodeId = Annotated[str, StringConstraints(pattern=r"^node:\d+$")]
 EdgeId = Annotated[str, StringConstraints(pattern=r"^edge:\d+$")]
 
 
+# Resolved event/valid time of this fact — when it became true in the world (not when
+# it was discussed). Optional; defaults to the episode time when no temporal cue exists.
+HappenedAt = datetime | None
+
+
 class CreateNodeInput(BaseModel):
     aliases: list[str]
     summary: str
     note: str
     provenance: ProvenanceInput
+    happened_at: HappenedAt = None
 
 
 class UpdateNodeInput(BaseModel):
@@ -30,6 +36,7 @@ class UpdateNodeInput(BaseModel):
     new_summary: str | None = None
     new_aliases: list[str] | None = None
     provenance: ProvenanceInput
+    happened_at: HappenedAt = None
 
 
 class CreateEdgeInput(BaseModel):
@@ -38,6 +45,7 @@ class CreateEdgeInput(BaseModel):
     label: str  # short directional relationship type, e.g. "works at"
     fact: str  # natural-language statement of the relationship; searchable
     note: str  # why this edge is being written now (logged)
+    happened_at: HappenedAt = None
 
 
 class UpdateEdgeInput(BaseModel):
@@ -45,6 +53,7 @@ class UpdateEdgeInput(BaseModel):
     note: str  # why this edge is changing (logged)
     new_label: str | None = None
     new_fact: str | None = None
+    happened_at: HappenedAt = None
 
 
 class DeleteNodeInput(BaseModel):
@@ -61,7 +70,7 @@ class SearchGraphInput(BaseModel):
     query: str
     limit: int = 10
     time_range: list[datetime] | None = (
-        None  # [start, end] — filter nodes by log timestamps
+        None  # [start, end] — filter by happened_at (valid time), falling back to record time
     )
 
 

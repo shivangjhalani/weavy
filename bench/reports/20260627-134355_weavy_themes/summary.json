@@ -1,0 +1,39 @@
+{
+  "n_questions": 5,
+  "overall_recall_accuracy": 0.6,
+  "by_category": {
+    "multi_hop": {
+      "accuracy": 0.5,
+      "n": 2
+    },
+    "temporal": {
+      "accuracy": 0.5,
+      "n": 2
+    },
+    "open_domain": {
+      "accuracy": 1.0,
+      "n": 1
+    }
+  },
+  "adversarial_abstention_accuracy": null,
+  "adversarial_n": 0,
+  "tokens": {
+    "ingest_total": 414300,
+    "answer_total": 83728,
+    "answer_per_question": 16745.6,
+    "judge_total": 1371
+  },
+  "latency_ms": {
+    "answer_p50": 7498.0,
+    "answer_p95": 11747.9,
+    "ingest_total": 748051.2
+  },
+  "cost_usd": {
+    "ingest": 0.07,
+    "answer": 0.0129,
+    "judge": 0.0002,
+    "total": 0.0831
+  },
+  "wall_clock_s": 761.8,
+  "ingest_failures": 0
+}

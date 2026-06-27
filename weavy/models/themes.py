@@ -5,6 +5,10 @@ from pydantic import BaseModel, field_validator
 
 ThemeStatus = Literal["deep", "active", "emerging", "dormant"]
 
+# Salience rank lives on the theme itself (lower = more salient). A freshly created
+# theme sorts last until the next theme-run reconciliation assigns its real rank.
+THEME_PRIORITY_UNSET = 1_000_000
+
 
 def _parse_json_list(v: Any) -> list:
     if isinstance(v, str):
@@ -17,6 +21,7 @@ class Theme(BaseModel):
     state: str
     status: list[ThemeStatus]  # 1-2 items
     anchors: list[str]  # node ids
+    priority: int = THEME_PRIORITY_UNSET  # salience rank — lower is more salient
 
     @field_validator("status", "anchors", mode="before")
     @classmethod

@@ -5,7 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class LogEntry(BaseModel):
     source_id: str  # s:N
-    timestamp: datetime
+    timestamp: datetime  # transaction time — when this fact was recorded/discussed
+    happened_at: datetime | None = (
+        None  # valid time — when the fact became true in the world
+    )
     note: str
 
 

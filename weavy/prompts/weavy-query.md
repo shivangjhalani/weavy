@@ -29,13 +29,16 @@ To read the **original source** behind a fact, call `get_session` with one of th
 
 ### Temporal questions
 
+Each log entry carries **two clocks**: `happened_at` (when the fact became true in the world) and `timestamp` (when it was recorded/discussed). They often differ — e.g. something said "yesterday" in one session was recorded that day but *happened* the day before. **For "when did X happen", always read `happened_at`, not `timestamp`.**
+
 For questions involving "when", "how long ago", "what changed", "most recent", "what was true at time T":
 
-1. Find the relevant node(s)
-2. Inspect their log via `get_node` — logs record every change with timestamps and provenance. **Edges have logs too**: a relationship that changed (a job change, a reversed belief) keeps its prior states in the edge's log, with the `fact` holding the current truth.
-3. Use `search_graph` with `time_range` to scope retrieval to a specific period (filters both nodes and edges by log timestamps)
+1. Find the relevant node(s)/edge(s).
+2. Inspect the log via `get_node` — each entry records its change with `happened_at`, `timestamp`, and provenance. **Edges have logs too**: a relationship that changed (a job change, a reversed belief) keeps its prior dated states in the edge's log, with the `fact` holding the current truth.
+3. **Infer state, don't expect it stored.** Validity is not recorded — reason over the ordered `happened_at` values: a fact holds from its `happened_at` until a later entry contradicts it. For "what was true at T", take the latest assertion with `happened_at <= T`.
+4. Use `search_graph` with `time_range` to scope retrieval to a period — it filters on `happened_at` (valid time).
 
-For relative time expressions in the question ("recently", "a few months back"), resolve them against `{{current_time}}` before reasoning.
+For relative time expressions in the question ("recently", "a few months back", "last year"), resolve them against `{{current_time}}` before reasoning.
 
 ### Multi-session questions
 

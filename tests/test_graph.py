@@ -625,3 +625,115 @@ def test_create_node_links_mention(graph: Graph) -> None:
 
     out = memory.get_node(graph, node_ids=[node_id])
     assert out.results[0].mentioned_by == ["s:1"]
+
+
+# ---------------------------------------------------------------------------
+# Temporal — two clocks: timestamp (recorded) vs happened_at (valid time)
+# ---------------------------------------------------------------------------
+
+
+def test_happened_at_distinct_from_record_time(graph: Graph) -> None:
+    """happened_at (when it was true) is stored independently of the episode time."""
+    recorded = datetime(2023, 5, 8)  # session date — when discussed
+    happened = datetime(2023, 5, 7)  # "yesterday" — when it actually happened
+    node_id = memory.create_node(
+        graph,
+        aliases=["support group visit"],
+        summary="Caroline attended the LGBTQ support group.",
+        note="mentioned as happening yesterday",
+        provenance=ProvenanceInput(source_id="s:1"),
+        trace=make_test_trace(),
+        event_time=recorded,
+        happened_at=happened,
+    ).id
+
+    entry = store_graph.get_node(graph, node_id).node.log[0]
+    assert entry.timestamp == recorded
+    assert entry.happened_at == happened
+
+
+def test_happened_at_defaults_to_event_time(graph: Graph) -> None:
+    """With no temporal cue, happened_at falls back to the episode time."""
+    recorded = datetime(2023, 5, 8)
+    node_id = memory.create_node(
+        graph,
+        aliases=["plain fact"],
+        summary="A fact with no stated event date.",
+        note="no temporal cue",
+        provenance=ProvenanceInput(source_id="s:1"),
+        trace=make_test_trace(),
+        event_time=recorded,
+    ).id
+
+    entry = store_graph.get_node(graph, node_id).node.log[0]
+    assert entry.happened_at == recorded
+    assert entry.timestamp == recorded
+
+
+def test_edge_happened_at_round_trips(graph: Graph) -> None:
+    prov = ProvenanceInput(source_id="s:1")
+    a = memory.create_node(
+        graph,
+        aliases=["A"],
+        summary="A",
+        note="a",
+        provenance=prov,
+        trace=make_test_trace(),
+    ).id
+    b = memory.create_node(
+        graph,
+        aliases=["B"],
+        summary="B",
+        note="b",
+        provenance=prov,
+        trace=make_test_trace(),
+    ).id
+    memory.create_edge(
+        graph,
+        from_node_id=a,
+        to_node_id=b,
+        label="attended",
+        fact="A attended B",
+        note="happened the day before it was mentioned",
+        provenance=prov,
+        trace=make_test_trace(),
+        event_time=datetime(2023, 5, 8),
+        happened_at=datetime(2023, 5, 7),
+    )
+
+    edge = store_graph.get_node(graph, a).edges[0]
+    assert edge.log[0].timestamp == datetime(2023, 5, 8)
+    assert edge.log[0].happened_at == datetime(2023, 5, 7)
+
+
+def test_search_time_range_filters_on_happened_at(graph: Graph) -> None:
+    """time_range matches valid time (happened_at), not when the fact was recorded."""
+    prov = ProvenanceInput(source_id="s:1")
+    # Discussed in August, but happened in May → inside a May window.
+    memory.create_node(
+        graph,
+        aliases=["alpha widget"],
+        summary="A widget event that happened in May.",
+        note="x",
+        provenance=prov,
+        trace=make_test_trace(),
+        event_time=datetime(2023, 8, 1),
+        happened_at=datetime(2023, 5, 7),
+    )
+    # Discussed in May, but happened in January → outside a May window.
+    memory.create_node(
+        graph,
+        aliases=["beta widget"],
+        summary="A widget event that happened in January.",
+        note="x",
+        provenance=prov,
+        trace=make_test_trace(),
+        event_time=datetime(2023, 5, 15),
+        happened_at=datetime(2023, 1, 1),
+    )
+
+    window = [datetime(2023, 5, 1), datetime(2023, 5, 31)]
+    out = store_graph.search_graph(graph, query="widget", time_range=window)
+    labels = {r.label for r in out.results}
+    assert "alpha widget" in labels
+    assert "beta widget" not in labels

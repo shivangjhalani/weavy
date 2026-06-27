@@ -63,12 +63,15 @@ def _make_log_entry(
     provenance: ProvenanceInput | None,
     note: str,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
 ) -> LogEntry:
     if provenance is None:
         raise ValueError("Log entry requires provenance")
+    timestamp = event_time or datetime.now(tz=timezone.utc)
     return LogEntry(
         source_id=provenance.source_id,
-        timestamp=event_time or datetime.now(tz=timezone.utc),
+        timestamp=timestamp,  # transaction time — when recorded/discussed
+        happened_at=happened_at or timestamp,  # valid time — defaults to episode time
         note=note,
     )
 
@@ -127,8 +130,9 @@ def create_node(
     node_id: str,
     embedding: list[float] | None = None,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
 ) -> OperationResult:
-    entry = _make_log_entry(provenance, note, event_time)
+    entry = _make_log_entry(provenance, note, event_time, happened_at)
     entry_json = _serialize_log_entry(entry)
     embedding_clause = (
         f", embedding: {_vecf32_literal(embedding)}" if embedding is not None else ""
@@ -165,6 +169,7 @@ def update_node(
     embedding: list[float] | None = None,
     current_summary: str | None = None,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
 ) -> OperationResult:
     effective_note = note
     if new_summary is not None:
@@ -178,7 +183,7 @@ def update_node(
             current_summary = result.result_set[0][0]
         effective_note = f"[archived summary] {current_summary} | Agent note: {note}"
 
-    entry = _make_log_entry(provenance, effective_note, event_time)
+    entry = _make_log_entry(provenance, effective_note, event_time, happened_at)
     entry_json = _serialize_log_entry(entry)
 
     set_parts = [
@@ -249,9 +254,10 @@ def create_edge(
     provenance: ProvenanceInput | None,
     embedding: list[float] | None = None,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
     source_id: str | None = None,
 ) -> OperationResult:
-    entry = _make_log_entry(provenance, note, event_time)
+    entry = _make_log_entry(provenance, note, event_time, happened_at)
     entry_json = _serialize_log_entry(entry)
     embedding_clause = (
         f", embedding: {_vecf32_literal(embedding)}" if embedding is not None else ""
@@ -296,8 +302,9 @@ def update_edge(
     provenance: ProvenanceInput | None = None,
     embedding: list[float] | None = None,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
 ) -> OperationResult:
-    entry = _make_log_entry(provenance, note, event_time)
+    entry = _make_log_entry(provenance, note, event_time, happened_at)
     entry_json = _serialize_log_entry(entry)
 
     set_parts = [
@@ -389,7 +396,11 @@ def _edge_row(edge_id, label, fact, from_id, to_id, score: float) -> SearchResul
 
 def _log_in_range(raw_log, start: datetime, end: datetime) -> bool:
     for entry_str in raw_log or []:
-        if start <= _deserialize_log_entry(entry_str).timestamp <= end:
+        entry = _deserialize_log_entry(entry_str)
+        # Filter on valid time (when the fact was true); fall back to record time
+        # for entries written before happened_at existed.
+        when = entry.happened_at or entry.timestamp
+        if start <= when <= end:
             return True
     return False
 

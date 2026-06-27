@@ -49,6 +49,7 @@ def create_node(
     provenance: ProvenanceInput,
     trace: RunTrace,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
     session_id: str | None = None,
 ) -> OperationResult:
     node_id = store_system.increment_counter(graph, "node")
@@ -62,6 +63,7 @@ def create_node(
         node_id=node_id,
         embedding=vec,
         event_time=event_time,
+        happened_at=happened_at,
     )
     if session_id is not None:
         store_graph.link_mention(graph, session_id, node_id)
@@ -79,6 +81,7 @@ def update_node(
     new_summary: str | None = None,
     new_aliases: list[str] | None = None,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
     session_id: str | None = None,
 ) -> OperationResult:
     vec: list[float] | None = None
@@ -100,6 +103,7 @@ def update_node(
         embedding=vec,
         current_summary=fetched_summary,
         event_time=event_time,
+        happened_at=happened_at,
     )
     if session_id is not None:
         store_graph.link_mention(graph, session_id, node_id)
@@ -124,6 +128,7 @@ def create_edge(
     provenance: ProvenanceInput,
     trace: RunTrace,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
     source_id: str | None = None,
 ) -> OperationResult:
     edge_id = store_system.increment_counter(graph, "edge")
@@ -139,6 +144,7 @@ def create_edge(
         provenance=provenance,
         embedding=vec,
         event_time=event_time,
+        happened_at=happened_at,
         source_id=source_id,
     )
     trace.touched_edges.append(TouchedEdge(edge_id=edge_id, action="created"))
@@ -155,6 +161,7 @@ def update_edge(
     new_label: str | None = None,
     new_fact: str | None = None,
     event_time: datetime | None = None,
+    happened_at: datetime | None = None,
 ) -> OperationResult:
     vec: list[float] | None = None
     if new_label is not None or new_fact is not None:
@@ -172,6 +179,7 @@ def update_edge(
         provenance=provenance,
         embedding=vec,
         event_time=event_time,
+        happened_at=happened_at,
     )
     trace.touched_edges.append(TouchedEdge(edge_id=edge_id, action="updated"))
     return result

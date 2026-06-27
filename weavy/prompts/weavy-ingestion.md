@@ -63,9 +63,19 @@ After confirming or creating nodes, wire relationships. **Edges are first-class,
 
 ### Step 5 — Capture temporal information
 
-When the input indicates **when** something happened:
-- If you can determine an event timestamp from the text, use it (resolve relative expressions like "last week", "three months ago" to absolute dates using `{{current_time}}`)
-- The log records how facts evolved over time — temporal precision is what enables "what was true on date X" queries later
+Every write carries **two clocks**, and keeping them distinct is what makes "when did X happen" and "what was true on date T" answerable later:
+
+- `timestamp` (record time) — *when this was discussed*. Set automatically to the episode time; you do nothing.
+- **`happened_at`** (event time) — *when the fact actually became true in the world*. **You resolve this** and pass it on the write (`create_node`/`update_node`/`create_edge`/`update_edge`).
+
+**When the text says when something happened, resolving `happened_at` is mandatory — not optional.** The event time is almost never the same as when it was discussed, and getting it wrong makes every "when did X happen" query wrong.
+
+Scan each fact for **any** time reference — relative ("yesterday", "last week", "a few months ago", "two years ago", "when I was 20", "back in college") or absolute ("in 2022", "on March 3", "last summer") — and resolve it to an absolute date against `{{current_time}}`, then pass it as `happened_at`.
+
+- **Worked example.** Current time is `8 May 2023`. The text says *"I went to the support group **yesterday**."* The visit happened **2023-05-07** — set `happened_at = 2023-05-07` (not the episode date of 8 May). A query for "when did they go" must return the 7th.
+- For coarse expressions, pick a **single representative point** (e.g. "in 2022" → `2022-01-01`, "last summer" → that summer's start) and keep the exact human wording in the `fact`/`note`.
+- Only when a fact carries **no time reference at all** do you omit `happened_at` — it then defaults to the episode time. Do not invent a date that isn't implied.
+- A re-asserted or corrected fact carries its own `happened_at` on the update — the log keeps the full dated history.
 
 ## Node quality
 

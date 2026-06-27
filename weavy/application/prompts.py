@@ -42,35 +42,27 @@ def _get_theme_tokenizer():
 
 def render_hot_themes(
     themes: list[Theme],
-    priority_order: list[str],
     token_budget: int,
 ) -> tuple[str, list[str]]:
+    """Render themes (already in salience order) until the token budget fills.
+
+    Themes carry their own rank, so there is no separate order list to validate and
+    nothing here can reference a non-existent theme.
+    """
     if not themes:
         return ("", [])
-
-    theme_map = {theme.name: theme for theme in themes}
-
-    for name in priority_order:
-        if name not in theme_map:
-            raise ValueError(f"Priority order contains unknown theme name: '{name}'")
 
     hot_parts: list[str] = []
     cold_names: list[str] = []
     tokens_used = 0
-    priority_set = set(priority_order)
 
-    for name in priority_order:
-        theme = theme_map[name]
+    for theme in themes:
         rendered = theme.render_block()
         token_count = len(_get_theme_tokenizer().encode(rendered))
         if tokens_used + token_count <= token_budget:
             hot_parts.append(rendered)
             tokens_used += token_count
         else:
-            cold_names.append(name)
-
-    for theme in themes:
-        if theme.name not in priority_set:
             cold_names.append(theme.name)
 
     if not hot_parts:
@@ -90,12 +82,11 @@ def render_hot_themes(
 
 def build_themes_context(
     graph: Graph,
-    priority_order: list[str],
     budget: int,
     empty_msg: str = "(No themes yet.)",
 ) -> str:
     all_themes = store_themes.list_all_themes(graph)
-    hot_block, cold_names = render_hot_themes(all_themes, priority_order, budget)
+    hot_block, cold_names = render_hot_themes(all_themes, budget)
 
     if hot_block:
         return hot_block
@@ -122,7 +113,6 @@ def build_themed_system_prompt(
     )
     prompt_variables["themes_context"] = build_themes_context(
         graph,
-        system_state.theme_priority_order,
         system_state.hot_theme_token_budget,
         empty_msg=empty_themes_message,
     )
@@ -132,14 +122,15 @@ def build_themed_system_prompt(
     return fetch_prompt(prompt_name, prompt_variables)
 
 
-def render_full_theme_map(themes: list[Theme], priority_order: list[str]) -> str:
+def render_full_theme_map(themes: list[Theme]) -> str:
     if not themes:
         return "CURRENT THEME MAP: (empty — no themes yet)\n"
 
     lines = ["CURRENT THEME MAP:\n"]
     for theme in themes:
         lines.append(f"{theme.render_block()}\n")
-    lines.append(f"\nCurrent priority order: {priority_order}")
+    # themes arrive in salience order — surface it explicitly for the agent.
+    lines.append(f"\nCurrent priority order: {[t.name for t in themes]}")
     return "\n".join(lines)
 
 

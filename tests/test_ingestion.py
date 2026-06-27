@@ -17,7 +17,7 @@ from weavy.models.traces import RunTrace
 from weavy.store import canonical as store_canonical
 from weavy.store import graph as store_graph
 from weavy.store import themes as store_themes
-from weavy.store.system import get_system, increment_counter
+from weavy.store.system import increment_counter
 from tests.helpers import (
     SAMPLE_TEXT,
     mock_tool_response,
@@ -179,8 +179,10 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
     assert result.name == "career-direction"
     assert node_id in result.anchors
 
-    state = get_system(graph)
-    assert state.theme_priority_order == ["career-direction"]
+    # Salience order is now intrinsic to the themes: reconciliation projected the
+    # agent's priority_order onto the theme's rank.
+    assert [t.name for t in store_themes.list_all_themes(graph)] == ["career-direction"]
+    assert result.priority == 0
 
 
 def test_theme_update_empty_map_runs(graph: Graph) -> None:
