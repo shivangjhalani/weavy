@@ -82,6 +82,10 @@ run_theme_update(graph)                              # -> RunTrace
 - **Single harness, three modes.** `run()` in `harness/runner.py` is the one agent loop — LiteLLM completion + tool dispatch. Terminates on `is_completion=True`. Shared by ingestion, query, and theme.
 - **Graph mutations tracked.** All writes flow through `services/memory.py` which enforces provenance and appends to `trace.touched_nodes`/`trace.touched_edges`.
 - **IDs are system-minted.** `store/system.py:increment_counter` produces `s:N`, `node:N`, `edge:N`. The `System` singleton tracks counters.
+- **Episodes are first-class memory.** The semantic graph is a lossy index; episodes are ground truth. Ingestion chunk-embeds each episode's text (`Chunk` nodes under `Session`), and `search_graph` returns `kind="episode"` excerpts in the same unified ranking as nodes and edges — the query agent reads source evidence directly rather than needing a multi-hop tool protocol.
+- **One node per entity is a storage invariant.** `create_node` refuses writes that collide with an existing entity (alias match, or embedding within `DUPLICATE_DISTANCE`) and names the candidates; `force=true` overrides for genuinely distinct same-name entities. Identity lives in aliases — embedding similarity only catches near-certain rephrasings.
+- **Node embeddings accumulate.** Updates re-embed over aliases + current summary + recent log notes (which hold archived summaries), so past facts stay retrievable after the summary moves on.
+- **Domain refusals are results, not exceptions.** Tools return `ok=false` with a corrective message for agent-fixable conditions (duplicate node, missing edge endpoint); exceptions are reserved for system faults and count toward the run's error budget.
 
 ### Module Map
 

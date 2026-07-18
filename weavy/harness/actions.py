@@ -69,7 +69,7 @@ def _complete(params: Any, ctx: ActionContext) -> OperationResult:
 ACTIONS: dict[str, Action] = {
     "search_graph": Action(
         "search_graph",
-        "Hybrid search over semantic nodes — combines semantic similarity (embedding) with keyword matching on aliases and summaries. Use varied phrasings to maximize recall; synonyms and rephrasings are matched by the vector component even when exact keywords differ. Optional time_range [start, end] filters to nodes with log entries in that window.",
+        "Hybrid search over the whole memory — semantic similarity (embedding) plus keyword matching, returning a unified ranked list of entities (kind='node'), relationship facts (kind='edge'), and verbatim episode excerpts (kind='episode', id is the s:N session — ground truth; read the full episode with get_session). Use varied phrasings to maximize recall. Optional time_range [start, end] filters to that window.",
         SearchGraphInput,
         lambda p, ctx: memory.search_graph(
             ctx.graph, query=p.query, limit=p.limit, time_range=p.time_range
@@ -109,7 +109,7 @@ ACTIONS: dict[str, Action] = {
     ),
     "create_node": Action(
         "create_node",
-        "Create a semantic node.",
+        "Create a semantic node. Creation is refused (ok=false, with candidates) when an existing node likely denotes the same entity — update that node instead, or retry with force=true only if the entity is genuinely distinct.",
         CreateNodeInput,
         lambda p, ctx: memory.create_node(
             ctx.graph,
@@ -121,6 +121,7 @@ ACTIONS: dict[str, Action] = {
             event_time=ctx.event_time,
             happened_at=p.happened_at,
             session_id=ctx.session_id,
+            force=p.force,
         ),
     ),
     "update_node": Action(

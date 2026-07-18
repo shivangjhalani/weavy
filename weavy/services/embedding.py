@@ -26,9 +26,19 @@ def embed(text: str) -> list[float]:
     return response.data[0]["embedding"]
 
 
-def embed_node(aliases: list[str], summary: str) -> list[float]:
+def embed_node(
+    aliases: list[str], summary: str, notes: list[str] | None = None
+) -> list[float]:
+    """Embed a node's accumulated knowledge, not just its current summary.
+
+    Log notes carry the facts that earlier summaries held (updates archive the
+    prior summary into the log) — folding them into the vector keeps past facts
+    retrievable after the summary moves on.
+    """
     text = " | ".join(aliases) + " — " + summary
-    return embed(text)
+    if notes:
+        text += "\n" + "\n".join(notes)
+    return embed(text[:6000])
 
 
 def embed_edge(label: str, fact: str) -> list[float]:

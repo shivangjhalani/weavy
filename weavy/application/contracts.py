@@ -20,12 +20,15 @@ class SearchResult(BaseModel):
     the entity's summary line). ``kind="edge"`` rows describe a relationship fact
     (``id`` is ``edge:N``, ``text`` is the fact, and ``endpoints`` names the two
     nodes it connects so the agent can traverse from a fact to its entities).
+    ``kind="episode"`` rows are verbatim excerpts from an original episode
+    (``id`` is ``s:N``, ``text`` is the excerpt) — ground truth behind the
+    semantic layer, readable in full via ``get_session``.
     """
 
-    kind: Literal["node", "edge"]
+    kind: Literal["node", "edge", "episode"]
     id: str
-    label: str  # node: canonical alias; edge: relationship label
-    text: str  # node: summary line; edge: the fact
+    label: str  # node: canonical alias; edge: relationship label; episode: date
+    text: str  # node: summary line; edge: the fact; episode: verbatim excerpt
     score: float  # vector distance (lower = closer); keyword hits use 0.0
     edge_count: int | None = None  # node only: degree, for hub identification
     endpoints: list[str] | None = None  # edge only: [from_node_id, to_node_id]

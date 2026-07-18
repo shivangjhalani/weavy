@@ -42,6 +42,8 @@ For each entity or fact, search with **3+ different phrasings** — exact name, 
 - Found a match → `update_node` to integrate new information. Do **not** create a duplicate.
 - No match → `create_node` with a complete, searchable representation.
 
+`create_node` enforces this: it refuses (ok=false) when an existing node likely denotes the same entity, naming the candidates. Switch to `update_node` on the named match; use `force=true` only when the entity is genuinely distinct (e.g. two different people sharing a name).
+
 ### Step 3 — Handle contradictions explicitly
 
 When new information **contradicts or supersedes** what is already in the graph:

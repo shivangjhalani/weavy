@@ -75,6 +75,8 @@ def _ensure_vector_index(graph: Graph, dim: int) -> None:
         f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
         f"CREATE VECTOR INDEX FOR ()-[r:RELATES]->() ON (r.embedding) "
         f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
+        f"CREATE VECTOR INDEX FOR (c:Chunk) ON (c.embedding) "
+        f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
     )
     for stmt in statements:
         try:

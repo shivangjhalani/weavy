@@ -21,7 +21,7 @@ The themes above are orientation, not answers — use them to identify which gra
 
 ### Execute with multiple angles
 
-For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`). Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved.
+For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. Results are a **unified ranked list**: each hit is an entity (`kind="node"`), a relationship fact (`kind="edge"`), or a verbatim episode excerpt (`kind="episode"`). Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved. **Episode hits are ground truth**: node and edge summaries are compressions, but an episode excerpt is the original source — trust its specifics (names, dates, details) over a summary, and call `get_session` on its `s:N` id when you need the surrounding context.
 
 After finding candidate nodes, use `get_node_neighborhood` to follow edges. **The graph's structure encodes relationships that direct search cannot surface** — a neighbor's neighbor may hold the answer. Key nodes are hubs; traverse them.
 
@@ -58,9 +58,12 @@ Attributes are frequently stated in passing, not as explicit declarations. Searc
 
 Then check log entries — states evolve over time and the most recent entry reflects current reality.
 
-### Abstention
+### Inference vs. abstention
 
-If thorough retrieval — multiple search angles, neighborhood traversal, log inspection — surfaces nothing relevant, say so clearly: **"The graph has no record of this."** Do not fabricate or speculate beyond what the graph contains. Absence is a valid answer.
+Distinguish two situations:
+
+- **Relevant evidence exists but doesn't literally state the answer** — give your best inference grounded in that evidence, flagged as inferred. A question like "would X enjoy Y?" is answerable from X's stored preferences even though no node says it outright. Do not abstain when adjacent evidence supports a reasonable conclusion.
+- **Nothing relevant surfaces** after thorough retrieval — multiple search angles, neighborhood traversal, log inspection — say so clearly: **"The graph has no record of this."** Do not fabricate. When the question asserts something the graph does not support, do not confirm it; absence is a valid answer.
 
 ## Answering
 

@@ -10,6 +10,7 @@ from weavy.harness.actions import SESSION_ACTIONS
 from weavy.harness.runner import run
 from weavy.models.canonical import ChatMessage, Session
 from weavy.models.traces import RunTrace, graph_changes as _graph_changes
+from weavy.services import memory
 from weavy.store import canonical as store_canonical
 from weavy.store import system as store_system
 
@@ -25,6 +26,10 @@ def create_session(
     store_canonical.create_session(
         graph, Session(id=session_id, timestamp=ts, messages=messages)
     )
+    if text:
+        # Episodes are first-class memory: index the verbatim text so search
+        # surfaces source excerpts alongside the semantic layer.
+        memory.index_episode(graph, session_id=session_id, text=text, timestamp=ts)
     return session_id
 
 

@@ -28,6 +28,9 @@ class CreateNodeInput(BaseModel):
     note: str
     provenance: ProvenanceInput
     happened_at: HappenedAt = None
+    # Creation is refused when an existing node likely denotes the same entity;
+    # set force=true only after confirming the entity is genuinely distinct.
+    force: bool = False
 
 
 class UpdateNodeInput(BaseModel):
