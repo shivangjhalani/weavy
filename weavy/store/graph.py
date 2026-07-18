@@ -286,9 +286,15 @@ def create_edge(
         },
     )
     if not result.result_set:
-        raise ValueError(
-            f"Cannot create edge: one or both nodes not found "
-            f"(from='{from_node_id}', to='{to_node_id}')."
+        # Domain refusal, not a system fault: report it as a result the agent
+        # can react to (look up real ids and retry) instead of raising.
+        return OperationResult(
+            ok=False,
+            message=(
+                f"Not created — one or both nodes do not exist "
+                f"(from='{from_node_id}', to='{to_node_id}'). Use node ids "
+                f"returned by create_node/search_graph, then retry."
+            ),
         )
     return OperationResult(ok=True, id=edge_id)
 
@@ -394,6 +400,17 @@ def _edge_row(edge_id, label, fact, from_id, to_id, score: float) -> SearchResul
     )
 
 
+def _episode_row(session_id, timestamp, text, score: float) -> SearchResult:
+    date = (timestamp or "")[:10]
+    return SearchResult(
+        kind="episode",
+        id=session_id,
+        label=f"episode {date}" if date else "episode",
+        text=text or "",
+        score=score,
+    )
+
+
 def _log_in_range(raw_log, start: datetime, end: datetime) -> bool:
     for entry_str in raw_log or []:
         entry = _deserialize_log_entry(entry_str)
@@ -416,7 +433,17 @@ def _filter_by_time_range(
     start, end = time_range[0], time_range[1]
     node_ids = [r.id for r in results if r.kind == "node"]
     edge_ids = [r.id for r in results if r.kind == "edge"]
+    episode_ids = [r.id for r in results if r.kind == "episode"]
     passing: set[str] = set()
+
+    if episode_ids:
+        rows = graph.query(
+            "MATCH (s:Session) WHERE s.id IN $ids RETURN s.id, s.timestamp",
+            {"ids": episode_ids},
+        )
+        for session_id, ts in rows.result_set:
+            if ts and start <= datetime.fromisoformat(ts) <= end:
+                passing.add(session_id)
 
     if node_ids:
         rows = graph.query(
@@ -478,13 +505,16 @@ def search_graph(
             )
 
         # FalkorDB indexes relationships separately; surface edge-facts in the same ranking.
+        # Read endpoints via startNode()/endNode() rather than re-MATCHing `relationship` —
+        # FalkorDB doesn't treat a YIELDed relationship as bound in a later MATCH pattern,
+        # which silently collapses every row's `score` to the first row's value.
         edge_vec = graph.query(
             f"""
             CALL db.idx.vector.queryRelationships(
                 'RELATES', 'embedding', $limit, {vec_literal}
             ) YIELD relationship, score
-            MATCH (a:SemanticNode)-[relationship]->(b:SemanticNode)
-            RETURN relationship.id, relationship.label, relationship.fact, a.id, b.id, score
+            RETURN relationship.id, relationship.label, relationship.fact,
+                   startNode(relationship).id, endNode(relationship).id, score
             """,
             {"limit": limit},
         )
@@ -492,6 +522,20 @@ def search_graph(
             _keep(
                 _edge_row(eid, label, fact, from_id, to_id, float(score)), float(score)
             )
+
+        # Episode excerpts — verbatim source text behind the semantic layer.
+        # Multiple chunks of one session collapse to its best-scoring excerpt.
+        chunk_vec = graph.query(
+            f"""
+            CALL db.idx.vector.queryNodes(
+                'Chunk', 'embedding', $limit, {vec_literal}
+            ) YIELD node, score
+            RETURN node.session_id, node.timestamp, node.text, score
+            """,
+            {"limit": limit},
+        )
+        for sid, ts, text, score in chunk_vec.result_set:
+            _keep(_episode_row(sid, ts, text, float(score)), float(score))
 
     node_kw = graph.query(
         """
@@ -524,10 +568,75 @@ def search_graph(
         if eid not in seen:
             seen[eid] = _edge_row(eid, label, fact, from_id, to_id, _KEYWORD_SCORE)
 
+    chunk_kw = graph.query(
+        """
+        MATCH (c:Chunk)
+        WHERE toLower(c.text) CONTAINS toLower($query)
+        RETURN c.session_id, c.timestamp, c.text
+        LIMIT $limit
+        """,
+        {"query": query, "limit": limit},
+    )
+    for sid, ts, text in chunk_kw.result_set:
+        if sid not in seen:
+            seen[sid] = _episode_row(sid, ts, text, _KEYWORD_SCORE)
+
     results = sorted(seen.values(), key=lambda r: r.score)[:limit]
     if time_range:
         results = _filter_by_time_range(graph, results, time_range)
     return SearchGraphOutput(results=results)
+
+
+def find_similar_nodes(
+    graph: Graph,
+    *,
+    aliases: list[str],
+    embedding: list[float],
+    max_distance: float,
+    limit: int = 3,
+) -> list[tuple[str, str, float]]:
+    """Existing nodes that likely denote the same entity as a prospective write.
+
+    A node matches if it shares an alias (case-insensitive) or its embedding is
+    within *max_distance* (cosine). Returns [(node_id, canonical_alias, distance)]
+    ordered nearest-first; alias matches without a close vector report distance
+    as found by the vector query or ``max_distance`` if outside its top-k.
+    """
+    candidates: dict[str, tuple[str, float]] = {}
+
+    rows = graph.query(
+        f"""
+        CALL db.idx.vector.queryNodes(
+            'SemanticNode', 'embedding', $limit, {_vecf32_literal(embedding)}
+        ) YIELD node, score
+        RETURN node.id, node.aliases, score
+        """,
+        {"limit": limit},
+    )
+    lowered = {a.lower() for a in aliases}
+    for nid, node_aliases, score in rows.result_set:
+        alias_hit = any(a.lower() in lowered for a in node_aliases or [])
+        if float(score) <= max_distance or alias_hit:
+            canonical = (node_aliases or [nid])[0]
+            candidates[nid] = (canonical, float(score))
+
+    alias_rows = graph.query(
+        """
+        MATCH (n:SemanticNode)
+        WHERE ANY(a IN n.aliases WHERE toLower(a) IN $aliases)
+        RETURN n.id, n.aliases
+        LIMIT $limit
+        """,
+        {"aliases": list(lowered), "limit": limit},
+    )
+    for nid, node_aliases in alias_rows.result_set:
+        if nid not in candidates:
+            candidates[nid] = ((node_aliases or [nid])[0], max_distance)
+
+    return sorted(
+        [(nid, alias, dist) for nid, (alias, dist) in candidates.items()],
+        key=lambda t: t[2],
+    )[:limit]
 
 
 def get_node(graph: Graph, node_id: str) -> GetNodeResult:
