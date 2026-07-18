@@ -58,6 +58,19 @@ def mock_fetch_prompt():
         yield mock
 
 
+def _fake_embed(text: str) -> list[float]:
+    """Deterministic per-text vector: same text -> same vector, different
+    texts -> (near-)orthogonal vectors. Keeps similarity semantics (and the
+    create_node duplicate guard) honest in tests without real embedding calls."""
+    import hashlib
+    import math
+
+    digest = hashlib.sha256(text.encode()).digest()
+    vec = [digest[i] - 127.5 for i in range(TEST_EMBEDDING_DIM)]
+    norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+    return [x / norm for x in vec]
+
+
 @pytest.fixture(autouse=True)
 def mock_embeddings():
     """Mock embedding calls to avoid real LiteLLM/Gemini calls in tests."""
@@ -67,11 +80,20 @@ def mock_embeddings():
         yield None
         return
 
-    dummy_vec = [0.1] * TEST_EMBEDDING_DIM
     with (
-        patch.object(embedding, "embed", return_value=dummy_vec),
-        patch.object(embedding, "embed_node", return_value=dummy_vec),
-        patch.object(embedding, "embed_edge", return_value=dummy_vec),
+        patch.object(embedding, "embed", side_effect=_fake_embed),
+        patch.object(
+            embedding,
+            "embed_node",
+            side_effect=lambda aliases, summary, notes=None: _fake_embed(
+                " | ".join(aliases) + " — " + summary
+            ),
+        ),
+        patch.object(
+            embedding,
+            "embed_edge",
+            side_effect=lambda label, fact: _fake_embed(f"{label} — {fact}"),
+        ),
         patch.object(embedding, "get_dimension", return_value=TEST_EMBEDDING_DIM),
     ):
         yield
