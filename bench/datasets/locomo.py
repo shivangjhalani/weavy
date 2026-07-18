@@ -200,9 +200,18 @@ def _load_qa(item: dict) -> QAItem | None:
     if "question" not in item or "category" not in item:
         return None
     category = int(item["category"])
-    # Category 5 stores the *correct* rebuttal in "answer"; "adversarial_answer"
-    # is the trap. We grade against the correct answer / abstention.
-    answer = item.get("answer", item.get("adversarial_answer", ""))
+    # Category 5 sometimes stores the correct yes/no rebuttal in "answer" (the
+    # question posed a binary false premise); "adversarial_answer" is always
+    # the trap the question implies and must never be graded as gold — most
+    # category-5 items in this dataset carry only "adversarial_answer" (the
+    # premise substitutes the wrong entity/attribute with no single correct
+    # string), so gold falls back to a premise-is-false marker instead.
+    if "answer" in item:
+        answer = item["answer"]
+    elif category == 5:
+        answer = "The premise is false / not supported by the record."
+    else:
+        answer = item.get("adversarial_answer", "")
     return QAItem(
         question=str(item["question"]).strip(),
         answer=str(answer).strip(),
