@@ -1,13 +1,18 @@
 """Episode chunking/search and the create_node duplicate guard."""
 
+from unittest.mock import patch
+
 import pytest
 
+from tests.conftest import _fake_embed
 from tests.helpers import reset_test_graph
 from weavy.application.session_runs import create_session
 from weavy.harness.tracing import new_trace
 from weavy.models.graph import ProvenanceInput
 from weavy.models.traces import RunTrace
+from weavy.services import embedding as embedding_module
 from weavy.services import memory
+from weavy.store import graph as store_graph
 
 
 @pytest.fixture
@@ -119,6 +124,62 @@ def test_create_node_force_overrides_guard(graph):
         force=True,
     )
     assert forced.ok
+
+
+def test_find_similar_nodes_uses_stable_identity_vector(graph):
+    """Regression for the identity/content embedding split: a node's content
+    embedding drifts as note history accumulates, but dedup must compare
+    against identity_embedding (aliases+summary only), which never does.
+
+    The default test mock ignores `notes` entirely, so it can't exercise this
+    — it patches in a notes-sensitive fake embedder locally to prove the
+    stored identity vector survives updates that would drift a blended one.
+    """
+
+    def notes_sensitive_embed_node(aliases, summary, notes=None):
+        text = " | ".join(aliases) + " — " + summary
+        if notes:
+            text += "\n" + "\n".join(notes)
+        return _fake_embed(text)
+
+    original_identity_vec = _fake_embed("Melanie — Melanie is a potter.")
+
+    with patch.object(
+        embedding_module, "embed_node", side_effect=notes_sensitive_embed_node
+    ):
+        created = memory.create_node(
+            graph,
+            aliases=["Melanie"],
+            summary="Melanie is a potter.",
+            note="n",
+            provenance=_provenance(),
+            trace=_trace(),
+        )
+        assert created.ok
+
+        # Unrelated note history drifts the content embedding far from the
+        # original — none of these updates touch summary/aliases, so
+        # identity_embedding must not move.
+        for i in range(5):
+            memory.update_node(
+                graph,
+                node_id=created.id,
+                note=f"unrelated tangent number {i} " + "z" * 300,
+                provenance=_provenance(),
+                trace=_trace(),
+            )
+
+    # Probe with the ORIGINAL clean identity vector, using an alias that
+    # shares nothing with "Melanie" so only the embedding path can match.
+    # A near-0 distance proves identity_embedding held steady while the
+    # content vector (embedding) drifted.
+    similar = store_graph.find_similar_nodes(
+        graph,
+        aliases=["distinct-alias"],
+        embedding=original_identity_vec,
+        max_distance=0.01,
+    )
+    assert any(nid == created.id for nid, _, _ in similar)
 
 
 def test_create_node_allows_distinct_entities(graph):

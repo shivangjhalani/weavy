@@ -135,7 +135,7 @@ def test_ingest_missing_session_raises(graph: Graph) -> None:
 
 
 def test_theme_update_creates_theme(graph: Graph) -> None:
-    """Theme agent calls create_theme then complete_theme_update; Theme node and priority_order persist."""
+    """Theme agent calls create_theme then complete_theme_update; Theme node persists."""
     session_id = store_test_session(graph, SAMPLE_TEXT)
     node_id = increment_counter(graph, "node")
     prov = ProvenanceInput(source_id=session_id)
@@ -155,12 +155,8 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
         "name": "career-direction",
         "state": "Weighing whether to leave job.",
         "anchors": [node_id],
-        "status": ["active"],
     }
-    completion_args = {
-        "updated_themes": ["career-direction"],
-        "priority_order": ["career-direction"],
-    }
+    completion_args = {"updated_themes": ["career-direction"]}
 
     usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
     create_resp = mock_tool_response(
@@ -178,16 +174,12 @@ def test_theme_update_creates_theme(graph: Graph) -> None:
     result = store_themes.get_theme(graph, "career-direction")
     assert result.name == "career-direction"
     assert node_id in result.anchors
-
-    # Salience order is now intrinsic to the themes: reconciliation projected the
-    # agent's priority_order onto the theme's rank.
     assert [t.name for t in store_themes.list_all_themes(graph)] == ["career-direction"]
-    assert result.priority == 0
 
 
 def test_theme_update_empty_map_runs(graph: Graph) -> None:
     """Theme agent can run with no existing themes or sessions."""
-    completion_args = {"updated_themes": [], "priority_order": []}
+    completion_args = {"updated_themes": []}
     done_resp = mock_tool_response(
         "complete_theme_update",
         completion_args,

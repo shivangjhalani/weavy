@@ -19,41 +19,21 @@ from weavy.store import themes as store_themes
 
 
 def finalize_theme(graph: Graph, trace: RunTrace) -> RunTrace:
+    """Record the run's completion time.
+
+    Previously also reconciled an agent-supplied ``priority_order`` onto a
+    stored rank per theme (see git history for `_reconcile_priority`). Themes
+    are now surfaced to ingestion/query as a plain name menu (see
+    `application/prompts.build_themes_context`), so there is nothing left to
+    reconcile here — the theme agent's job ends at create/update/retire.
+    """
     if trace.status != "completed":
         return trace
-
-    _reconcile_priority(graph, (trace.completion_payload or {}).get("priority_order"))
 
     store_system.update_last_theme_run_at(
         graph, datetime.now(tz=timezone.utc).isoformat()
     )
     return trace
-
-
-def _reconcile_priority(graph: Graph, agent_order: list[str] | None) -> None:
-    """Project the agent's salience hint onto the real theme set, then persist it.
-
-    The agent's ``priority_order`` is a *hint*, not authoritative state: we keep only
-    names that correspond to real themes (in the agent's order), then append any theme
-    the agent omitted (stable by current rank, then name). The result is written as a
-    rank on each theme, so the stored order can never reference a theme that does not
-    exist. This is the single point where the LLM's output meets ground truth.
-    """
-    themes = store_themes.list_all_themes(graph)  # ground truth
-    if not themes:
-        return
-
-    seen: set[str] = set()
-    existing = {t.name for t in themes}
-    ordered = [
-        name
-        for name in (agent_order or [])
-        if name in existing and not (name in seen or seen.add(name))
-    ]
-    leftovers = sorted(
-        (t for t in themes if t.name not in seen), key=lambda t: (t.priority, t.name)
-    )
-    store_themes.set_theme_priority(graph, ordered + [t.name for t in leftovers])
 
 
 def run_theme_update(
@@ -76,8 +56,7 @@ def run_theme_update(
         user_content = render_session_journal(sessions)
     else:
         user_content = (
-            "No new sessions since your last run. "
-            "Review existing themes for coherence and priority."
+            "No new sessions since your last run. Review existing themes for coherence."
         )
 
     trace = run(

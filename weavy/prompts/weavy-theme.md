@@ -38,7 +38,7 @@ Read the session digest in the user message. Use read tools (`search_graph`, `ge
 
 **Naming**: Short descriptive phrases. Stable across updates — rename only when the thread has fundamentally changed character. No near-duplicates.
 
-**Status**: Use one or two of: `deep` (well-developed with substantial graph structure), `active` (currently ongoing and generating new material), `emerging` (appearing across sessions but not yet deep), `dormant` (present in graph but not recently active).
+**State**: This is where lifecycle shows up, not a separate tag — say directly whether the thread is deep and well-established, actively generating new material, freshly emerging, or dormant, as part of the 2–4 sentence description.
 
 **Anchors**: Node IDs that are central to this theme — the nodes a query agent should inspect first. Require existing `node:N` ids only.
 
@@ -48,8 +48,4 @@ Call `set_preface` if your synthesis reveals the preface is missing, stale, or n
 
 ## Completion
 
-Call `complete_theme_update` with:
-- `updated_themes` — names created or materially changed (empty if none)
-- `priority_order` — full ordered list of all surviving (non-retired) theme names, most salient first
-
-Return a coherent `priority_order` even if no changes were made.
+Call `complete_theme_update` with `updated_themes` — names created or materially changed (empty if none).

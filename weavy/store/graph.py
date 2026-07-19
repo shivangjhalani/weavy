@@ -134,9 +134,14 @@ def create_node(
 ) -> OperationResult:
     entry = _make_log_entry(provenance, note, event_time, happened_at)
     entry_json = _serialize_log_entry(entry)
-    embedding_clause = (
-        f", embedding: {_vecf32_literal(embedding)}" if embedding is not None else ""
-    )
+    embedding_clause = ""
+    if embedding is not None:
+        # On creation there is no note history yet, so the content vector and
+        # the identity vector (aliases+summary only) are the same value.
+        vec_literal = _vecf32_literal(embedding)
+        embedding_clause = (
+            f", embedding: {vec_literal}, identity_embedding: {vec_literal}"
+        )
     graph.query(
         f"""
         CREATE (n:SemanticNode {{
@@ -167,6 +172,7 @@ def update_node(
     new_aliases: list[str] | None,
     provenance: ProvenanceInput | None,
     embedding: list[float] | None = None,
+    identity_embedding: list[float] | None = None,
     current_summary: str | None = None,
     event_time: datetime | None = None,
     happened_at: datetime | None = None,
@@ -202,6 +208,10 @@ def update_node(
         params["new_name"] = new_aliases[0]
     if embedding is not None:
         set_parts.append(f"n.embedding = {_vecf32_literal(embedding)}")
+    if identity_embedding is not None:
+        set_parts.append(
+            f"n.identity_embedding = {_vecf32_literal(identity_embedding)}"
+        )
 
     result = graph.query(
         f"MATCH (n:SemanticNode {{id: $id}}) SET {', '.join(set_parts)} RETURN n",
@@ -378,7 +388,9 @@ def delete_edge(graph: Graph, edge_id: str) -> OperationResult:
 # ---------------------------------------------------------------------------
 
 
-def _node_row(node_id, aliases, summary, edge_count, score: float) -> SearchResult:
+def _node_row(
+    node_id, aliases, summary, edge_count, score: float | None = None
+) -> SearchResult:
     return SearchResult(
         kind="node",
         id=node_id,
@@ -389,7 +401,9 @@ def _node_row(node_id, aliases, summary, edge_count, score: float) -> SearchResu
     )
 
 
-def _edge_row(edge_id, label, fact, from_id, to_id, score: float) -> SearchResult:
+def _edge_row(
+    edge_id, label, fact, from_id, to_id, score: float | None = None
+) -> SearchResult:
     return SearchResult(
         kind="edge",
         id=edge_id,
@@ -400,7 +414,9 @@ def _edge_row(edge_id, label, fact, from_id, to_id, score: float) -> SearchResul
     )
 
 
-def _episode_row(session_id, timestamp, text, score: float) -> SearchResult:
+def _episode_row(
+    session_id, timestamp, text, score: float | None = None
+) -> SearchResult:
     date = (timestamp or "")[:10]
     return SearchResult(
         kind="episode",
@@ -464,11 +480,6 @@ def _filter_by_time_range(
                 passing.add(edge_id)
 
     return [r for r in results if r.id in passing]
-
-
-_KEYWORD_SCORE = (
-    1.0  # sort keyword-only hits after vector hits (which carry true distances)
-)
 
 
 def search_graph(
@@ -552,7 +563,7 @@ def search_graph(
     )
     for nid, aliases, summary, edge_count in node_kw.result_set:
         if nid not in seen:
-            seen[nid] = _node_row(nid, aliases, summary, edge_count, _KEYWORD_SCORE)
+            seen[nid] = _node_row(nid, aliases, summary, edge_count)
 
     edge_kw = graph.query(
         """
@@ -566,7 +577,7 @@ def search_graph(
     )
     for eid, label, fact, from_id, to_id in edge_kw.result_set:
         if eid not in seen:
-            seen[eid] = _edge_row(eid, label, fact, from_id, to_id, _KEYWORD_SCORE)
+            seen[eid] = _edge_row(eid, label, fact, from_id, to_id)
 
     chunk_kw = graph.query(
         """
@@ -579,9 +590,14 @@ def search_graph(
     )
     for sid, ts, text in chunk_kw.result_set:
         if sid not in seen:
-            seen[sid] = _episode_row(sid, ts, text, _KEYWORD_SCORE)
+            seen[sid] = _episode_row(sid, ts, text)
 
-    results = sorted(seen.values(), key=lambda r: r.score)[:limit]
+    # Vector hits carry a real cosine distance and always outrank keyword-only
+    # hits, which have no distance to compare — tier is a structural fact
+    # about what kind of match this is, not a number tuned to approximate one.
+    results = sorted(seen.values(), key=lambda r: (r.score is None, r.score or 0.0))[
+        :limit
+    ]
     if time_range:
         results = _filter_by_time_range(graph, results, time_range)
     return SearchGraphOutput(results=results)
@@ -597,17 +613,24 @@ def find_similar_nodes(
 ) -> list[tuple[str, str, float]]:
     """Existing nodes that likely denote the same entity as a prospective write.
 
-    A node matches if it shares an alias (case-insensitive) or its embedding is
-    within *max_distance* (cosine). Returns [(node_id, canonical_alias, distance)]
-    ordered nearest-first; alias matches without a close vector report distance
-    as found by the vector query or ``max_distance`` if outside its top-k.
+    A node matches if it shares an alias (case-insensitive) or its identity
+    embedding is within *max_distance* (cosine). Returns
+    [(node_id, canonical_alias, distance)] ordered nearest-first; alias matches
+    without a close vector report distance as found by the vector query or
+    ``max_distance`` if outside its top-k.
+
+    Queries ``identity_embedding`` (aliases+summary only), not ``embedding``
+    (which also carries accumulated note history for updated nodes) — a fresh
+    candidate never has notes, so comparing it against the note-laden content
+    vector would compare two different kinds of thing. *embedding* here is the
+    candidate's own clean aliases+summary vector, matching that representation.
     """
     candidates: dict[str, tuple[str, float]] = {}
 
     rows = graph.query(
         f"""
         CALL db.idx.vector.queryNodes(
-            'SemanticNode', 'embedding', $limit, {_vecf32_literal(embedding)}
+            'SemanticNode', 'identity_embedding', $limit, {_vecf32_literal(embedding)}
         ) YIELD node, score
         RETURN node.id, node.aliases, score
         """,

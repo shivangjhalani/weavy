@@ -104,7 +104,7 @@ weavy/
   models/
     canonical.py     — Session, ChatMessage, conversation_to_chat_messages
     graph.py         — SemanticNode, SemanticEdge, ProvenanceInput
-    themes.py        — Theme, ThemeStatus
+    themes.py        — Theme
     traces.py        — RunTrace, Turn, TurnUsage, TouchedNode/Edge
   store/             — FalkorDB reads/writes (canonical, graph, themes, system)
     client.py        — FalkorDB client / graph access

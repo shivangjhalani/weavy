@@ -27,7 +27,6 @@ def test_init_system_creates_node(graph: Graph) -> None:
     assert state.next_node_id == 1
     assert state.next_edge_id == 1
     assert state.next_session_id == 1
-    assert state.hot_theme_token_budget > 0
     assert state.last_theme_run_at == "1970-01-01T00:00:00+00:00"
 
 

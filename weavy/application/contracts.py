@@ -29,7 +29,9 @@ class SearchResult(BaseModel):
     id: str
     label: str  # node: canonical alias; edge: relationship label; episode: date
     text: str  # node: summary line; edge: the fact; episode: verbatim excerpt
-    score: float  # vector distance (lower = closer); keyword hits use 0.0
+    score: (
+        float | None
+    )  # vector distance (lower = closer); None = keyword-only hit, no real distance
     edge_count: int | None = None  # node only: degree, for hub identification
     endpoints: list[str] | None = None  # edge only: [from_node_id, to_node_id]
 

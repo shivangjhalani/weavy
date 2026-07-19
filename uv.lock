@@ -1748,7 +1748,6 @@ dependencies = [
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "tiktoken" },
 ]
 
 [package.optional-dependencies]
@@ -1779,7 +1778,6 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "tiktoken", specifier = ">=0.12.0" },
 ]
 provides-extras = ["langfuse", "dev"]
 

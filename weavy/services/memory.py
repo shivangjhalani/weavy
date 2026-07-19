@@ -21,20 +21,34 @@ from weavy.store import system as store_system
 # distinct-entity pairs overlap (summaries describe content, not identity), so
 # the vector check only catches near-certain rephrasings; alias equality is the
 # primary identity signal and is checked independently of distance.
+#
+# Compared against identity_embedding (aliases+summary only — see
+# find_similar_nodes), never the content embedding that accumulates note
+# history, so the comparison is always apples-to-apples regardless of how many
+# times the existing node has been updated. This is an irreducible judgment
+# call, not a derivable fact — it is scoped to the embedding model actually
+# configured (settings.EMBEDDING_MODEL), not assumed universal across models.
 DUPLICATE_DISTANCE = 0.2
 
 # Episode chunking: greedy line packing into windows of roughly this many
 # characters, overlapping by one line so facts straddling a boundary survive.
+# This is a retrieval-granularity target, not a derivable value — but it must
+# never exceed what the embedding model can actually take, so chunk_text clamps
+# it against the model's real budget rather than trusting the guess blindly.
 _CHUNK_TARGET_CHARS = 800
 
 
-def chunk_text(text: str, target: int = _CHUNK_TARGET_CHARS) -> list[str]:
+def chunk_text(text: str, target: int | None = None) -> list[str]:
     """Split text into overlapping windows for embedding, structure-agnostic.
 
     Lines are the packing unit when present (dialogue, notes, logs); a single
     line longer than *target* is hard-split. Consecutive chunks share one line
-    of overlap.
+    of overlap. *target* defaults to the smaller of the quality target and the
+    embedding model's real capacity, computed lazily so it stays mockable in
+    tests instead of being frozen in a default argument at import time.
     """
+    if target is None:
+        target = min(_CHUNK_TARGET_CHARS, embedding.get_char_budget())
     units: list[str] = []
     for line in text.splitlines():
         line = line.strip()
@@ -173,8 +187,17 @@ def update_node(
     fetched_summary = current.node.summary
     aliases = new_aliases if new_aliases is not None else current.node.aliases
     summary = new_summary if new_summary is not None else fetched_summary
-    notes = [entry.note for entry in current.node.log][-8:] + [note]
+    notes = [entry.note for entry in current.node.log] + [note]
     vec = embedding.embed_node(aliases, summary, notes)
+
+    # identity_embedding (aliases+summary only, no notes) is dedup's own,
+    # stable representation — recomputed only when the identity-relevant
+    # fields actually change, not on every log entry.
+    identity_vec = (
+        embedding.embed_node(aliases, summary)
+        if new_summary is not None or new_aliases is not None
+        else None
+    )
 
     result = store_graph.update_node(
         graph,
@@ -183,6 +206,7 @@ def update_node(
         new_summary=new_summary,
         new_aliases=new_aliases,
         provenance=provenance,
+        identity_embedding=identity_vec,
         embedding=vec,
         current_summary=fetched_summary,
         event_time=event_time,

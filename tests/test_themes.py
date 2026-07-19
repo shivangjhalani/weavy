@@ -1,5 +1,5 @@
 """
-Theme CRUD, anchor management, and hot-theme rendering.
+Theme CRUD and anchor management.
 Requires a running FalkorDB instance (provided by devenv up).
 Uses the "weavy_test" graph to avoid touching the main graph.
 """
@@ -7,8 +7,7 @@ Uses the "weavy_test" graph to avoid touching the main graph.
 import pytest
 from falkordb import Graph
 
-from weavy.application.prompts import render_hot_themes
-from weavy.models.themes import Theme
+from weavy.application.prompts import build_themes_context
 from weavy.store import themes as store_themes
 from tests.helpers import reset_test_graph
 
@@ -25,19 +24,16 @@ def graph() -> Graph:
 
 def test_create_theme_basic(graph: Graph) -> None:
     store_themes.create_theme(
-        graph, "career-direction", "Weighing a job change.", ["node:1"], ["active"]
+        graph, "career-direction", "Weighing a job change.", ["node:1"]
     )
     theme = store_themes.get_theme(graph, "career-direction")
     assert theme.name == "career-direction"
     assert theme.state == "Weighing a job change."
-    assert theme.status == ["active"]
     assert "node:1" in theme.anchors
 
 
 def test_create_theme_no_anchors(graph: Graph) -> None:
-    store_themes.create_theme(
-        graph, "sleep-routine", "Tracking sleep.", [], ["emerging"]
-    )
+    store_themes.create_theme(graph, "sleep-routine", "Tracking sleep.", [])
     result = store_themes.get_theme(graph, "sleep-routine")
     assert result.anchors == []
 
@@ -53,52 +49,31 @@ def test_get_theme_not_found(graph: Graph) -> None:
 
 
 def test_update_theme_state_only(graph: Graph) -> None:
-    store_themes.create_theme(
-        graph, "meditation-practice", "Just started.", ["node:1"], ["emerging"]
-    )
+    store_themes.create_theme(graph, "meditation-practice", "Just started.", ["node:1"])
     store_themes.update_theme(
         graph,
         "meditation-practice",
         new_state="Practiced for 2 weeks.",
         new_anchors=None,
-        new_status=None,
     )
     result = store_themes.get_theme(graph, "meditation-practice")
     assert result.state == "Practiced for 2 weeks."
-    assert result.status == ["emerging"]  # unchanged
     assert "node:1" in result.anchors  # unchanged
 
 
 def test_update_theme_anchors_add_remove(graph: Graph) -> None:
-    store_themes.create_theme(
-        graph, "mental-health", "Exploring emotions.", ["node:1"], ["active"]
-    )
+    store_themes.create_theme(graph, "mental-health", "Exploring emotions.", ["node:1"])
     store_themes.update_theme(
-        graph, "mental-health", new_state=None, new_anchors=["node:2"], new_status=None
+        graph, "mental-health", new_state=None, new_anchors=["node:2"]
     )
     result = store_themes.get_theme(graph, "mental-health")
     assert "node:1" not in result.anchors
     assert "node:2" in result.anchors
 
 
-def test_update_theme_status(graph: Graph) -> None:
-    store_themes.create_theme(graph, "pottery-class", "Casual hobby.", [], ["emerging"])
-    store_themes.update_theme(
-        graph,
-        "pottery-class",
-        new_state=None,
-        new_anchors=None,
-        new_status=["deep", "active"],
-    )
-    result = store_themes.get_theme(graph, "pottery-class")
-    assert set(result.status) == {"deep", "active"}
-
-
 def test_update_theme_not_found(graph: Graph) -> None:
     with pytest.raises(ValueError, match="not found"):
-        store_themes.update_theme(
-            graph, "nonexistent", new_state="x", new_anchors=None, new_status=None
-        )
+        store_themes.update_theme(graph, "nonexistent", new_state="x", new_anchors=None)
 
 
 # ---------------------------------------------------------------------------
@@ -107,9 +82,7 @@ def test_update_theme_not_found(graph: Graph) -> None:
 
 
 def test_retire_theme(graph: Graph) -> None:
-    store_themes.create_theme(
-        graph, "exercise", "Building fitness habit.", ["node:1"], ["active"]
-    )
+    store_themes.create_theme(graph, "exercise", "Building fitness habit.", ["node:1"])
     store_themes.retire_theme(graph, "exercise")
     with pytest.raises(ValueError, match="not found"):
         store_themes.get_theme(graph, "exercise")
@@ -130,96 +103,47 @@ def test_list_all_themes_empty(graph: Graph) -> None:
 
 
 def test_list_all_themes_multiple(graph: Graph) -> None:
-    store_themes.create_theme(graph, "career", "Career focus.", ["node:1"], ["active"])
-    store_themes.create_theme(graph, "health", "Health matters.", [], ["emerging"])
+    store_themes.create_theme(graph, "career", "Career focus.", ["node:1"])
+    store_themes.create_theme(graph, "health", "Health matters.", [])
     themes = store_themes.list_all_themes(graph)
     names = {t.name for t in themes}
     assert names == {"career", "health"}
 
 
-# ---------------------------------------------------------------------------
-# render_hot_themes (pure function)
-# ---------------------------------------------------------------------------
+def test_list_all_themes_orders_by_name(graph: Graph) -> None:
+    # Previously ordered by an agent-maintained `priority` rank reconciled on
+    # every theme-run (see git history). Themes are now a plain name menu
+    # (see application/prompts.build_themes_context) with nothing to rank, so
+    # listing order is just name order — deterministic, no agent upkeep.
+    for name in ("c", "a", "b"):
+        store_themes.create_theme(graph, name, f"state {name}", [])
+    assert [t.name for t in store_themes.list_all_themes(graph)] == ["a", "b", "c"]
 
 
-def test_render_hot_themes_empty() -> None:
-    hot, cold = render_hot_themes([], 250)
-    assert hot == ""
-    assert cold == []
-
-
-def test_render_hot_themes_budget_respected() -> None:
-    themes = [
-        Theme(
-            name=f"theme-{i}",
-            state=f"Long state description for theme number {i}.",
-            status=["active"],
-            anchors=[],
-        )
-        for i in range(20)
-    ]
-    hot, cold = render_hot_themes(themes, 100)
-    assert len(cold) > 0
-    assert "HOT THEMES" in hot
-
-
-def test_render_hot_themes_cold_index_in_output() -> None:
-    themes = [
-        Theme(name="theme-a", state="Short.", status=["deep"], anchors=[]),
-        Theme(
-            name="theme-b",
-            state="A very long state description that will certainly push the cumulative token count over any reasonable small budget.",
-            status=["emerging"],
-            anchors=[],
-        ),
-    ]
-    hot, cold = render_hot_themes(themes, 20)
-    assert "theme-b" in cold
-    assert "Other themes" in hot
-
-
-# ---------------------------------------------------------------------------
-# priority ordering — order is intrinsic to themes, reconciled from the agent hint
-# ---------------------------------------------------------------------------
-
-
-def test_list_all_themes_orders_by_priority(graph: Graph) -> None:
-    for name in ("a", "b", "c"):
-        store_themes.create_theme(graph, name, f"state {name}", [], ["active"])
-    store_themes.set_theme_priority(graph, ["c", "a", "b"])
-    assert [t.name for t in store_themes.list_all_themes(graph)] == ["c", "a", "b"]
-
-
-def test_set_theme_priority_ignores_unknown_names(graph: Graph) -> None:
-    """A stale/unknown name in the ordering hint matches nothing — no error, no crash."""
-    store_themes.create_theme(graph, "real", "state", [], ["active"])
-    store_themes.set_theme_priority(graph, ["ghost", "real"])  # 'ghost' does not exist
-    themes = store_themes.list_all_themes(graph)
-    assert [t.name for t in themes] == ["real"]
-    # render path must never raise on a stale name (the original crash)
-    hot, _ = render_hot_themes(themes, 250)
-    assert "real" in hot
-
-
-def test_reconcile_priority_appends_omitted_themes(graph: Graph) -> None:
-    from weavy.application.theme_runs import _reconcile_priority
-
-    for name in ("x", "y", "z"):
-        store_themes.create_theme(graph, name, f"state {name}", [], ["active"])
-    # Agent hint names one unknown theme and omits 'z' entirely.
-    _reconcile_priority(graph, ["y", "bogus", "x"])
-    order = [t.name for t in store_themes.list_all_themes(graph)]
-    assert order[:2] == ["y", "x"]  # agent order honoured for real themes
-    assert "z" in order  # omitted theme still present, appended
-    assert "bogus" not in order
-
-
-def test_retire_theme_leaves_no_dangling_order(graph: Graph) -> None:
+def test_retire_theme_removes_it_from_listing(graph: Graph) -> None:
     for name in ("a", "b"):
-        store_themes.create_theme(graph, name, f"state {name}", [], ["active"])
-    store_themes.set_theme_priority(graph, ["a", "b"])
+        store_themes.create_theme(graph, name, f"state {name}", [])
     store_themes.retire_theme(graph, "a")
-    themes = store_themes.list_all_themes(graph)
-    assert [t.name for t in themes] == ["b"]
-    hot, _ = render_hot_themes(themes, 250)  # no reference to retired 'a'
-    assert "a [" not in hot
+    assert [t.name for t in store_themes.list_all_themes(graph)] == ["b"]
+
+
+# ---------------------------------------------------------------------------
+# build_themes_context — the ingestion/query-facing theme menu (names only;
+# full `state` is fetched on demand via get_theme, not pre-rendered here)
+# ---------------------------------------------------------------------------
+
+
+def test_build_themes_context_empty_uses_fallback(graph: Graph) -> None:
+    assert build_themes_context(graph, empty_msg="(none)") == "(none)"
+
+
+def test_build_themes_context_lists_names_only(graph: Graph) -> None:
+    store_themes.create_theme(
+        graph, "career-direction", "A long state description.", ["node:1"]
+    )
+    store_themes.create_theme(graph, "sleep-routine", "Another long description.", [])
+    context = build_themes_context(graph)
+    assert "career-direction" in context
+    assert "sleep-routine" in context
+    # names only — full state text must not leak into the menu
+    assert "long state description" not in context.lower()

@@ -16,6 +16,7 @@ The graph IS the memory. Its quality determines what can be retrieved. **Edges a
 - **Session:** `{{session_id}}`
 - **Graph preface:** {{preface}}
 - **Active themes:** {{themes_context}}
+  (names only — call `get_theme` on any that look relevant to this material before connecting to them)
   {{caller_context}}
 
 ## What to extract

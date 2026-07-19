@@ -17,7 +17,7 @@ Before calling any tool, think through:
 2. What are all the ways someone might refer to those entities in stored memory?
 3. What **adjacent concepts** might hold the answer indirectly?
 
-The themes above are orientation, not answers — use them to identify which graph regions to explore first.
+The themes above are names, not answers — pick the ones that look relevant to the question and call `get_theme` on them to read their current `state` and `anchors` before searching, then use that to identify which graph regions to explore first.
 
 ### Execute with multiple angles
 

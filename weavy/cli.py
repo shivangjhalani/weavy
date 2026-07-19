@@ -23,15 +23,14 @@ from weavy.store.system import (
 
 
 def _print_system_state(header: str, state: SystemState, graph: Graph) -> None:
-    theme_order = [t.name for t in store_themes.list_all_themes(graph)]
+    theme_names = [t.name for t in store_themes.list_all_themes(graph)]
     print(f"{header}:")
-    print(f"  preface               = {state.preface or '(not set)'}")
-    print(f"  next_node_id          = {state.next_node_id}")
-    print(f"  next_edge_id          = {state.next_edge_id}")
-    print(f"  next_session_id       = {state.next_session_id}")
-    print(f"  hot_theme_token_budget = {state.hot_theme_token_budget}")
-    print(f"  theme_priority_order  = {theme_order}")
-    print(f"  last_theme_run_at     = {state.last_theme_run_at}")
+    print(f"  preface           = {state.preface or '(not set)'}")
+    print(f"  next_node_id      = {state.next_node_id}")
+    print(f"  next_edge_id      = {state.next_edge_id}")
+    print(f"  next_session_id   = {state.next_session_id}")
+    print(f"  themes            = {theme_names}")
+    print(f"  last_theme_run_at = {state.last_theme_run_at}")
 
 
 def _read_text(source: str) -> str:

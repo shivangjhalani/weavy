@@ -195,16 +195,14 @@ ACTIONS: dict[str, Action] = {
         "create_theme",
         "Create a theme.",
         CreateThemeInput,
-        lambda p, ctx: store_themes.create_theme(
-            ctx.graph, p.name, p.state, p.anchors, p.status
-        ),
+        lambda p, ctx: store_themes.create_theme(ctx.graph, p.name, p.state, p.anchors),
     ),
     "update_theme": Action(
         "update_theme",
         "Update a theme.",
         UpdateThemeInput,
         lambda p, ctx: store_themes.update_theme(
-            ctx.graph, p.name, p.new_state, p.new_anchors, p.new_status
+            ctx.graph, p.name, p.new_state, p.new_anchors
         ),
     ),
     "retire_theme": Action(

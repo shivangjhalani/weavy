@@ -11,7 +11,6 @@ from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
 
 from weavy.models.graph import ProvenanceInput
-from weavy.models.themes import ThemeStatus
 
 NodeId = Annotated[str, StringConstraints(pattern=r"^node:\d+$")]
 EdgeId = Annotated[str, StringConstraints(pattern=r"^edge:\d+$")]
@@ -104,14 +103,12 @@ class CreateThemeInput(BaseModel):
     name: str
     state: str
     anchors: list[NodeId]
-    status: list[ThemeStatus]
 
 
 class UpdateThemeInput(BaseModel):
     name: str
     new_state: str | None = None
     new_anchors: list[NodeId] | None = None
-    new_status: list[ThemeStatus] | None = None
 
 
 class RetireThemeInput(BaseModel):
@@ -131,4 +128,3 @@ class CompleteInput(BaseModel):
 
 class CompleteThemeUpdateInput(BaseModel):
     updated_themes: list[str]
-    priority_order: list[str]

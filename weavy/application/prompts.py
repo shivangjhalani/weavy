@@ -32,67 +32,21 @@ def fetch_prompt(name: str, variables: dict[str, object]) -> str:
     return template
 
 
-@lru_cache(maxsize=1)
-def _get_theme_tokenizer():
-    """Use cl100k_base as an approximate tokenizer for prompt budgeting."""
-    import tiktoken
+def build_themes_context(graph: Graph, empty_msg: str = "(No themes yet.)") -> str:
+    """List every theme by name — a menu, not a rendering.
 
-    return tiktoken.get_encoding("cl100k_base")
-
-
-def render_hot_themes(
-    themes: list[Theme],
-    token_budget: int,
-) -> tuple[str, list[str]]:
-    """Render themes (already in salience order) until the token budget fills.
-
-    Themes carry their own rank, so there is no separate order list to validate and
-    nothing here can reference a non-existent theme.
+    Previously themes were pre-ranked by an agent-maintained ``priority`` field
+    and rendered in full until a token budget filled, demoting the rest to a
+    bare name (see git history for `render_hot_themes`). That required global
+    re-ranking on every theme-run and a budget number with no principled value.
+    Theme names are designed to be self-describing search entry points (see
+    weavy-theme.md), so the menu alone is enough to orient — the agent pulls a
+    theme's full `state` on demand via `get_theme` when a name looks relevant.
     """
-    if not themes:
-        return ("", [])
-
-    hot_parts: list[str] = []
-    cold_names: list[str] = []
-    tokens_used = 0
-
-    for theme in themes:
-        rendered = theme.render_block()
-        token_count = len(_get_theme_tokenizer().encode(rendered))
-        if tokens_used + token_count <= token_budget:
-            hot_parts.append(rendered)
-            tokens_used += token_count
-        else:
-            cold_names.append(theme.name)
-
-    if not hot_parts:
-        return ("", cold_names)
-
-    total = len(themes)
-    hot_count = len(hot_parts)
-    header = (
-        f"HOT THEMES ({hot_count} of {total} themes, filling "
-        f"{tokens_used} of {token_budget} token budget)\n\n"
-    )
-    hot_block = header + "\n\n".join(hot_parts)
-    if cold_names:
-        hot_block += "\n\nOther themes: " + ", ".join(cold_names)
-    return (hot_block, cold_names)
-
-
-def build_themes_context(
-    graph: Graph,
-    budget: int,
-    empty_msg: str = "(No themes yet.)",
-) -> str:
-    all_themes = store_themes.list_all_themes(graph)
-    hot_block, cold_names = render_hot_themes(all_themes, budget)
-
-    if hot_block:
-        return hot_block
-    if cold_names:
-        return "Themes (no hot set rendered): " + ", ".join(cold_names)
-    return empty_msg
+    names = [t.name for t in store_themes.list_all_themes(graph)]
+    if not names:
+        return empty_msg
+    return "\n".join(f"- {name}" for name in names)
 
 
 def build_themed_system_prompt(
@@ -112,9 +66,7 @@ def build_themed_system_prompt(
         system_state.preface or "(not set — call set_preface to describe this graph)"
     )
     prompt_variables["themes_context"] = build_themes_context(
-        graph,
-        system_state.hot_theme_token_budget,
-        empty_msg=empty_themes_message,
+        graph, empty_msg=empty_themes_message
     )
     prompt_variables["caller_context"] = (
         f"- **Caller context:** {caller_context}" if caller_context else ""
@@ -123,14 +75,13 @@ def build_themed_system_prompt(
 
 
 def render_full_theme_map(themes: list[Theme]) -> str:
+    """Full theme map for the theme agent's own view (every theme, name order)."""
     if not themes:
         return "CURRENT THEME MAP: (empty — no themes yet)\n"
 
     lines = ["CURRENT THEME MAP:\n"]
     for theme in themes:
         lines.append(f"{theme.render_block()}\n")
-    # themes arrive in salience order — surface it explicitly for the agent.
-    lines.append(f"\nCurrent priority order: {[t.name for t in themes]}")
     return "\n".join(lines)
 
 

@@ -7,8 +7,6 @@ from typing import Literal
 from falkordb import Graph
 from pydantic import BaseModel
 
-from weavy.config import settings
-
 CounterName = Literal["node", "edge", "session"]
 
 _COUNTER_FIELD: dict[str, str] = {
@@ -22,31 +20,21 @@ class SystemState(BaseModel):
     next_node_id: int
     next_edge_id: int
     next_session_id: int
-    hot_theme_token_budget: int
     last_theme_run_at: str
     preface: str | None = None  # what this graph is about
 
 
-def init_system(
-    graph: Graph,
-    embedding_dim: int | None = None,
-    hot_theme_token_budget: int | None = None,
-) -> SystemState:
+def init_system(graph: Graph, embedding_dim: int | None = None) -> SystemState:
     """Create the System node if it does not exist; return current state.
 
     When *embedding_dim* is provided, a vector index is created (or verified)
     on SemanticNode.embedding for hybrid search.
 
-    *hot_theme_token_budget* seeds the budget on first creation; it defaults to
-    ``settings.HOT_THEME_TOKEN_BUDGET``. Once the node exists, the persisted
-    value is the runtime source of truth (``MERGE`` only sets it ``ON CREATE``),
-    so re-running init never overwrites a budget tuned per-graph.
+    Previously also seeded a ``hot_theme_token_budget`` used to ration how many
+    themes got rendered in full per run (see git history). Themes are now
+    surfaced as a plain name menu with no budget to tune — see
+    `application/prompts.build_themes_context`.
     """
-    budget = (
-        hot_theme_token_budget
-        if hot_theme_token_budget is not None
-        else settings.HOT_THEME_TOKEN_BUDGET
-    )
     result = graph.query(
         """
         MERGE (s:System)
@@ -55,11 +43,9 @@ def init_system(
             s.next_node_id = 1,
             s.next_edge_id = 1,
             s.next_session_id = 1,
-            s.hot_theme_token_budget = $budget,
             s.last_theme_run_at = '1970-01-01T00:00:00+00:00'
         RETURN s
-        """,
-        {"budget": budget},
+        """
     )
 
     if embedding_dim is not None:
@@ -72,6 +58,12 @@ def _ensure_vector_index(graph: Graph, dim: int) -> None:
     """Create vector indexes for entity nodes and relationship facts (idempotent)."""
     statements = (
         f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
+        f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
+        # Separate index for dedup: identity_embedding covers aliases+summary
+        # only, never the note history that n.embedding accumulates, so a
+        # fresh candidate is always compared against the same kind of vector
+        # it is (see memory.DUPLICATE_DISTANCE).
+        f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.identity_embedding) "
         f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
         f"CREATE VECTOR INDEX FOR ()-[r:RELATES]->() ON (r.embedding) "
         f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
