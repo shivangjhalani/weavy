@@ -32,7 +32,7 @@ A theme should:
 
 Read the session digest in the user message. Use read tools (`search_graph`, `get_node`, `get_node_neighborhood`, `get_theme`) to investigate nodes relevant to current or potential themes. Then reconcile the theme map:
 
-- **Create** — for genuinely new long-running threads not yet represented. Require evidence from at least two distinct sessions or a single session with clear forward momentum.
+- **Create** — for genuinely new long-running threads not yet represented. Create only for a recurring thread — one that has shown up across sessions or has clear forward momentum — not a one-off topic.
 - **Update** — when a theme's situation, depth, or salience has materially shifted. Update `state` to reflect current reality. Update `anchors` when better anchor nodes exist.
 - **Retire** — when a thread has resolved, concluded, or genuinely faded. Retire decisively; a bloated theme map is worse than a lean one.
 

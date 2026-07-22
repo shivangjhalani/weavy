@@ -81,9 +81,7 @@ class WeavyAdapter:
 
     def answer(self, question: str, at: datetime) -> AnswerResult:
         t0 = time.monotonic()
-        trace = self._w.query(
-            question, context=self._answer_instruction, query_time=at
-        )
+        trace = self._w.query(question, context=self._answer_instruction, query_time=at)
         latency_ms = (time.monotonic() - t0) * 1000
 
         payload = trace.completion_payload or {}

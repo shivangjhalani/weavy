@@ -69,7 +69,7 @@ def _complete(params: Any, ctx: ActionContext) -> OperationResult:
 ACTIONS: dict[str, Action] = {
     "search_graph": Action(
         "search_graph",
-        "Hybrid search over the whole memory — semantic similarity (embedding) plus keyword matching, returning a unified ranked list of entities (kind='node'), relationship facts (kind='edge'), and verbatim episode excerpts (kind='episode', id is the s:N session — ground truth; read the full episode with get_session). Use varied phrasings to maximize recall. Optional time_range [start, end] filters to that window.",
+        "Hybrid search over the semantic graph — the sole search surface. Semantic similarity (embedding) plus keyword matching, returning a unified ranked list of entities (kind='node') and relationship facts (kind='edge'). To reach ground-truth episode text, navigate from a result: get_node's mentioned_by (or an edge's source_id) gives the s:N session id, then read it with get_session. Use varied phrasings to maximize recall. Optional time_range [start, end] filters to that window.",
         SearchGraphInput,
         lambda p, ctx: memory.search_graph(
             ctx.graph, query=p.query, limit=p.limit, time_range=p.time_range
@@ -215,9 +215,7 @@ ACTIONS: dict[str, Action] = {
         "set_preface",
         "Set or update the graph preface — a short description of what this graph is about and whose it is.",
         SetPrefaceInput,
-        lambda p, ctx: (
-            store_system.set_preface(ctx.graph, p.preface) or OperationResult(ok=True)
-        ),
+        lambda p, ctx: store_system.set_preface(ctx.graph, p.preface),
     ),
     "complete": Action(
         "complete",

@@ -7,6 +7,8 @@ from typing import Literal
 from falkordb import Graph
 from pydantic import BaseModel
 
+from weavy.application.contracts import OperationResult
+
 CounterName = Literal["node", "edge", "session"]
 
 _COUNTER_FIELD: dict[str, str] = {
@@ -35,6 +37,9 @@ def init_system(graph: Graph, embedding_dim: int | None = None) -> SystemState:
     surfaced as a plain name menu with no budget to tune — see
     `application/prompts.build_themes_context`.
     """
+    # `name` is not read by app code; FalkorDB Browser uses it as the node's
+    # display caption. Keep in sync with `id`/`aliases[0]` on every node type
+    # that sets it (SemanticNode, Session, System).
     result = graph.query(
         """
         MERGE (s:System)
@@ -59,15 +64,7 @@ def _ensure_vector_index(graph: Graph, dim: int) -> None:
     statements = (
         f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.embedding) "
         f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
-        # Separate index for dedup: identity_embedding covers aliases+summary
-        # only, never the note history that n.embedding accumulates, so a
-        # fresh candidate is always compared against the same kind of vector
-        # it is (see memory.DUPLICATE_DISTANCE).
-        f"CREATE VECTOR INDEX FOR (n:SemanticNode) ON (n.identity_embedding) "
-        f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
         f"CREATE VECTOR INDEX FOR ()-[r:RELATES]->() ON (r.embedding) "
-        f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
-        f"CREATE VECTOR INDEX FOR (c:Chunk) ON (c.embedding) "
         f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}",
     )
     for stmt in statements:
@@ -90,13 +87,14 @@ def get_system(graph: Graph) -> SystemState:
     return SystemState(**result.result_set[0][0].properties)
 
 
-def set_preface(graph: Graph, preface: str) -> None:
+def set_preface(graph: Graph, preface: str) -> OperationResult:
     result = graph.query(
         "MATCH (s:System) SET s.preface = $preface RETURN s",
         {"preface": preface},
     )
     if not result.result_set:
         raise RuntimeError("System node not found. Cannot update preface.")
+    return OperationResult(ok=True)
 
 
 def update_last_theme_run_at(graph: Graph, iso_timestamp: str) -> None:

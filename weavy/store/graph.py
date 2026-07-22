@@ -136,12 +136,9 @@ def create_node(
     entry_json = _serialize_log_entry(entry)
     embedding_clause = ""
     if embedding is not None:
-        # On creation there is no note history yet, so the content vector and
-        # the identity vector (aliases+summary only) are the same value.
-        vec_literal = _vecf32_literal(embedding)
-        embedding_clause = (
-            f", embedding: {vec_literal}, identity_embedding: {vec_literal}"
-        )
+        embedding_clause = f", embedding: {_vecf32_literal(embedding)}"
+    # `name` is not read by app code; it's the FalkorDB Browser display
+    # caption (see store/system.py:init_system).
     graph.query(
         f"""
         CREATE (n:SemanticNode {{
@@ -172,7 +169,6 @@ def update_node(
     new_aliases: list[str] | None,
     provenance: ProvenanceInput | None,
     embedding: list[float] | None = None,
-    identity_embedding: list[float] | None = None,
     current_summary: str | None = None,
     event_time: datetime | None = None,
     happened_at: datetime | None = None,
@@ -208,10 +204,6 @@ def update_node(
         params["new_name"] = new_aliases[0]
     if embedding is not None:
         set_parts.append(f"n.embedding = {_vecf32_literal(embedding)}")
-    if identity_embedding is not None:
-        set_parts.append(
-            f"n.identity_embedding = {_vecf32_literal(identity_embedding)}"
-        )
 
     result = graph.query(
         f"MATCH (n:SemanticNode {{id: $id}}) SET {', '.join(set_parts)} RETURN n",
@@ -389,41 +381,28 @@ def delete_edge(graph: Graph, edge_id: str) -> OperationResult:
 
 
 def _node_row(
-    node_id, aliases, summary, edge_count, score: float | None = None
+    node_id, aliases, summary, edge_count, distance: float | None = None
 ) -> SearchResult:
     return SearchResult(
         kind="node",
         id=node_id,
         label=aliases[0] if aliases else node_id,
         text=summary.splitlines()[0] if summary else "",
-        score=score,
+        distance=distance,
         edge_count=int(edge_count),
     )
 
 
 def _edge_row(
-    edge_id, label, fact, from_id, to_id, score: float | None = None
+    edge_id, label, fact, from_id, to_id, distance: float | None = None
 ) -> SearchResult:
     return SearchResult(
         kind="edge",
         id=edge_id,
         label=label or "",
         text=(fact or "").splitlines()[0] if fact else "",
-        score=score,
+        distance=distance,
         endpoints=[from_id, to_id],
-    )
-
-
-def _episode_row(
-    session_id, timestamp, text, score: float | None = None
-) -> SearchResult:
-    date = (timestamp or "")[:10]
-    return SearchResult(
-        kind="episode",
-        id=session_id,
-        label=f"episode {date}" if date else "episode",
-        text=text or "",
-        score=score,
     )
 
 
@@ -449,17 +428,7 @@ def _filter_by_time_range(
     start, end = time_range[0], time_range[1]
     node_ids = [r.id for r in results if r.kind == "node"]
     edge_ids = [r.id for r in results if r.kind == "edge"]
-    episode_ids = [r.id for r in results if r.kind == "episode"]
     passing: set[str] = set()
-
-    if episode_ids:
-        rows = graph.query(
-            "MATCH (s:Session) WHERE s.id IN $ids RETURN s.id, s.timestamp",
-            {"ids": episode_ids},
-        )
-        for session_id, ts in rows.result_set:
-            if ts and start <= datetime.fromisoformat(ts) <= end:
-                passing.add(session_id)
 
     if node_ids:
         rows = graph.query(
@@ -482,6 +451,18 @@ def _filter_by_time_range(
     return [r for r in results if r.id in passing]
 
 
+# Reciprocal Rank Fusion constant (standard choice; see Cormack et al. 2009).
+# RRF combines the vector-distance ranking and the keyword match-tier ranking
+# by rank position rather than raw magnitude, so a top keyword hit (e.g. an
+# exact alias/title match) can outrank a middling vector hit instead of being
+# structurally capped below every embedding result.
+_RRF_K = 60
+
+
+def _rrf_scores(ranked_ids: list[str]) -> dict[str, float]:
+    return {rid: 1.0 / (_RRF_K + rank) for rank, rid in enumerate(ranked_ids, start=1)}
+
+
 def search_graph(
     graph: Graph,
     *,
@@ -490,12 +471,8 @@ def search_graph(
     query_embedding: list[float] | None = None,
     time_range: list[datetime] | None = None,
 ) -> SearchGraphOutput:
-    seen: dict[str, SearchResult] = {}
-
-    def _keep(result: SearchResult, score: float) -> None:
-        existing = seen.get(result.id)
-        if existing is None or score < existing.score:
-            seen[result.id] = result
+    rows: dict[str, SearchResult] = {}
+    vector_hits: list[tuple[float, str]] = []
 
     if query_embedding is not None:
         vec_literal = _vecf32_literal(query_embedding)
@@ -510,10 +487,9 @@ def search_graph(
             """,
             {"limit": limit},
         )
-        for nid, aliases, summary, edge_count, score in node_vec.result_set:
-            _keep(
-                _node_row(nid, aliases, summary, edge_count, float(score)), float(score)
-            )
+        for nid, aliases, summary, edge_count, distance in node_vec.result_set:
+            rows[nid] = _node_row(nid, aliases, summary, edge_count, float(distance))
+            vector_hits.append((float(distance), nid))
 
         # FalkorDB indexes relationships separately; surface edge-facts in the same ranking.
         # Read endpoints via startNode()/endNode() rather than re-MATCHing `relationship` —
@@ -529,75 +505,64 @@ def search_graph(
             """,
             {"limit": limit},
         )
-        for eid, label, fact, from_id, to_id, score in edge_vec.result_set:
-            _keep(
-                _edge_row(eid, label, fact, from_id, to_id, float(score)), float(score)
-            )
+        for eid, label, fact, from_id, to_id, distance in edge_vec.result_set:
+            rows[eid] = _edge_row(eid, label, fact, from_id, to_id, float(distance))
+            vector_hits.append((float(distance), eid))
 
-        # Episode excerpts — verbatim source text behind the semantic layer.
-        # Multiple chunks of one session collapse to its best-scoring excerpt.
-        chunk_vec = graph.query(
-            f"""
-            CALL db.idx.vector.queryNodes(
-                'Chunk', 'embedding', $limit, {vec_literal}
-            ) YIELD node, score
-            RETURN node.session_id, node.timestamp, node.text, score
-            """,
-            {"limit": limit},
-        )
-        for sid, ts, text, score in chunk_vec.result_set:
-            _keep(_episode_row(sid, ts, text, float(score)), float(score))
-
+    # match_tier 0 = the query hit the entity's identity (alias/label), the
+    # strongest keyword signal; 1 = it only hit free text (summary/fact).
+    # Ordering by tier gives keyword hits a real rank to feed into RRF instead
+    # of leaving them all tied with no way to compare to each other or to
+    # vector hits.
     node_kw = graph.query(
         """
         MATCH (n:SemanticNode)
         WHERE ANY(a IN n.aliases WHERE toLower(a) CONTAINS toLower($query))
            OR toLower(n.summary) CONTAINS toLower($query)
         OPTIONAL MATCH (n)-[r:RELATES]-()
-        WITH n, count(r) AS edge_count
-        RETURN n.id, n.aliases, n.summary, edge_count
-        ORDER BY edge_count DESC
+        WITH n, count(r) AS edge_count,
+             CASE WHEN ANY(a IN n.aliases WHERE toLower(a) CONTAINS toLower($query))
+                  THEN 0 ELSE 1 END AS match_tier
+        RETURN n.id, n.aliases, n.summary, edge_count, match_tier
+        ORDER BY match_tier ASC, edge_count DESC
         LIMIT $limit
         """,
         {"query": query, "limit": limit},
     )
-    for nid, aliases, summary, edge_count in node_kw.result_set:
-        if nid not in seen:
-            seen[nid] = _node_row(nid, aliases, summary, edge_count)
+    keyword_hits: list[tuple[int, str]] = []
+    for nid, aliases, summary, edge_count, match_tier in node_kw.result_set:
+        if nid not in rows:
+            rows[nid] = _node_row(nid, aliases, summary, edge_count)
+        keyword_hits.append((match_tier, nid))
 
     edge_kw = graph.query(
         """
         MATCH (a:SemanticNode)-[r:RELATES]->(b:SemanticNode)
         WHERE toLower(r.label) CONTAINS toLower($query)
            OR toLower(r.fact) CONTAINS toLower($query)
-        RETURN r.id, r.label, r.fact, a.id, b.id
+        WITH a, b, r,
+             CASE WHEN toLower(r.label) CONTAINS toLower($query)
+                  THEN 0 ELSE 1 END AS match_tier
+        RETURN r.id, r.label, r.fact, a.id, b.id, match_tier
+        ORDER BY match_tier ASC
         LIMIT $limit
         """,
         {"query": query, "limit": limit},
     )
-    for eid, label, fact, from_id, to_id in edge_kw.result_set:
-        if eid not in seen:
-            seen[eid] = _edge_row(eid, label, fact, from_id, to_id)
+    for eid, label, fact, from_id, to_id, match_tier in edge_kw.result_set:
+        if eid not in rows:
+            rows[eid] = _edge_row(eid, label, fact, from_id, to_id)
+        keyword_hits.append((match_tier, eid))
 
-    chunk_kw = graph.query(
-        """
-        MATCH (c:Chunk)
-        WHERE toLower(c.text) CONTAINS toLower($query)
-        RETURN c.session_id, c.timestamp, c.text
-        LIMIT $limit
-        """,
-        {"query": query, "limit": limit},
-    )
-    for sid, ts, text in chunk_kw.result_set:
-        if sid not in seen:
-            seen[sid] = _episode_row(sid, ts, text)
+    vector_rank = [rid for _, rid in sorted(vector_hits, key=lambda t: t[0])]
+    keyword_rank = [rid for _, rid in sorted(keyword_hits, key=lambda t: t[0])]
+    vector_scores = _rrf_scores(vector_rank)
+    keyword_scores = _rrf_scores(keyword_rank)
+    fused = {
+        rid: vector_scores.get(rid, 0.0) + keyword_scores.get(rid, 0.0) for rid in rows
+    }
 
-    # Vector hits carry a real cosine distance and always outrank keyword-only
-    # hits, which have no distance to compare — tier is a structural fact
-    # about what kind of match this is, not a number tuned to approximate one.
-    results = sorted(seen.values(), key=lambda r: (r.score is None, r.score or 0.0))[
-        :limit
-    ]
+    results = sorted(rows.values(), key=lambda r: fused[r.id], reverse=True)[:limit]
     if time_range:
         results = _filter_by_time_range(graph, results, time_range)
     return SearchGraphOutput(results=results)
@@ -613,24 +578,22 @@ def find_similar_nodes(
 ) -> list[tuple[str, str, float]]:
     """Existing nodes that likely denote the same entity as a prospective write.
 
-    A node matches if it shares an alias (case-insensitive) or its identity
-    embedding is within *max_distance* (cosine). Returns
-    [(node_id, canonical_alias, distance)] ordered nearest-first; alias matches
-    without a close vector report distance as found by the vector query or
-    ``max_distance`` if outside its top-k.
+    A node matches if it shares an alias (case-insensitive) or its embedding is
+    within *max_distance* (cosine). Returns [(node_id, canonical_alias,
+    distance)] ordered nearest-first; alias matches without a close vector
+    report distance as found by the vector query or ``max_distance`` if
+    outside its top-k.
 
-    Queries ``identity_embedding`` (aliases+summary only), not ``embedding``
-    (which also carries accumulated note history for updated nodes) — a fresh
-    candidate never has notes, so comparing it against the note-laden content
-    vector would compare two different kinds of thing. *embedding* here is the
-    candidate's own clean aliases+summary vector, matching that representation.
+    Queries the single ``embedding`` index — every node's embedding is aliases
+    + current summary only, so the candidate's own aliases+summary vector
+    always compares apples-to-apples against it.
     """
     candidates: dict[str, tuple[str, float]] = {}
 
     rows = graph.query(
         f"""
         CALL db.idx.vector.queryNodes(
-            'SemanticNode', 'identity_embedding', $limit, {_vecf32_literal(embedding)}
+            'SemanticNode', 'embedding', $limit, {_vecf32_literal(embedding)}
         ) YIELD node, score
         RETURN node.id, node.aliases, score
         """,

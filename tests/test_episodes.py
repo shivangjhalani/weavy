@@ -1,6 +1,4 @@
-"""Episode chunking/search and the create_node duplicate guard."""
-
-from unittest.mock import patch
+"""Navigational retrieval (graph -> episode) and the create_node duplicate guard."""
 
 import pytest
 
@@ -10,14 +8,13 @@ from weavy.application.session_runs import create_session
 from weavy.harness.tracing import new_trace
 from weavy.models.graph import ProvenanceInput
 from weavy.models.traces import RunTrace
-from weavy.services import embedding as embedding_module
 from weavy.services import memory
 from weavy.store import graph as store_graph
 
 
 @pytest.fixture
 def graph():
-    yield reset_test_graph("Session", "Chunk")
+    yield reset_test_graph("Session")
 
 
 def _trace() -> RunTrace:
@@ -28,55 +25,58 @@ def _provenance() -> ProvenanceInput:
     return ProvenanceInput(source_id="s:1")
 
 
-# --- chunk_text -----------------------------------------------------------
+# --- search_graph returns only nodes/edges --------------------------------
 
 
-def test_chunk_text_packs_lines_with_overlap():
-    lines = [f"speaker: line {i} " + "x" * 60 for i in range(20)]
-    chunks = memory.chunk_text("\n".join(lines), target=300)
-    assert len(chunks) > 1
-    # consecutive chunks share one line of overlap
-    for a, b in zip(chunks, chunks[1:]):
-        assert a.splitlines()[-1] == b.splitlines()[0]
-    # every line survives somewhere
-    joined = "\n".join(chunks)
-    assert all(line in joined for line in lines)
-
-
-def test_chunk_text_empty_and_blank():
-    assert memory.chunk_text("") == []
-    assert memory.chunk_text("\n  \n") == []
-
-
-def test_chunk_text_hard_splits_long_line():
-    chunks = memory.chunk_text("y" * 1000, target=300)
-    assert all(len(c) <= 300 for c in chunks)
-
-
-# --- episode indexing + search -------------------------------------------
-
-
-def test_session_with_text_indexes_chunks_and_search_finds_episode(graph):
+def test_search_graph_never_returns_episode_kind(graph):
     session_id = create_session("Ada: I adopted a guinea pig named Oscar.", graph)
-    rows = graph.query(
-        "MATCH (s:Session {id: $id})-[:HAS_CHUNK]->(c:Chunk) RETURN c.text",
-        {"id": session_id},
-    ).result_set
-    assert rows, "episode text should be chunk-indexed"
+    memory.create_node(
+        graph,
+        aliases=["Oscar"],
+        summary="A guinea pig Ada adopted.",
+        note="n",
+        provenance=_provenance(),
+        trace=_trace(),
+        session_id=session_id,
+    )
 
     out = memory.search_graph(graph, query="guinea pig named Oscar")
-    episode_hits = [r for r in out.results if r.kind == "episode"]
-    assert episode_hits and episode_hits[0].id == session_id
-    assert "Oscar" in episode_hits[0].text
+    assert out.results
+    assert all(r.kind in ("node", "edge") for r in out.results)
 
 
-def test_query_session_without_text_indexes_nothing(graph):
+def test_query_session_without_text_creates_no_search_surface(graph):
     session_id = create_session("", graph)
-    rows = graph.query(
-        "MATCH (s:Session {id: $id})-[:HAS_CHUNK]->(c:Chunk) RETURN c",
-        {"id": session_id},
-    ).result_set
-    assert rows == []
+    # No node/edge exists for this empty session, so nothing to find — but
+    # critically, no chunk/episode search surface was created for it either.
+    out = memory.search_graph(graph, query=session_id)
+    assert out.results == []
+
+
+# --- ground truth is reachable only by navigation -------------------------
+
+
+def test_episode_reachable_via_mentioned_by_then_get_session(graph):
+    text = "Ada: I adopted a guinea pig named Oscar."
+    session_id = create_session(text, graph)
+    created = memory.create_node(
+        graph,
+        aliases=["Oscar"],
+        summary="A guinea pig.",
+        note="n",
+        provenance=_provenance(),
+        trace=_trace(),
+        session_id=session_id,
+    )
+    assert created.ok
+
+    node_result = memory.get_node(graph, node_ids=[created.id]).results[0]
+    assert session_id in node_result.mentioned_by
+
+    from weavy.store import canonical as store_canonical
+
+    episode = store_canonical.get_session_output(graph, session_id)
+    assert "Oscar" in episode.text
 
 
 # --- create_node duplicate guard ------------------------------------------
@@ -126,57 +126,37 @@ def test_create_node_force_overrides_guard(graph):
     assert forced.ok
 
 
-def test_find_similar_nodes_uses_stable_identity_vector(graph):
-    """Regression for the identity/content embedding split: a node's content
-    embedding drifts as note history accumulates, but dedup must compare
-    against identity_embedding (aliases+summary only), which never does.
+def test_find_similar_nodes_uses_single_embedding_after_updates(graph):
+    """A node's embedding is aliases+summary only, so it does not drift as log
+    notes accumulate — dedup keeps matching the same node across updates that
+    only touch `note`, using the single `embedding` vector (no separate
+    identity vector)."""
 
-    The default test mock ignores `notes` entirely, so it can't exercise this
-    — it patches in a notes-sensitive fake embedder locally to prove the
-    stored identity vector survives updates that would drift a blended one.
-    """
+    created = memory.create_node(
+        graph,
+        aliases=["Melanie"],
+        summary="Melanie is a potter.",
+        note="n",
+        provenance=_provenance(),
+        trace=_trace(),
+    )
+    assert created.ok
 
-    def notes_sensitive_embed_node(aliases, summary, notes=None):
-        text = " | ".join(aliases) + " — " + summary
-        if notes:
-            text += "\n" + "\n".join(notes)
-        return _fake_embed(text)
-
-    original_identity_vec = _fake_embed("Melanie — Melanie is a potter.")
-
-    with patch.object(
-        embedding_module, "embed_node", side_effect=notes_sensitive_embed_node
-    ):
-        created = memory.create_node(
+    # Note-only updates never touch aliases/summary, so the embedding must not move.
+    for i in range(5):
+        memory.update_node(
             graph,
-            aliases=["Melanie"],
-            summary="Melanie is a potter.",
-            note="n",
+            node_id=created.id,
+            note=f"unrelated tangent number {i} " + "z" * 300,
             provenance=_provenance(),
             trace=_trace(),
         )
-        assert created.ok
 
-        # Unrelated note history drifts the content embedding far from the
-        # original — none of these updates touch summary/aliases, so
-        # identity_embedding must not move.
-        for i in range(5):
-            memory.update_node(
-                graph,
-                node_id=created.id,
-                note=f"unrelated tangent number {i} " + "z" * 300,
-                provenance=_provenance(),
-                trace=_trace(),
-            )
-
-    # Probe with the ORIGINAL clean identity vector, using an alias that
-    # shares nothing with "Melanie" so only the embedding path can match.
-    # A near-0 distance proves identity_embedding held steady while the
-    # content vector (embedding) drifted.
+    probe_vec = _fake_embed("Melanie — Melanie is a potter.")
     similar = store_graph.find_similar_nodes(
         graph,
         aliases=["distinct-alias"],
-        embedding=original_identity_vec,
+        embedding=probe_vec,
         max_distance=0.01,
     )
     assert any(nid == created.id for nid, _, _ in similar)
@@ -200,3 +180,55 @@ def test_create_node_allows_distinct_entities(graph):
         trace=_trace(),
     )
     assert a.ok and b.ok
+
+
+# --- single embedding, no identity_embedding -------------------------------
+
+
+def test_create_and_update_node_write_only_embedding(graph):
+    created = memory.create_node(
+        graph,
+        aliases=["Oscar"],
+        summary="A guinea pig.",
+        note="n",
+        provenance=_provenance(),
+        trace=_trace(),
+    )
+    props = (
+        graph.query("MATCH (n:SemanticNode {id: $id}) RETURN n", {"id": created.id})
+        .result_set[0][0]
+        .properties
+    )
+    assert "embedding" in props
+    assert "identity_embedding" not in props
+
+    memory.update_node(
+        graph,
+        node_id=created.id,
+        note="n2",
+        provenance=_provenance(),
+        trace=_trace(),
+        new_summary="A guinea pig named Oscar.",
+    )
+    props = (
+        graph.query("MATCH (n:SemanticNode {id: $id}) RETURN n", {"id": created.id})
+        .result_set[0][0]
+        .properties
+    )
+    assert "identity_embedding" not in props
+
+
+def test_single_node_vector_index_exists(graph):
+    indexes = graph.query("CALL db.indexes()").result_set
+    node_vector_indexes = [
+        row
+        for row in indexes
+        if row[0] == "SemanticNode" and "embedding" in (row[1] or [])
+    ]
+    assert node_vector_indexes
+    identity_indexes = [
+        row
+        for row in indexes
+        if row[0] == "SemanticNode" and "identity_embedding" in (row[1] or [])
+    ]
+    assert not identity_indexes

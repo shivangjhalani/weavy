@@ -37,6 +37,8 @@ def _get_session_props(graph: Graph, session_id: str) -> dict:
 
 
 def create_session(graph: Graph, session: Session) -> None:
+    # `name` is not read by app code; it's the FalkorDB Browser display
+    # caption (see store/system.py:init_system).
     graph.query(
         """
         CREATE (s:Session {
@@ -52,42 +54,6 @@ def create_session(graph: Graph, session: Session) -> None:
             "messages": json.dumps([m.model_dump() for m in session.messages]),
         },
     )
-
-
-def create_chunks(
-    graph: Graph,
-    session_id: str,
-    chunks: list[str],
-    embeddings: list[list[float]],
-    timestamp: datetime,
-) -> None:
-    """Persist embedded excerpts of an episode, linked to their Session.
-
-    Chunks make the canonical layer searchable: each carries a slice of the
-    episode's verbatim text and its embedding, so search can surface source
-    excerpts alongside semantic nodes and edges.
-    """
-    from weavy.store.graph import _vecf32_literal
-
-    for seq, (text, vec) in enumerate(zip(chunks, embeddings)):
-        graph.query(
-            f"""
-            MATCH (s:Session {{id: $session_id}})
-            CREATE (s)-[:HAS_CHUNK]->(c:Chunk {{
-                session_id: $session_id,
-                seq: $seq,
-                text: $text,
-                timestamp: $timestamp,
-                embedding: {_vecf32_literal(vec)}
-            }})
-            """,
-            {
-                "session_id": session_id,
-                "seq": seq,
-                "text": text,
-                "timestamp": timestamp.isoformat(),
-            },
-        )
 
 
 def get_session(

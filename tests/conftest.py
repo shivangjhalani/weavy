@@ -85,7 +85,7 @@ def mock_embeddings():
         patch.object(
             embedding,
             "embed_node",
-            side_effect=lambda aliases, summary, notes=None: _fake_embed(
+            side_effect=lambda aliases, summary: _fake_embed(
                 " | ".join(aliases) + " — " + summary
             ),
         ),
@@ -95,7 +95,5 @@ def mock_embeddings():
             side_effect=lambda label, fact: _fake_embed(f"{label} — {fact}"),
         ),
         patch.object(embedding, "get_dimension", return_value=TEST_EMBEDDING_DIM),
-        patch.object(embedding, "get_max_input_tokens", return_value=2048),
-        patch.object(embedding, "get_char_budget", return_value=2048 * 3),
     ):
         yield

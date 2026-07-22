@@ -78,7 +78,9 @@ def _ingest_phase(
         )
         return conv.sample_id, graph_name, stats
 
-    progress(f"Phase 1: ingesting {len(conversations)} conversations ({workers} workers)")
+    progress(
+        f"Phase 1: ingesting {len(conversations)} conversations ({workers} workers)"
+    )
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(_ingest, c): c for c in conversations}
         for fut in as_completed(futures):

@@ -8,7 +8,13 @@ The graph serves three consumers:
 2. A **theme agent** that synthesizes long-running arcs across time — it reads the graph to find persistent patterns
 3. **Future ingestion runs** that build on your structure
 
-The graph IS the memory. Its quality determines what can be retrieved. **Edges are more valuable than nodes alone** — connections enable multi-hop reasoning that flat search cannot. An isolated node is a dead end.
+The graph is the **sole** search surface — there is no raw-text fallback. If an entity you read about here never becomes a node, or becomes a node no search can find, or becomes a node no query can reach by traversal, the fact is gone: unanswerable even though the episode text still exists in storage. Your job is not "write a good summary" — it is **coverage + linking + source-pointing**:
+
+- **Coverage** — every answer-bearing entity becomes a node.
+- **Linking** — every node is connected by edges; an isolated node is a retrieval dead end.
+- **Source-pointing** — every node points back to the episode that produced it (`mentioned_by`), so an agent that needs a specific it dropped can navigate there.
+
+A lossy summary is fine — the specifics stay recoverable via the episode. A **missing, isolated, or unlinked entity is not fine** — it is an ingestion failure, not an acceptable compression. There is no retrieval safety net downstream of this step.
 
 ## Context
 
@@ -38,7 +44,7 @@ Read the **full input** before touching any tool. Inventory: what entities appea
 
 ### Step 2 — Search before creating
 
-For each entity or fact, search with **3+ different phrasings** — exact name, synonyms, abbreviations, related terms. Hybrid search combines vector similarity and keyword matching; different phrasings surface different graph regions. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`, with its `endpoints`). An edge hit is a direct route to two already-connected nodes — follow its endpoints rather than recreating them.
+For each entity or fact, search with **varied phrasings** — exact name, synonyms, abbreviations, related terms. Hybrid search combines vector similarity and keyword matching; different phrasings surface different graph regions. Results are a **unified ranked list**: each hit is either an entity (`kind="node"`) or a relationship fact (`kind="edge"`, with its `endpoints`). An edge hit is a direct route to two already-connected nodes — follow its endpoints rather than recreating them.
 
 - Found a match → `update_node` to integrate new information. Do **not** create a duplicate.
 - No match → `create_node` with a complete, searchable representation.
@@ -82,7 +88,7 @@ Scan each fact for **any** time reference — relative ("yesterday", "last week"
 
 ## Node quality
 
-**`aliases`** are the primary retrieval signal. Include every name this entity goes by: canonical name, abbreviations, nicknames, alternate spellings, common synonyms. A missing alias is a missed retrieval. Put the most recognized name first.
+**`aliases`** are the primary **entry point** into the graph — the first foothold a search has before any traversal, and there is no fallback search if the entry point misses. Include every name this entity goes by: canonical name, abbreviations, nicknames, alternate spellings, common synonyms. A missing alias is a missed retrieval, permanently, until re-ingestion. Put the most recognized name first.
 
 **`summary`** captures the **current state** in one compact sentence. Answer: what is this entity, and what is notable or distinctive about it right now?
 

@@ -1,15 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to AI agents when working with code in this repository.
-
-## What This Is
-
-Spoken thought is the primary tool for complex, abstract thought and self-reflection, yet it is, by design, fleeting and highly unstructured.
-
-Challenge: How do you represent and store a human's evolving life in a structure that supports arbitrary, open-ended queries without encoding prior assumptions about how to store and what to store?
-
-Weavy is a CLI-first personal memory layer. It accepts any text, runs an agent to ingest it into a semantic graph in FalkorDB, and answers grounded queries against that graph. Pre-processing (audio transcription, document parsing, chat formatting) is the caller's responsibility — by the time information reaches Weavy, it's text.
-
 - FalkorDB: sessions, semantic graph, themes, system counters
 - LiteLLM: all model calls — completions and embeddings (configured via `LLM_MODEL` / `EMBEDDING_MODEL`)
 - Langfuse: run traces and eval visibility
@@ -82,9 +70,9 @@ run_theme_update(graph)                              # -> RunTrace
 - **Single harness, three modes.** `run()` in `harness/runner.py` is the one agent loop — LiteLLM completion + tool dispatch. Terminates on `is_completion=True`. Shared by ingestion, query, and theme.
 - **Graph mutations tracked.** All writes flow through `services/memory.py` which enforces provenance and appends to `trace.touched_nodes`/`trace.touched_edges`.
 - **IDs are system-minted.** `store/system.py:increment_counter` produces `s:N`, `node:N`, `edge:N`. The `System` singleton tracks counters.
-- **Episodes are first-class memory.** The semantic graph is a lossy index; episodes are ground truth. Ingestion chunk-embeds each episode's text (`Chunk` nodes under `Session`), and `search_graph` returns `kind="episode"` excerpts in the same unified ranking as nodes and edges — the query agent reads source evidence directly rather than needing a multi-hop tool protocol.
+- **Navigational graph memory (Model B).** The semantic graph (nodes + edges) is the *sole* search surface — `search_graph` returns only `kind="node"`/`kind="edge"`. Episodes are ground truth but are never independently searchable; they are reached only by navigation: `search_graph` → `get_node`'s `mentioned_by` (or an edge's `source_id`) → `get_session`. There is no RAG safety net — retrieval quality equals index quality, by design (see `openspec/changes/navigational-graph-memory`).
 - **One node per entity is a storage invariant.** `create_node` refuses writes that collide with an existing entity (alias match, or embedding within `DUPLICATE_DISTANCE`) and names the candidates; `force=true` overrides for genuinely distinct same-name entities. Identity lives in aliases — embedding similarity only catches near-certain rephrasings.
-- **Node embeddings accumulate.** Updates re-embed over aliases + current summary + recent log notes (which hold archived summaries), so past facts stay retrievable after the summary moves on.
+- **A node carries exactly one embedding.** `embedding` is computed from aliases + current summary only — no log-note history folded in, no separate `identity_embedding`. Since past facts are recovered by navigating to episodes rather than by embedding note history, the same vector serves both search and `DUPLICATE_DISTANCE` dedup.
 - **Domain refusals are results, not exceptions.** Tools return `ok=false` with a corrective message for agent-fixable conditions (duplicate node, missing edge endpoint); exceptions are reserved for system faults and count toward the run's error budget.
 
 ### Module Map
@@ -110,7 +98,7 @@ weavy/
     client.py        — FalkorDB client / graph access
   services/
     memory.py        — graph CRUD + provenance enforcement + touched-node tracking
-    embedding.py     — embedding generation for semantic nodes
+    embedding.py     — embedding generation for semantic nodes (single vector: aliases + summary)
   harness/
     runner.py        — single agentic loop (LiteLLM completion + tool dispatch)
     actions.py       — ACTIONS registry; SESSION_ACTIONS / THEME_ACTIONS lists

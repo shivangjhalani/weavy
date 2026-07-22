@@ -21,11 +21,22 @@ The themes above are names, not answers — pick the ones that look relevant to 
 
 ### Execute with multiple angles
 
-For each identified entity or concept, search with **multiple phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. Results are a **unified ranked list**: each hit is an entity (`kind="node"`), a relationship fact (`kind="edge"`), or a verbatim episode excerpt (`kind="episode"`). Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved. **Episode hits are ground truth**: node and edge summaries are compressions, but an episode excerpt is the original source — trust its specifics (names, dates, details) over a summary, and call `get_session` on its `s:N` id when you need the surrounding context.
+For each identified entity or concept, search with **varied phrasings** — synonyms, abbreviations, related terms, alternate framings. The search is hybrid (semantic + keyword); different phrasings activate different regions of the graph. **The graph is the sole search surface** — every result is an entity (`kind="node"`) or a relationship fact (`kind="edge"`); there is no raw-text search tier alongside it. Edge hits often *are* the answer to "how is X related to Y" questions — read the fact directly and follow its `endpoints` to the entities involved.
 
-After finding candidate nodes, use `get_node_neighborhood` to follow edges. **The graph's structure encodes relationships that direct search cannot surface** — a neighbor's neighbor may hold the answer. Key nodes are hubs; traverse them.
+### Navigate to ground truth
 
-To read the **original source** behind a fact, call `get_session` with one of the `s:N` ids in a node's `mentioned_by` list — useful when a summary is ambiguous and you need the verbatim episode.
+Search lands you on the index, not the source. The full protocol:
+
+```
+search_graph            → land on relevant node(s)/edge(s); summaries may be lossy
+get_node_neighborhood    → follow edges outward, multi-hop, to related entities
+get_node.mentioned_by    → which episode(s) (s:N) touched this node
+get_session              → read the verbatim episode for the specifics the summary dropped
+```
+
+A node or edge summary is allowed to compress away specifics — that's expected, not a defect. When you need a name, date, quote, or other detail the summary doesn't spell out, don't guess and don't stop at the summary: navigate to it. Follow `mentioned_by` (from `get_node`) or an edge's `source_id` to the `s:N` session id, then call `get_session` to read the original text. Episodes are navigation *targets*, reached through the graph — never an independent search result.
+
+Key nodes are hubs; traverse them, since a neighbor's neighbor may hold the answer that direct search cannot surface.
 
 ### Temporal questions
 

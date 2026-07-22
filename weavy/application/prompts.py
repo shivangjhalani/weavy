@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -54,14 +53,12 @@ def build_themed_system_prompt(
     graph: Graph,
     system_state: SystemState,
     empty_themes_message: str,
+    current_time: str,
     variables: dict[str, object] | None = None,
-    current_time: str | None = None,
     caller_context: str | None = None,
 ) -> str:
     prompt_variables = dict(variables or {})
-    prompt_variables["current_time"] = current_time or datetime.now(
-        tz=timezone.utc
-    ).strftime("%Y-%m-%dT%H:%MZ")
+    prompt_variables["current_time"] = current_time
     prompt_variables["preface"] = (
         system_state.preface or "(not set — call set_preface to describe this graph)"
     )

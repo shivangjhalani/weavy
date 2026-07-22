@@ -182,7 +182,10 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--embedding-model", default="text-embedding-3-small")
     p_run.add_argument("--judge-model", default="gpt-4o-mini")
     p_run.add_argument(
-        "--ingest-workers", type=int, default=10, help="conversations ingested in parallel"
+        "--ingest-workers",
+        type=int,
+        default=10,
+        help="conversations ingested in parallel",
     )
     p_run.add_argument(
         "--query-workers", type=int, default=16, help="questions answered in parallel"
