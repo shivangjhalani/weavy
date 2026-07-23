@@ -94,6 +94,25 @@ def _ingest_phase(
     return graph_names, stats_by_id
 
 
+def _load_checkpoint(path: Path) -> tuple[list[QuestionRecord], set[tuple[str, str]]]:
+    """Load already-answered records from a checkpoint results.jsonl (tolerant of
+    records that span multiple physical lines). Returns records + done keys."""
+    if not path.exists():
+        return [], set()
+    records: list[QuestionRecord] = []
+    buf = ""
+    for line in path.read_text().splitlines(keepends=True):
+        buf += line
+        try:
+            d = json.loads(buf)
+        except json.JSONDecodeError:
+            continue
+        buf = ""
+        records.append(QuestionRecord(**d))
+    done = {(r.sample_id, r.question) for r in records}
+    return records, done
+
+
 def _answer_phase(
     conversations: list[Conversation],
     graph_names: dict[str, str],
@@ -103,15 +122,29 @@ def _answer_phase(
     workers: int,
     scorer: LangfuseScorer,
     progress: ProgressFn,
+    checkpoint_path: Path | None = None,
 ) -> list[QuestionRecord]:
-    """Answer + judge every question across the built graphs, in parallel."""
+    """Answer + judge every question across the built graphs, in parallel.
+
+    If ``checkpoint_path`` is given, each graded record is appended to it as it
+    completes and already-present (sample_id, question) pairs are skipped, so a
+    killed run resumes where it left off on relaunch.
+    """
     pool_adapters = _AdapterPool(make_system)
+    prior_records, done_keys = (
+        _load_checkpoint(checkpoint_path) if checkpoint_path else ([], set())
+    )
+    if prior_records:
+        progress(f"Resuming: {len(prior_records)} questions already checkpointed")
     tasks: list[tuple[Conversation, QAItem]] = [
         (conv, qa)
         for conv in conversations
         if conv.sample_id in graph_names
         for qa in conv.qa
+        if (conv.sample_id, qa.question) not in done_keys
     ]
+    ckpt_lock = threading.Lock()
+    ckpt_file = checkpoint_path.open("a") if checkpoint_path else None
 
     def _answer(task: tuple[Conversation, QAItem]) -> QuestionRecord:
         conv, qa = task
@@ -143,21 +176,29 @@ def _answer_phase(
             judge_error=verdict.error,
         )
         scorer.score(record)
+        if ckpt_file is not None:
+            with ckpt_lock:
+                ckpt_file.write(json.dumps(M.record_to_json(record)) + "\n")
+                ckpt_file.flush()
         return record
 
     progress(f"Phase 2: answering {len(tasks)} questions ({workers} workers)")
-    records: list[QuestionRecord] = []
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_answer, t): t for t in tasks}
-        for i, fut in enumerate(as_completed(futures), 1):
-            try:
-                records.append(fut.result())
-            except Exception as e:  # one bad question must not sink the run
-                conv, qa = futures[fut]
-                progress(f"[{conv.sample_id}] ANSWER FAILED: {e}")
-            if i % 100 == 0 or i == len(tasks):
-                done = sum(r.correct for r in records)
-                progress(f"  answered {i}/{len(tasks)} ({done} correct so far)")
+    records: list[QuestionRecord] = list(prior_records)
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_answer, t): t for t in tasks}
+            for i, fut in enumerate(as_completed(futures), 1):
+                try:
+                    records.append(fut.result())
+                except Exception as e:  # one bad question must not sink the run
+                    conv, qa = futures[fut]
+                    progress(f"[{conv.sample_id}] ANSWER FAILED: {e}")
+                if i % 100 == 0 or i == len(tasks):
+                    done = sum(r.correct for r in records)
+                    progress(f"  answered {i}/{len(tasks)} ({done} correct so far)")
+    finally:
+        if ckpt_file is not None:
+            ckpt_file.close()
     scorer.flush()
     return records
 
@@ -225,6 +266,7 @@ def run_benchmark(
         workers=query_workers,
         scorer=scorer,
         progress=progress,
+        checkpoint_path=out_dir / "results.jsonl",
     )
 
     summary = M.summarize(
