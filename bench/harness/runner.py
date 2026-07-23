@@ -177,19 +177,46 @@ def run_benchmark(
     references: list[dict[str, Any]],
     scorer: LangfuseScorer,
     progress: ProgressFn = print,
+    ingest_only: bool = False,
+    reuse_prefix: str | None = None,
 ) -> dict[str, Any]:
     """Execute the full benchmark and write artifacts. Returns the summary dict."""
     out_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
 
-    graph_names, ingest_stats = _ingest_phase(
-        conversations,
-        make_system=make_system,
-        graph_prefix=graph_prefix,
-        granularity=granularity,
-        workers=ingest_workers,
-        progress=progress,
-    )
+    if reuse_prefix is not None:
+        graph_names = {
+            c.sample_id: f"{reuse_prefix}_{c.sample_id}" for c in conversations
+        }
+        ingest_stats: dict[str, IngestStats] = {}
+        progress(f"Reusing existing graphs with prefix {reuse_prefix!r}")
+    else:
+        graph_names, ingest_stats = _ingest_phase(
+            conversations,
+            make_system=make_system,
+            graph_prefix=graph_prefix,
+            granularity=granularity,
+            workers=ingest_workers,
+            progress=progress,
+        )
+
+    if ingest_only:
+        ingest_summary = {
+            "ingest_only": True,
+            "graphs": graph_names,
+            "ingest_prompt_tokens": sum(
+                s.usage.prompt_tokens for s in ingest_stats.values()
+            ),
+            "ingest_completion_tokens": sum(
+                s.usage.completion_tokens for s in ingest_stats.values()
+            ),
+            "ingest_failures": sum(s.failures for s in ingest_stats.values()),
+            "wall_clock_s": round(time.monotonic() - t0, 1),
+        }
+        (out_dir / "summary.json").write_text(json.dumps(ingest_summary, indent=2))
+        (out_dir / "config.json").write_text(json.dumps(config, indent=2))
+        return ingest_summary
+
     records = _answer_phase(
         conversations,
         graph_names,

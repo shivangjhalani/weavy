@@ -138,7 +138,14 @@ def _run(args: argparse.Namespace) -> int:
         config=config,
         references=REFERENCE_LINES,
         scorer=scorer,
+        ingest_only=args.ingest_only,
+        reuse_prefix=args.reuse_graphs,
     )
+
+    if args.ingest_only:
+        print(f"\nIngest-only run complete. Graphs: bench_{run_id}_<sample_id>")
+        print(f"Reports written to: {out_dir}")
+        return 0
 
     print("\n=== Summary ===")
     print(f"Overall recall accuracy: {summary['overall_recall_accuracy']:.1%}")
@@ -193,6 +200,17 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--limit-conversations", type=int, default=0)
     p_run.add_argument(
         "--limit-questions", type=int, default=0, help="per conversation"
+    )
+    p_run.add_argument(
+        "--ingest-only",
+        action="store_true",
+        help="stop after phase 1 (build graphs, skip answering)",
+    )
+    p_run.add_argument(
+        "--reuse-graphs",
+        default=None,
+        metavar="PREFIX",
+        help="skip ingest; answer against existing graphs named PREFIX_<sample_id>",
     )
     p_run.set_defaults(func=_run)
 
