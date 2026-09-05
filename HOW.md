@@ -4,7 +4,7 @@ Weavy is a local, CLI-first memory system built on top of:
 
 - FalkorDB for canonical records, semantic graph state, themes, and system counters
 - LiteLLM for all model calls — completions (`LLM_MODEL`) and embeddings (`EMBEDDING_MODEL`)
-- Langfuse for run traces and eval visibility
+- local FalkorDB `RunTrace` nodes for audit history, with optional Langfuse visibility
 
 There is no web app or API layer. The main way to use the app is:
 
@@ -21,8 +21,9 @@ There is no web app or API layer. The main way to use the app is:
 - Ask grounded questions against the graph
 - Continue any prior session — ingestion or query — to ask follow-up questions with full context
 - A single unified agent handles both ingestion and query, sharing the same tool set and message history model
-- Automatic theme maintenance after every `add` — the theme agent self-discovers changes since its last run
-- Track agent runs in Langfuse
+- Automatic theme maintenance after every successful CLI or SDK `add`
+- Persist agent runs locally and optionally track them in Langfuse
+- Export and import complete local backups as single JSON files
 
 ## What To Expect
 
@@ -32,8 +33,8 @@ There is no web app or API layer. The main way to use the app is:
 - Pre-processing is external. Document extraction, audio transcription, and chat formatting happen before text reaches Weavy.
 - Any session can be continued in query mode — `continue s:N "question"` loads the prior messages as context and runs the query agent.
 - Query runs may mutate the graph if the agent decides a new statement should update memory.
-- Theme updates run automatically after every `add`. The theme agent queries all sessions completed since its last run and reconciles themes. `update-themes` is available for explicit invocation when needed.
-- Run traces are not written to disk. Langfuse is the trace store.
+- Theme updates run automatically after every successful CLI or SDK `add`. The theme agent queries all sessions completed since its last run and reconciles themes. `update-themes` is still available for explicit invocation when needed.
+- Run traces are persisted locally as `RunTrace` nodes in FalkorDB. Langfuse adds observability when configured, but it is not the only trace store.
 
 ## Prerequisites
 
@@ -134,8 +135,8 @@ What happens:
 
 1. A canonical `Session` is created with the text as the first user message
 2. The ingestion agent reads the text, searches the existing graph, and creates/updates semantic nodes and edges
-3. The theme agent runs automatically to reconcile themes against the updated graph
-4. The CLI prints the session status, touched node IDs, and the ingestion summary
+3. The CLI prints the session status, touched node IDs, and the ingestion summary
+4. The theme agent runs automatically to reconcile themes against newly completed sessions
 
 ### Caller Context
 
@@ -223,7 +224,14 @@ Behavior to expect:
 
 ## Themes
 
-Theme maintenance runs automatically after every `add` call. You do not need to invoke it manually.
+Theme maintenance runs automatically after every successful CLI or SDK `add` call.
+You can also invoke it manually:
+
+```bash
+uv run python -m weavy.cli update-themes
+```
+
+Lower-level application calls such as `run_add(...)` do not run themes automatically; callers that use `application/` own theme timing explicitly.
 
 The theme agent is self-discovering. It queries all sessions completed since its last run (tracked via `last_theme_run_at` on the System node) and builds a journal of recent activity.
 
@@ -241,14 +249,36 @@ What to expect:
 
 ## Tracing And Langfuse
 
-Each harness run creates a Langfuse trace with nested spans for:
+Each harness run persists a complete `RunTrace` node in FalkorDB, including turns,
+tool calls, token usage, completion payload, touched graph IDs, status, and error.
+
+When Langfuse is configured, each harness run also creates a Langfuse trace with nested spans for:
 
 - the run root
 - each turn
 - each LLM generation
 - each tool call
 
-These are not saved locally. If you want to inspect a run, use the Langfuse UI.
+Use FalkorDB for the durable local audit trail. Use the Langfuse UI when you want richer run visualization.
+
+## Backup, Export, And Import
+
+Export writes one complete JSON backup containing the System node, canonical
+sessions, semantic nodes, relationships, themes, and local run traces:
+
+```bash
+uv run python -m weavy.cli export backup.json
+```
+
+Import restores that backup into the current graph. It refuses to touch a
+non-empty graph unless `--replace` is passed:
+
+```bash
+uv run python -m weavy.cli import backup.json --replace
+```
+
+Backups are plain JSON by design. If you need encrypted storage, encrypt the
+file externally with your normal tooling.
 
 ### Prompts
 
@@ -304,6 +334,9 @@ list-sessions [--limit N]
 add <file_or_-> [--context "..."] [--timestamp ISO]
 continue <session_id> <question>
 update-themes
+export <path>
+import <path> --replace
+set-preface <preface>
 query [question]
 ```
 
@@ -333,6 +366,7 @@ docker compose --profile falkordb --profile langfuse up -d
 
 uv run python -m weavy.cli init-system
 uv run python -m weavy.cli add notes.txt --context "Personal journal entry"
+uv run python -m weavy.cli export backup.json
 uv run python -m weavy.cli query "What has been on my mind recently?"
 uv run python -m weavy.cli continue s:1 "Tell me more about what I said about X"
 ```

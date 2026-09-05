@@ -18,7 +18,11 @@ from falkordb import Graph
 
 from weavy.application.session_runs import run_add, run_query, run_session
 from weavy.application.theme_runs import run_theme_update
+from weavy.config import settings
 from weavy.models.traces import RunTrace
+from weavy.services.backup import BackupSummary
+from weavy.services.backup import export_backup as export_graph_backup
+from weavy.services.backup import import_backup as import_graph_backup
 from weavy.services.embedding import get_dimension
 from weavy.store.client import delete_graph_if_exists, get_graph
 from weavy.store.system import init_system
@@ -37,6 +41,7 @@ class Weavy:
     """
 
     def __init__(self, graph_name: str | None = None) -> None:
+        self._graph_name = graph_name or settings.GRAPH_NAME
         self._graph: Graph = get_graph(graph_name)
         init_system(self._graph, embedding_dim=get_dimension())
 
@@ -107,6 +112,22 @@ class Weavy:
             RunTrace with ``mode="theme"``.
         """
         return run_theme_update(self._graph)
+
+    def export_backup(self, path: str) -> BackupSummary:
+        """Export the current graph to a complete local JSON backup."""
+        return export_graph_backup(self._graph, path, graph_name=self._graph_name)
+
+    def import_backup(self, path: str, *, replace: bool = False) -> BackupSummary:
+        """Import a complete local JSON backup into this graph.
+
+        Args:
+            path: JSON backup path.
+            replace: Required when the target graph is non-empty.
+        """
+        summary = import_graph_backup(
+            self._graph, path, replace=replace, graph_name=self._graph_name
+        )
+        return summary
 
     def reset(self) -> None:
         """Drop and reinitialise the graph.

@@ -10,7 +10,11 @@ from datetime import datetime
 from falkordb import Graph
 
 from weavy.application import session_runs, theme_runs
+from weavy.config import settings
 from weavy.models.traces import RunTrace
+from weavy.services.backup import BackupSummary
+from weavy.services.backup import export_backup as export_graph_backup
+from weavy.services.backup import import_backup as import_graph_backup
 from weavy.store import themes as store_themes
 from weavy.store.canonical import list_sessions
 from weavy.store.client import get_graph
@@ -59,6 +63,16 @@ def _completion_field(trace: RunTrace, field: str) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _print_backup_summary(action: str, summary: BackupSummary) -> None:
+    print(f"{action}: {summary.path}")
+    print(f"  graph          = {summary.graph_name or '(default)'}")
+    print(f"  sessions       = {summary.sessions}")
+    print(f"  semantic_nodes = {summary.semantic_nodes}")
+    print(f"  semantic_edges = {summary.semantic_edges}")
+    print(f"  themes         = {summary.themes}")
+    print(f"  run_traces     = {summary.run_traces}")
+
+
 def cmd_init_system(_args: argparse.Namespace) -> None:
     from weavy.services.embedding import get_dimension
 
@@ -104,11 +118,40 @@ def cmd_add(args: argparse.Namespace) -> None:
     print(f"Touched nodes: {touched}")
     print(f"Summary: {_completion_field(trace, 'summary')}")
 
+    theme_trace = theme_runs.run_theme_update(get_graph())
+    if theme_trace.status == "failed":
+        print("Theme update status: failed", file=sys.stderr)
+        if theme_trace.error:
+            print(f"Theme update error: {theme_trace.error}", file=sys.stderr)
+        return
+    print("Theme update complete.")
+
 
 def cmd_update_themes(_args: argparse.Namespace) -> None:
     trace = theme_runs.run_theme_update(get_graph())
     if _print_trace_status(trace):
         print("Theme update complete.")
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    summary = export_graph_backup(
+        get_graph(), args.path, graph_name=settings.GRAPH_NAME
+    )
+    _print_backup_summary("Exported backup", summary)
+
+
+def cmd_import(args: argparse.Namespace) -> None:
+    try:
+        summary = import_graph_backup(
+            get_graph(),
+            args.path,
+            replace=args.replace,
+            graph_name=settings.GRAPH_NAME,
+        )
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    _print_backup_summary("Imported backup", summary)
 
 
 def cmd_set_preface(args: argparse.Namespace) -> None:
@@ -198,6 +241,17 @@ def main() -> None:
         "update-themes", help="Manually run the theme agent over the current graph"
     )
 
+    p = subparsers.add_parser("export", help="Export a complete JSON backup")
+    p.add_argument("path", help="Output JSON backup path")
+
+    p = subparsers.add_parser("import", help="Import a complete JSON backup")
+    p.add_argument("path", help="Input JSON backup path")
+    p.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace the target graph if it already contains data",
+    )
+
     p = subparsers.add_parser(
         "set-preface", help="Set the graph preface describing what this graph is about"
     )
@@ -228,6 +282,8 @@ def main() -> None:
         "add": cmd_add,
         "continue": cmd_continue,
         "update-themes": cmd_update_themes,
+        "export": cmd_export,
+        "import": cmd_import,
         "set-preface": cmd_set_preface,
         "query": cmd_query,
     }

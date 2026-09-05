@@ -15,6 +15,7 @@ from falkordb import Graph
 from weavy.config import settings
 from weavy.harness import actions
 from weavy.harness.tracing import RunTracer, finalize_trace, new_trace, record_turn
+from weavy.store.traces import persist_trace
 
 from weavy.models.traces import RunMode, RunTrace, ToolCall, Turn, TurnUsage
 
@@ -52,6 +53,7 @@ def _get_context_limit(model: str) -> int | None:
 def _finalize_failed_run(
     trace: RunTrace,
     tracer: RunTracer,
+    graph: Graph,
     error: str,
     context_limit: int | None,
     turn: Turn | None = None,
@@ -60,6 +62,7 @@ def _finalize_failed_run(
         record_turn(trace, turn)
     tracer.end_turn(None)
     finalize_trace(trace, "failed", error=error)
+    persist_trace(graph, trace)
     tracer.finalize(trace, context_limit=context_limit)
     return trace
 
@@ -77,6 +80,7 @@ def _handle_tool_error(
     messages: list[dict[str, Any]],
     tool_error_retries: int,
     context_limit: int | None,
+    graph: Graph,
 ) -> tuple[int, RunTrace | None]:
     tracer.record_tool_error(turn.turn_number, tool_name, args, error)
     turn.tool_calls.append(
@@ -90,7 +94,7 @@ def _handle_tool_error(
     )
     if tool_error_retries >= _MAX_TOOL_RETRIES:
         return tool_error_retries, _finalize_failed_run(
-            trace, tracer, error, context_limit, turn=turn
+            trace, tracer, graph, error, context_limit, turn=turn
         )
 
     messages.append(
@@ -142,6 +146,7 @@ def run(
     """
     input_summary = run_context.get("input_summary", "")
     trace = new_trace(mode, input_summary)
+    trace.session_id = session_id
     tracer = RunTracer(
         trace.run_id,
         mode,
@@ -186,7 +191,7 @@ def run(
             )
         except Exception as e:
             err = f"Model call failed: {e}"
-            return _finalize_failed_run(trace, tracer, err, context_limit)
+            return _finalize_failed_run(trace, tracer, graph, err, context_limit)
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None) or []
 
@@ -236,7 +241,7 @@ def run(
                 continue
 
             err = "Model stopped without calling a completion tool."
-            return _finalize_failed_run(trace, tracer, err, context_limit)
+            return _finalize_failed_run(trace, tracer, graph, err, context_limit)
 
         # Append assistant message with tool_calls to conversation history.
         messages.append(
@@ -290,6 +295,7 @@ def run(
                     messages=messages,
                     tool_error_retries=tool_error_retries,
                     context_limit=context_limit,
+                    graph=graph,
                 )
                 if failed_trace is not None:
                     return failed_trace
@@ -315,6 +321,7 @@ def run(
                     messages=messages,
                     tool_error_retries=tool_error_retries,
                     context_limit=context_limit,
+                    graph=graph,
                 )
                 if failed_trace is not None:
                     return failed_trace
@@ -339,6 +346,7 @@ def run(
                     messages=messages,
                     tool_error_retries=tool_error_retries,
                     context_limit=context_limit,
+                    graph=graph,
                 )
                 if failed_trace is not None:
                     return failed_trace
@@ -371,6 +379,7 @@ def run(
                 record_turn(trace, turn)
                 trace.conversation = messages[1:]  # skip system message
                 finalize_trace(trace, "completed")
+                persist_trace(graph, trace)
                 tracer.end_turn(message.content)
                 tracer.finalize(trace, context_limit=context_limit)
                 return trace

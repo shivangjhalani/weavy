@@ -1,19 +1,31 @@
+# AGENT.md
+
+This file provides guidance to AI agents when working with code in this repository.
+
+## What This Is
+
+Spoken thought is the primary tool for complex, abstract thought and self-reflection, yet it is, by design, fleeting and highly unstructured.
+
+Challenge: How do you represent and store a human's evolving life in a structure that supports arbitrary, open-ended queries without encoding prior assumptions about how to store and what to store?
+
+Weavy is a CLI-first personal memory layer. It accepts any text, runs an agent to ingest it into a semantic graph in FalkorDB, and answers grounded queries against that graph. Pre-processing (transcription, document parsing, chat formatting) is the caller's responsibility — by the time information reaches Weavy, it's text.
+
 - FalkorDB: sessions, semantic graph, themes, system counters
 - LiteLLM: all model calls — completions and embeddings (configured via `LLM_MODEL` / `EMBEDDING_MODEL`)
-- Langfuse: run traces and eval visibility
+- local FalkorDB `RunTrace` nodes: durable run audit history
+- Langfuse: optional trace visualization and eval visibility
 
 ## Commands
 
 ```bash
-docker compose --profile falkordb up -d   # start FalkorDB
-docker compose --profile langfuse up -d   # start Langfuse (optional)
-docker compose --profile falkordb --profile langfuse up -d  # start both
+devenv up          # start FalkorDB
+devenv shell       # enter dev environment
 
-uv run pytest                        # all tests
-uv run pytest tests/test_graph.py    # single file
-uv run pytest -k "test_create_node"  # single test by name
-uv run ruff check .
-uv run ruff format .
+devenv shell -- uv run pytest                        # all tests
+devenv shell -- uv run pytest tests/test_graph.py    # single file
+devenv shell -- uv run pytest -k "test_create_node"  # single test by name
+devenv shell -- ruff check .
+devenv shell -- ruff format .
 ```
 
 Tests auto-mock `RunTracer` (Langfuse) and `fetch_prompt` (prompt files) — no real services needed.
@@ -27,6 +39,8 @@ uv run python -m weavy.cli list-sessions [--limit N]
 uv run python -m weavy.cli add <file_or_-> [--context "..."] [--timestamp ISO]
 uv run python -m weavy.cli continue <session_id> <question>
 uv run python -m weavy.cli update-themes
+uv run python -m weavy.cli export <path>
+uv run python -m weavy.cli import <path> --replace
 uv run python -m weavy.cli query [question]                 # omit question for REPL
 ```
 
@@ -44,6 +58,8 @@ trace = w.add(text, timestamp=..., context=...)        # -> RunTrace
 trace = w.query(question, context=..., query_time=...) # -> RunTrace
 trace = w.continue_session(session_id, message)        # -> RunTrace
 trace = w.update_themes()                              # -> RunTrace
+w.export_backup("backup.json")                         # -> BackupSummary
+w.import_backup("backup.json", replace=True)           # -> BackupSummary
 w.reset()                                              # drop + reinit (benchmarks)
 ```
 
@@ -65,12 +81,14 @@ run_theme_update(graph)                              # -> RunTrace
 ### Key Design Decisions
 
 - **Session is state, mode is behavior.** A `Session` is just a message history — no mode attached. Mode (`ingestion`/`query`) selects system prompt and tool set at call time. Any session can be continued in any mode.
-- **Themes are automatic at the SDK boundary.** `Weavy.add()` in `client.py` runs `run_theme_update` after every successful ingestion — the caller never manages it. `application/run_add` does not; internal callers (eval, CLI) own theme timing explicitly.
+- **Themes are automatic at user-facing boundaries.** `Weavy.add()` in `client.py` and CLI `add` both run `run_theme_update` after every successful ingestion. `application/run_add` does not; internal callers own theme timing explicitly.
 - **Source-agnostic ingestion.** The ingestion prompt has no source-specific framing. The agent reads the text and determines what it is. Optional `caller_context` (e.g., "These are chat logs") is injected into the `{{caller_context}}` prompt slot to steer interpretation.
 - **Single harness, three modes.** `run()` in `harness/runner.py` is the one agent loop — LiteLLM completion + tool dispatch. Terminates on `is_completion=True`. Shared by ingestion, query, and theme.
 - **Graph mutations tracked.** All writes flow through `services/memory.py` which enforces provenance and appends to `trace.touched_nodes`/`trace.touched_edges`.
+- **Run traces persist locally.** The harness writes every completed or failed `RunTrace` to FalkorDB as a `RunTrace` node before returning. Langfuse is optional observability, not the sole trace store.
+- **Backups are complete graph snapshots.** Export/import uses one plain JSON file covering System, sessions, semantic graph, themes, and local run traces. Import replaces only when explicitly requested.
 - **IDs are system-minted.** `store/system.py:increment_counter` produces `s:N`, `node:N`, `edge:N`. The `System` singleton tracks counters.
-- **Navigational graph memory (Model B).** The semantic graph (nodes + edges) is the *sole* search surface — `search_graph` returns only `kind="node"`/`kind="edge"`. Episodes are ground truth but are never independently searchable; they are reached only by navigation: `search_graph` → `get_node`'s `mentioned_by` (or an edge's `source_id`) → `get_session`. There is no RAG safety net — retrieval quality equals index quality, by design (see `openspec/changes/navigational-graph-memory`).
+- **Navigational graph memory (Model B).** The semantic graph (nodes + edges) is the *sole* search surface — `search_graph` returns only `kind="node"`/`kind="edge"`. Episodes are ground truth but are never independently searchable; they are reached only by navigation: `search_graph` → `get_node`'s `mentioned_by` (or an edge's `source_id`) → `get_session`. There is no RAG safety net — retrieval quality equals index quality, by design (see `openspec/changes/archive/2026-07-21-navigational-graph-memory`).
 - **One node per entity is a storage invariant.** `create_node` refuses writes that collide with an existing entity (alias match, or embedding within `DUPLICATE_DISTANCE`) and names the candidates; `force=true` overrides for genuinely distinct same-name entities. Identity lives in aliases — embedding similarity only catches near-certain rephrasings.
 - **A node carries exactly one embedding.** `embedding` is computed from aliases + current summary only — no log-note history folded in, no separate `identity_embedding`. Since past facts are recovered by navigating to episodes rather than by embedding note history, the same vector serves both search and `DUPLICATE_DISTANCE` dedup.
 - **Domain refusals are results, not exceptions.** Tools return `ok=false` with a corrective message for agent-fixable conditions (duplicate node, missing edge endpoint); exceptions are reserved for system faults and count toward the run's error budget.
@@ -96,7 +114,9 @@ weavy/
     traces.py        — RunTrace, Turn, TurnUsage, TouchedNode/Edge
   store/             — FalkorDB reads/writes (canonical, graph, themes, system)
     client.py        — FalkorDB client / graph access
+    traces.py        — local RunTrace persistence
   services/
+    backup.py        — complete JSON export/import
     memory.py        — graph CRUD + provenance enforcement + touched-node tracking
     embedding.py     — embedding generation for semantic nodes (single vector: aliases + summary)
   harness/
@@ -135,7 +155,7 @@ weavy/
 - `Weavy` in `client.py` is the SDK entry point — self-bootstrapping, returns RunTrace
 - `Weavy(graph_name)` provides graph-level isolation for benchmark scenarios
 - Input boundary is text — pre-processing is the caller's responsibility
-- Sessions are source-agnostic — no origin, audio_path, or segment fields in `store/canonical.py`
+- Sessions are source-agnostic — no origin or segment fields in `store/canonical.py`
 - Agent tool schemas are a harness concern — they should not be shared as the
   general application contract for `store/` and non-harness services
 - `RunTrace` is the standard return type from all agent runs — no hiding

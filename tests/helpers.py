@@ -30,6 +30,7 @@ def reset_test_graph(*extra_labels: str) -> Graph:
     graph = get_graph(TEST_GRAPH)
     graph.query("MATCH (s:System) DELETE s")
     graph.query("MATCH (n:SemanticNode) DETACH DELETE n")
+    graph.query("MATCH (t:RunTrace) DETACH DELETE t")
     for label in extra_labels:
         graph.query(f"MATCH (n:{label}) DETACH DELETE n")
     init_system(graph, embedding_dim=TEST_EMBEDDING_DIM)

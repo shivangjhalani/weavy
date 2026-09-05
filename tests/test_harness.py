@@ -15,6 +15,7 @@ from weavy.harness import runner as harness_runner
 from weavy.harness.runner import run
 from weavy.harness.tracing import RunTracer
 from weavy.models.traces import TurnUsage
+from weavy.store.traces import get_trace
 from tests.helpers import (
     make_test_trace,
     mock_text_response,
@@ -409,3 +410,52 @@ def test_run_with_graph_write_records_touched_nodes(graph: Graph) -> None:
     assert len(trace.touched_nodes) == 1
     assert trace.touched_nodes[0].action == "created"
     assert trace.touched_nodes[0].node_id.startswith("node:")
+
+
+def test_run_persists_completed_trace_locally(graph: Graph) -> None:
+    completion_resp = mock_tool_response(
+        "complete",
+        {"summary": "done"},
+        usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    )
+
+    with (
+        patch("litellm.completion", return_value=completion_resp),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
+        trace = run(
+            mode="ingestion",
+            system_prompt="system",
+            initial_messages=[],
+            allowed_actions=reg.SESSION_ACTIONS,
+            run_context={"input_summary": "trace test"},
+            graph=graph,
+            session_id="s:trace",
+        )
+
+    stored = get_trace(graph, trace.run_id)
+    assert stored.status == "completed"
+    assert stored.run_id == trace.run_id
+    assert stored.session_id == "s:trace"
+    assert stored.completion_payload
+    assert stored.completion_payload["summary"] == "done"
+    assert stored.total_usage.total_tokens == 15
+
+
+def test_run_persists_failed_trace_locally(graph: Graph) -> None:
+    with (
+        patch("litellm.completion", side_effect=RuntimeError("network error")),
+        patch("weavy.harness.runner.RunTracer", return_value=_mock_run_tracer()),
+    ):
+        trace = run(
+            mode="query",
+            system_prompt="system",
+            initial_messages=[],
+            allowed_actions=reg.SESSION_ACTIONS,
+            run_context={"input_summary": "failed trace test"},
+            graph=graph,
+        )
+
+    stored = get_trace(graph, trace.run_id)
+    assert stored.status == "failed"
+    assert "network error" in (stored.error or "")
